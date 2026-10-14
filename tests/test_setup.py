@@ -133,6 +133,7 @@ def test_installer_selects_only_successful_result(app, tmp_path, fake_python, mo
     assert dialog.result() == QDialog.DialogCode.Accepted
     assert Config.load().comfy_dir == str(target)
     assert Config.load().python == str(dialog.plan.environment / "bin" / "python")
+    assert Config.load().update_method == "cli"
     assert Config.load().arguments == ("--cpu" if gpu == "--cpu" else "")
 
 

@@ -1,4 +1,4 @@
-"""Asynchronous process ownership, shutdown, and safe Git updates."""
+"""Asynchronous process ownership, shutdown, and Git or Comfy CLI updates."""
 import codecs
 import os
 from pathlib import Path
@@ -28,6 +28,7 @@ class Controller(QObject):
         self._steps = []
         self._step = ""
         self._captured = ""
+        self._cli_update = None
         self._decoder = codecs.getincrementaldecoder("utf-8")("replace")
         self._kill_timer = QTimer(self)
         self._kill_timer.setSingleShot(True)
@@ -68,6 +69,13 @@ class Controller(QObject):
         env.insert("TERM", "dumb")
         env.insert("NO_COLOR", "1")
         env.insert("GIT_TERMINAL_PROMPT", "0")
+        if kind == "update" and self._step == "Update with Comfy CLI":
+            # Comfy CLI may be installed globally/pipx, but requirements must
+            # go into the selected ComfyUI environment, never the GUI's venv.
+            for name in ("VIRTUAL_ENV", "CONDA_PREFIX", "CONDA_DEFAULT_ENV", "PYTHONHOME"):
+                env.remove(name)
+            for name, value in self._cli_update[1].items():
+                env.insert(name, value)
         process.setProcessEnvironment(env)
         params = QProcess.UnixProcessParameters()
         params.flags = QProcess.UnixProcessFlag.CreateNewSession
@@ -78,6 +86,8 @@ class Controller(QObject):
         process.errorOccurred.connect(self._process_error)
         self._message("$ " + shlex.join(command))
         process.start(command[0], command[1:])
+        if kind == "update" and self._step == "Update with Comfy CLI":
+            process.closeWriteChannel()  # Unexpected prompts get EOF, not a hung update.
 
     def _started(self):
         self._pid = self.process.processId()
@@ -186,7 +196,10 @@ class Controller(QObject):
             self.config.validate()
             if not shutil.which("git"):
                 raise ValueError("Git is not installed. Install it with: sudo dnf install git")
-            if self.config.install_requirements and not os.access(self.config.interpreter(), os.X_OK):
+            if self.config.update_method not in ("git", "cli"):
+                raise ValueError("Unknown update method. Choose Git or Comfy CLI.")
+            self._cli_update = self.config.cli_update() if self.config.update_method == "cli" else None
+            if self.config.update_method == "git" and self.config.install_requirements and not shutil.which(self.config.interpreter()):
                 raise ValueError("Set an explicit working ComfyUI Python executable before installing requirements.")
         except (ValueError, OSError) as exc:
             self._error(str(exc))
@@ -201,10 +214,13 @@ class Controller(QObject):
         self._steps = [
             ("Check repository", ["git", "rev-parse", "--show-toplevel"]),
             ("Check local changes", ["git", "status", "--porcelain", "--untracked-files=normal"]),
-            ("Pull ComfyUI", ["git", "-c", "core.hooksPath=/dev/null", "pull", "--ff-only"]),
         ]
-        if self.config.install_requirements:
-            self._steps.append(("Install requirements", [self.config.interpreter(), "-m", "pip", "install", "-r", "requirements.txt"]))
+        if self.config.update_method == "cli":
+            self._steps.append(("Update with Comfy CLI", self._cli_update[0]))
+        else:
+            self._steps.append(("Pull ComfyUI", ["git", "-c", "core.hooksPath=/dev/null", "pull", "--ff-only"]))
+            if self.config.install_requirements:
+                self._steps.append(("Install requirements", [self.config.interpreter(), "-m", "pip", "install", "-r", "requirements.txt"]))
         self._state("updating")
         self._next_step()
 

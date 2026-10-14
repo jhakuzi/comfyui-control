@@ -1,5 +1,5 @@
 Name:           comfyui-control
-Version:        0.5.0
+Version:        0.6.0
 Release:        1%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
@@ -54,5 +54,8 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/applications/%{name}.desktop
 
 %changelog
+* Wed Oct 14 2026 ComfyUI Control contributors - 0.6.0-1
+- Add Comfy CLI update selection with explicit workspace and environment.
+
 * Wed Oct 14 2026 ComfyUI Control contributors - 0.5.0-1
 - Add Fedora packaging and COPR source RPM preparation.

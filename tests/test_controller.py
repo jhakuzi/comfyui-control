@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import subprocess
 import sys
 import time
@@ -214,3 +215,100 @@ def test_requirement_install_uses_selected_python_and_reports_failure(app, repos
     assert arguments.read_text() == "['-m', 'pip', 'install', '-r', 'requirements.txt']"
     assert "Install requirements" in errors[0]
     assert "simulated dependency failure" in "".join(logs)
+
+
+@pytest.fixture
+def cli_environment(tmp_path):
+    prefix = tmp_path / "Comfy environment"
+    (prefix / "bin").mkdir(parents=True)
+    (prefix / "bin" / "python").symlink_to(sys.executable)
+    (prefix / "pyvenv.cfg").touch()
+    report = tmp_path / "cli-report.json"
+    cli = prefix / "bin" / "comfy"
+    cli.write_text(
+        f"#!{sys.executable}\n"
+        "import json, os, sys\n"
+        f"open({str(report)!r}, 'w').write(json.dumps(dict(argv=sys.argv[1:], cwd=os.getcwd(), "
+        "venv=os.environ.get('VIRTUAL_ENV'), conda=os.environ.get('CONDA_PREFIX'), "
+        "path=os.environ['PATH'], pythonhome=os.environ.get('PYTHONHOME'))))\n"
+        "print('CLI update finished', flush=True)\n"
+        "sys.exit(int(os.environ.get('TEST_CLI_EXIT', '0')))\n"
+    )
+    cli.chmod(0o755)
+    return prefix, cli, report
+
+
+@pytest.mark.parametrize("exit_code", [0, 9])
+def test_cli_update_uses_workspace_environment_and_resumes_only_on_success(app, repositories, cli_environment, monkeypatch, exit_code):
+    _, local = repositories
+    prefix, _, report = cli_environment
+    c, logs, errors = make_controller(app, local)
+    c.config.python = str(prefix / "bin" / "python")
+    c.config.update_method = "cli"
+    c.config.install_requirements = True  # Must not add a second pip step for CLI.
+    monkeypatch.setenv("CONDA_PREFIX", "/wrong/conda")
+    monkeypatch.setenv("TEST_CLI_EXIT", str(exit_code))
+    try:
+        c.start()
+        wait_for(lambda: c.state == "running")
+        first_pid = c._pid
+        # Contaminate the parent environment only after the server has started.
+        monkeypatch.setenv("VIRTUAL_ENV", "/wrong/gui-env")
+        monkeypatch.setenv("PYTHONHOME", "/wrong/python")
+        c.update()
+        if exit_code:
+            wait_for(lambda: c.state == "stopped" and bool(errors))
+            assert "Update with Comfy CLI" in errors[0]
+        else:
+            # Restore Python's startup env before the server restarts; it should
+            # keep its normal environment rather than the CLI-only overrides.
+            monkeypatch.delenv("PYTHONHOME")
+            wait_for(lambda: c.state == "running" and c._pid != first_pid)
+            assert not errors
+        recorded = json.loads(report.read_text())
+        assert recorded["argv"] == ["--workspace", str(local), "--skip-prompt", "update"]
+        assert recorded["cwd"] == str(local)
+        assert recorded["venv"] == str(prefix)
+        assert recorded["conda"] is None and recorded["pythonhome"] is None
+        assert recorded["path"].split(":")[0] == str(prefix / "bin")
+        assert "CLI update finished" in "".join(logs)
+        assert "Install requirements" not in "".join(logs)
+        assert "pull --ff-only" not in "".join(logs)
+    finally:
+        c.shutdown()
+        wait_for(lambda: c.state == "stopped")
+
+
+def test_missing_cli_keeps_running_server_and_does_not_fall_back(app, repositories, cli_environment):
+    _, local = repositories
+    prefix, _, report = cli_environment
+    c, logs, errors = make_controller(app, local)
+    c.config.python = str(prefix / "bin" / "python")
+    c.config.update_method, c.config.comfy_cli = "cli", str(prefix / "missing-comfy")
+    try:
+        c.start()
+        wait_for(lambda: c.state == "running")
+        first_pid = c._pid
+        c.update()
+        assert c.state == "running" and c._pid == first_pid
+        assert errors and "Comfy CLI was not found" in errors[0]
+        assert not report.exists()
+        assert "pull --ff-only" not in "".join(logs)
+    finally:
+        c.shutdown()
+        wait_for(lambda: c.state == "stopped")
+
+
+def test_cli_preserves_local_changes_without_invoking_cli(app, repositories, cli_environment):
+    _, local = repositories
+    prefix, _, report = cli_environment
+    original = (local / "main.py").read_text() + "# personal changes\n"
+    (local / "main.py").write_text(original)
+    c, _, errors = make_controller(app, local)
+    c.config.python = str(prefix / "bin" / "python")
+    c.config.update_method = "cli"
+    c.update()
+    wait_for(lambda: c.state == "stopped" and bool(errors))
+    assert "local changes" in errors[0]
+    assert not report.exists()
+    assert (local / "main.py").read_text() == original

@@ -30,7 +30,7 @@ def test_detect_venv_and_script_arguments(tmp_path):
     assert config.command() == ["/bin/bash", str(script), "--port", "8188"]
 
 
-@pytest.mark.parametrize("data", [[], {"python": 42}, {"install_requirements": "false"}, {"mode": "shell"}])
+@pytest.mark.parametrize("data", [[], {"python": 42}, {"install_requirements": "false"}, {"mode": "shell"}, {"update_method": "shell"}, {"comfy_cli": False}])
 def test_invalid_config_rejected_without_overwriting(tmp_path, data):
     path = tmp_path / "config.json"
     original = json.dumps(data)
@@ -67,3 +67,35 @@ def test_existing_selection_detects_companion_environment(tmp_path):
     config = Config(comfy_dir=str(directory))
     config.validate()
     assert config.interpreter() == str(interpreter)
+
+
+@pytest.mark.parametrize("kind", ["venv", "conda"])
+def test_cli_resolves_global_tool_but_targets_selected_environment(tmp_path, monkeypatch, kind):
+    prefix = tmp_path / "environment with spaces"
+    (prefix / "bin").mkdir(parents=True)
+    python = prefix / "bin" / "python"
+    python.symlink_to(sys.executable)
+    if kind == "venv":
+        (prefix / "pyvenv.cfg").touch()
+    else:
+        (prefix / "conda-meta").mkdir()
+    tools = tmp_path / "global tools"
+    tools.mkdir()
+    cli = tools / "comfy"
+    cli.write_text("#!/bin/sh\nexit 0\n")
+    cli.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tools))
+    config = Config(comfy_dir=str(tmp_path / "selected ComfyUI"), python=str(python), update_method="cli")
+    command, environment = config.cli_update()
+    assert command == [str(cli), "--workspace", config.comfy_dir, "--skip-prompt", "update"]
+    assert environment["VIRTUAL_ENV" if kind == "venv" else "CONDA_PREFIX"] == str(prefix)
+    assert environment["PATH"].split(":")[0] == str(prefix / "bin")
+    config.comfy_cli = str(tools / "missing")
+    with pytest.raises(ValueError, match="Comfy CLI was not found"):
+        config.cli_update()
+
+
+def test_cli_rejects_system_python_instead_of_updating_gui_environment(tmp_path):
+    config = Config(comfy_dir=str(tmp_path), python="/usr/bin/python3", update_method="cli")
+    with pytest.raises(ValueError, match="environment's bin/python"):
+        config.cli_update()

@@ -258,7 +258,7 @@ class InstallDialog(QDialog):
                 data = json.loads(self.result_path.read_text(encoding="utf-8"))
                 if not isinstance(data, dict) or not all(isinstance(data.get(key), str) for key in ("directory", "python")):
                     return
-                config = Config(comfy_dir=data["directory"], python=data["python"], arguments="--cpu" if self.plan.gpu == "--cpu" else "")
+                config = Config(comfy_dir=data["directory"], python=data["python"], arguments="--cpu" if self.plan.gpu == "--cpu" else "", update_method="cli")
                 if config.directory != self.plan.directory or config.interpreter() != str(self.plan.environment / "bin" / "python"):
                     return
                 config.validate()

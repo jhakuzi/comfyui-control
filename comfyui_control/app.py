@@ -58,10 +58,21 @@ class SettingsDialog(QDialog):
         form.addRow(self.edit_script)
         form.addRow("Output folder", self._path_row(self.output_dir, directory=True))
         form.addRow("Models folder", self._path_row(self.models_dir, directory=True))
-        self.requirements = QCheckBox("Install requirements.txt after updating")
+        self.update_method = QComboBox()
+        self.update_method.addItem("Git — fast-forward pull", "git")
+        self.update_method.addItem("Comfy CLI — comfy update", "cli")
+        self.update_method.setCurrentIndex(self.update_method.findData(config.update_method))
+        form.addRow("Update method", self.update_method)
+        self.comfy_cli = QLineEdit(config.comfy_cli)
+        self.comfy_cli.setPlaceholderText("Auto: ComfyUI environment's comfy, then PATH")
+        form.addRow("Comfy CLI executable", self._path_row(self.comfy_cli, title="Choose Comfy CLI executable"))
+        self.requirements = QCheckBox("Git: install requirements.txt after updating")
         self.requirements.setChecked(config.install_requirements)
         self.requirements.setToolTip("Runs pip in the ComfyUI Python selected above. May change installed packages, including GPU dependencies.")
         form.addRow(self.requirements)
+        update_note = QLabel("Comfy CLI always installs requirements using the selected ComfyUI environment. Choose that environment's bin/python above. Neither method updates custom nodes.")
+        update_note.setWordWrap(True)
+        form.addRow(update_note)
         contents = QWidget()
         contents.setLayout(form)
         area = QScrollArea()
@@ -74,24 +85,26 @@ class SettingsDialog(QDialog):
         layout.addWidget(buttons)
         self.mode.currentIndexChanged.connect(self._mode_changed)
         self.script.textChanged.connect(self._mode_changed)
+        self.update_method.currentIndexChanged.connect(self._update_mode_changed)
         self._mode_changed()
+        self._update_mode_changed()
 
-    def _path_row(self, field, directory=False, scripts=False):
+    def _path_row(self, field, directory=False, scripts=False, title=None):
         row = QWidget()
         layout = QHBoxLayout(row)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(field)
         button = QPushButton("Browse…")
-        button.clicked.connect(lambda: self._browse(field, directory, scripts))
+        button.clicked.connect(lambda: self._browse(field, directory, scripts, title))
         layout.addWidget(button)
         return row
 
-    def _browse(self, field, directory, scripts):
+    def _browse(self, field, directory, scripts, title=None):
         start = str(expand(field.text() or self.folder.text()))
         if directory:
             path = QFileDialog.getExistingDirectory(self, "Choose folder", start)
         else:
-            path, _ = QFileDialog.getOpenFileName(self, "Choose launch script" if scripts else "Choose Python executable", start, "Shell scripts (*.sh);;All files (*)" if scripts else "All files (*)")
+            path, _ = QFileDialog.getOpenFileName(self, title or ("Choose launch script" if scripts else "Choose Python executable"), start, "Shell scripts (*.sh);;All files (*)" if scripts else "All files (*)")
         if path:
             field.setText(path)
 
@@ -108,6 +121,11 @@ class SettingsDialog(QDialog):
             if script_mode else
             "Arguments are passed directly to main.py. They are saved here and take effect on the next start."
         )
+
+    def _update_mode_changed(self):
+        cli = self.update_method.currentData() == "cli"
+        self.comfy_cli.parentWidget().setEnabled(cli)
+        self.requirements.setEnabled(not cli)
 
     def _edit_script(self):
         path = expand(self.script.text())
@@ -134,6 +152,7 @@ class SettingsDialog(QDialog):
             arguments=arguments,
             output_dir=self.output_dir.text().strip(), models_dir=self.models_dir.text().strip(),
             install_requirements=self.requirements.isChecked(),
+            update_method=self.update_method.currentData(), comfy_cli=self.comfy_cli.text().strip(),
             managed_script=(self.original_config.managed_script and
                             self.mode.currentData() == "script" and
                             self.script.text().strip() == self.original_config.script),
@@ -230,10 +249,22 @@ class MainWindow(QMainWindow):
         left, right = QVBoxLayout(), QVBoxLayout()
         self.start_stop = self._button("Start", "media-playback-start", self._start_stop)
         self.restart = self._button("Restart", "view-refresh", self.controller.restart)
-        self.update = self._button("Update ComfyUI", "system-software-update", self._update)
+        self.update = self._button("Update", "system-software-update", self._update)
+        self.update.setToolTip("Update the selected ComfyUI installation using the method beside this button.")
+        self.update_method = QComboBox()
+        self.update_method.addItem("Git", "git")
+        self.update_method.addItem("Comfy CLI", "cli")
+        self.update_method.setCurrentIndex(self.update_method.findData(config.update_method))
+        self.update_method.setAccessibleName("ComfyUI update method")
+        self.update_method.setToolTip("Git: fast-forward pull, optional requirements. Comfy CLI: comfy update, including requirements.")
+        self.update_method.setMinimumHeight(36)
+        self.update_method.currentIndexChanged.connect(self._update_method_changed)
+        update_row = QHBoxLayout()
+        update_row.addWidget(self.update, 1)
+        update_row.addWidget(self.update_method)
         left.addWidget(self.start_stop)
         left.addWidget(self.restart)
-        left.addWidget(self.update)
+        left.addLayout(update_row)
         self.output_button = self._button("Open output folder", "folder-open", lambda: self._open_folder("output"))
         self.models_button = self._button("Open models folder", "folder-open", lambda: self._open_folder("models"))
         self.config_button = self._button("Edit launch configuration…", "configure", self._settings)
@@ -291,9 +322,22 @@ class MainWindow(QMainWindow):
 
     def _set_config(self, config):
         self.controller.config = config
+        blocked = self.update_method.blockSignals(True)
+        self.update_method.setCurrentIndex(self.update_method.findData(config.update_method))
+        self.update_method.blockSignals(blocked)
         self.path_label.setText(config.comfy_dir or "No installation selected")
         self.path_label.setToolTip(str(config.directory))
         self._state_changed(self.controller.state)
+
+    def _update_method_changed(self):
+        config = replace(self.controller.config, update_method=self.update_method.currentData())
+        try:
+            config.save()
+        except OSError as exc:
+            self._set_config(self.controller.config)
+            QMessageBox.warning(self, "Could not save update method", str(exc))
+            return
+        self._set_config(config)
 
     def _create_script(self):
         config = self.controller.config
@@ -371,6 +415,7 @@ class MainWindow(QMainWindow):
         self.start_stop.setEnabled(((idle and configured) or active) and not self._closing)
         self.restart.setEnabled(((idle and configured) or active) and not self._closing)
         self.update.setEnabled(((idle and configured) or active) and not self._closing)
+        self.update_method.setEnabled(((idle and configured) or active) and not self._closing)
         self.config_button.setEnabled(idle and configured and not self._closing)
         self.change_folder.setEnabled(idle and not self._closing)
         self.create_script_button.setEnabled(idle and configured and not self._closing)
@@ -386,8 +431,13 @@ class MainWindow(QMainWindow):
 
     def _update(self):
         running = self.controller.state in ("starting", "running")
-        message = "Update the ComfyUI Git checkout with git pull --ff-only? Local changes will cause the update to stop."
-        if self.controller.config.install_requirements:
+        cli = self.controller.config.update_method == "cli"
+        message = (
+            "Run comfy update for the selected ComfyUI folder using its configured Python environment? Comfy CLI updates code and installs requirements, which may change GPU dependencies."
+            if cli else "Update the ComfyUI Git checkout with git pull --ff-only?"
+        )
+        message += "\n\nLocal changes or untracked files will cause the update to stop."
+        if not cli and self.controller.config.install_requirements:
             message += "\n\nThen install requirements.txt with your selected ComfyUI Python. This may change installed dependencies."
         if running:
             message += "\n\nThe running server will stop first and restart after a successful update."

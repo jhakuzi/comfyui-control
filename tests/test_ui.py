@@ -158,3 +158,27 @@ def test_switching_scripts_clears_managed_mode(app, tmp_path, monkeypatch):
     dialog.script.setText(str(other))
     dialog._save()
     assert not Config.load().managed_script
+
+
+def test_update_method_selection_persists_and_is_locked_during_update(app, tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "settings"))
+    (tmp_path / "main.py").touch()
+    window = MainWindow(Config(comfy_dir=str(tmp_path)))
+    window.update_method.setCurrentIndex(window.update_method.findData("cli"))
+    assert Config.load().update_method == "cli"
+    window._state_changed("updating")
+    assert not window.update_method.isEnabled()
+    window._state_changed("stopped")
+    assert window.update_method.isEnabled()
+    with patch("comfyui_control.app.QMessageBox.question", return_value=QMessageBox.StandardButton.Yes) as confirm, patch.object(window.controller, "update") as update:
+        window._update()
+    assert "comfy update" in confirm.call_args.args[2]
+    assert "git pull --ff-only" not in confirm.call_args.args[2]
+    update.assert_called_once()
+    dialog = SettingsDialog(window.controller.config)
+    assert not dialog.requirements.isEnabled()
+    dialog.comfy_cli.setText("/path with spaces/comfy")
+    dialog._save()
+    assert Config.load().comfy_cli == "/path with spaces/comfy"
+    assert Config.load().update_method == "cli"
+    window.close()

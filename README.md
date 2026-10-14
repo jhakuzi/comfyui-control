@@ -137,9 +137,22 @@ Stop sends SIGTERM to the process group, then SIGKILL after eight seconds if nec
 
 ## Updates
 
-Update requires the selected folder to be the root of a Git checkout. It checks for tracked modifications and untracked files, then runs `git pull --ff-only` against the branch's configured upstream. It never resets, cleans, or stashes your changes. Git divergence, local changes, authentication failures, or command errors stop the update and remain visible in the output. If Git reports untracked models/output files, check the installation's `.gitignore` or move them before updating.
+Choose **Git** or **Comfy CLI** in the drop-down beside **Update**. The choice is saved for the selected installation and is also available in **Edit launch configuration…**. Existing settings retain Git; new installations created through the app's Comfy CLI setup select Comfy CLI automatically.
 
-If ComfyUI is running, Update stops it and restarts it only after a successful update. On failure it stays stopped. Optional **Install requirements.txt after updating** runs `python -m pip install -r requirements.txt` with the selected ComfyUI interpreter. It is off by default because it can change GPU and other dependencies. In script mode, explicitly select the Python executable used by your script before enabling this option. Updates cover the core checkout and optionally its requirements; custom nodes have their own update procedures. There is no automatic rollback if Git succeeds but dependency installation fails.
+| Method | What it does | When to choose it |
+| --- | --- | --- |
+| Git | `git pull --ff-only`; optionally install `requirements.txt` | You manage dependencies yourself or want to control when they change. |
+| Comfy CLI | `comfy --workspace "/your/ComfyUI" --skip-prompt update`, including requirements | You normally activate your ComfyUI environment and use `comfy update`. |
+
+For Comfy CLI, set **ComfyUI Python** to your ComfyUI virtual environment's `bin/python` (or use automatic detection of a supported local/companion environment). Conda environments are supported too. The app sets that environment for the update process without sourcing a shell activation script. This keeps requirements out of the GUI's own environment. The CLI executable is detected in the selected environment first, then on PATH; you can choose an explicit **Comfy CLI executable** in launch configuration for pipx or another tool installation. A missing executable or invalid environment is reported before stopping a running server. The app does not automatically install CLI packages or silently switch update methods.
+
+Neither method is universally better. Comfy CLI matches its own update workflow and installs dependencies required by the new ComfyUI code. Git without dependency installation is narrower but can leave missing requirements after a code update. The Git method always requires a fast-forward; Comfy CLI uses its own Git pull policy. With either dependency-installing method, package resolution can change GPU dependencies. The app's Git-only **Install requirements.txt after updating** checkbox is off by default and disabled when Comfy CLI is selected, because CLI handles requirements itself. CLI update behavior is defined by your installed version; the current upstream implementation is in [Comfy CLI's update command](https://github.com/Comfy-Org/comfy-cli/blob/main/comfy_cli/cmdline.py).
+
+Both methods require the selected folder to be the root of its own Git checkout. Before invoking either updater, the app checks for tracked modifications and untracked files and refuses to proceed if any exist. It does not reset, clean, or stash them. If Git reports untracked models/output files, check the installation's `.gitignore` or move them before updating. Setup shell scripts with extra environment exports are not executed by the updater; configure your actual ComfyUI Python explicitly, especially when using a custom launch script.
+
+If ComfyUI is running, Update stops it and restarts it only after a successful update. On failure it stays stopped, with the command and output visible in the log. CLI runs without interactive prompts; authentication or unexpected input requirements must be resolved in a terminal. Neither method updates custom nodes, the Comfy CLI tool itself, or this controller app. There is no automatic rollback if Git succeeds but dependency installation fails.
+
+![Update method selector after a real Comfy CLI test](update-preview.png)
 
 ## Troubleshooting
 
@@ -165,6 +178,10 @@ On 2026-10-14, a fresh GitHub checkout of version 0.4.1 (commit `41b262d`) was d
 The app's Start button launched ComfyUI with `--cpu --listen 127.0.0.1 --port 8199`. Both `/` and `/system_stats` returned HTTP 200. Restart produced a new server process and both endpoints responded again. Stop shut down the process and closed the port. Real server output appeared in the app's output pane throughout. This validation covers CPU installation and server control; GPU/ROCm, KDE Plasma integration, and model inference were not exercised.
 
 ![Actual app running the installed ComfyUI server](live-test-preview.png)
+
+### Update method verification
+
+Version 0.6.0 was additionally tested on Fedora 44 / Python 3.14.8 using the actual Comfy CLI 1.22.0 executable from the earlier installation. A disposable Git checkout with ComfyUI marker files and a small test server was updated by clicking Update and accepting the app's confirmation dialog. The CLI pulled a new revision and installed a local test-wheel requirement into a separate selected environment; the requirement was absent from both the GUI's system Python and the CLI tool's own environment. The server restarted only after success. Switching the saved selector to Git pulled another revision and restarted the server again; Stop then shut it down. This checks update integration and environment selection without updating the earlier full ComfyUI installation or exercising GPU dependencies. The CLI reported its optional custom-node ID cache unavailable in the minimal test environment; the code and requirement updates succeeded. The automated suite now has 61 passing tests, including CLI failure and missing-tool behavior.
 
 ## Uninstall
 

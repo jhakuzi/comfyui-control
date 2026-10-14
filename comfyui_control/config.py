@@ -27,6 +27,8 @@ class Config:
     models_dir: str = ""
     install_requirements: bool = False
     managed_script: bool = False
+    update_method: str = "git"
+    comfy_cli: str = ""
 
     @classmethod
     def load(cls, path: Path | None = None) -> "Config":
@@ -44,6 +46,8 @@ class Config:
                 raise ValueError(f"Invalid value for {key}.")
         if data.get("mode", "python") not in ("python", "script"):
             raise ValueError("Unknown launch mode.")
+        if data.get("update_method", "git") not in ("git", "cli"):
+            raise ValueError("Unknown update method.")
         return cls(**data)
 
     def save(self, path: Path | None = None) -> None:
@@ -90,6 +94,35 @@ class Config:
     def folder(self, kind: str) -> Path:
         override = self.output_dir if kind == "output" else self.models_dir
         return expand(override) if override.strip() else self.directory / kind
+
+    def cli_update(self) -> tuple[list[str], dict[str, str]]:
+        """Resolve the CLI separately from the environment it must update."""
+        python = shutil.which(self.interpreter())
+        if not python:
+            raise ValueError("Select a working ComfyUI Python executable before using Comfy CLI updates.")
+        # Do not resolve the Python symlink: its enclosing environment matters.
+        prefix = Path(python).absolute().parent.parent
+        if not (prefix / "bin" / "python").is_file():
+            raise ValueError("Select your ComfyUI environment's bin/python in Edit launch configuration.")
+        environment = {"PATH": str(prefix / "bin") + os.pathsep + os.environ.get("PATH", "")}
+        if (prefix / "pyvenv.cfg").is_file():
+            environment["VIRTUAL_ENV"] = str(prefix)
+        elif (prefix / "conda-meta").is_dir():
+            environment["CONDA_PREFIX"] = str(prefix)
+            environment["CONDA_DEFAULT_ENV"] = str(prefix)
+        else:
+            raise ValueError("For Comfy CLI updates, select your ComfyUI virtual environment's bin/python in Edit launch configuration.")
+        if self.comfy_cli.strip():
+            value = self.comfy_cli.strip()
+            executable = shutil.which(str(expand(value)) if "/" in value else value)
+        else:
+            executable = shutil.which(str(prefix / "bin" / "comfy")) or shutil.which("comfy")
+        if not executable:
+            raise ValueError(
+                "Comfy CLI was not found. Select its executable in Edit launch configuration, "
+                f"or install it in your ComfyUI environment: {shlex.join([python, '-m', 'pip', 'install', 'comfy-cli'])}"
+            )
+        return [executable, "--workspace", str(self.directory), "--skip-prompt", "update"], environment
 
     def validate(self) -> None:
         if not self.comfy_dir.strip() or not (self.directory / "main.py").is_file():
