@@ -13,12 +13,16 @@ from comfyui_control.setup import InstallDialog, InstallPlan, PYTHON_COMMANDS, W
 
 @pytest.fixture
 def fake_python(tmp_path):
-    executable = tmp_path / "python3.13"
+    executable = tmp_path / "python3"
     executable.write_text(
         f"#!{sys.executable}\n"
         "import json, os, pathlib, shlex, shutil, sys\n"
         "args = sys.argv[1:]\n"
-        "if args[:2] == ['-m', 'venv']:\n"
+        "if args[:1] == ['-c']:\n"
+        "    sys.version = '3.14.8 (simulated interpreter)'\n"
+        "    sys.version_info = (3, 14, 8)\n"
+        "    exec(args[1])\n"
+        "elif args[:2] == ['-m', 'venv']:\n"
         "    env = pathlib.Path(args[2])\n"
         "    (env / 'bin').mkdir(parents=True)\n"
         "    for name in ('python', 'comfy'):\n"
@@ -46,7 +50,7 @@ def fake_python(tmp_path):
     return executable
 
 
-def test_setup_runs_venv_pip_and_comfy_at_chosen_location(tmp_path, fake_python):
+def test_setup_accepts_python314_and_runs_venv_pip_and_comfy(tmp_path, fake_python):
     target = tmp_path / "Folder with 'quotes' $dollars `backticks`"
     plan = InstallPlan(target, str(fake_python), "--amd")
     plan.validate()
@@ -54,7 +58,8 @@ def test_setup_runs_venv_pip_and_comfy_at_chosen_location(tmp_path, fake_python)
     script = tmp_path / "setup.sh"
     script.write_text(plan.script(result_path))
     subprocess.run(["bash", "-n", str(script)], check=True)
-    subprocess.run(["bash", str(script)], check=True, capture_output=True, text=True)
+    completed = subprocess.run(["bash", str(script)], check=True, capture_output=True, text=True)
+    assert "3.14.8" in completed.stdout
     assert (target / "main.py").is_file()
     assert plan.environment.parent == target.parent
     assert not plan.environment.is_relative_to(target)
@@ -80,9 +85,9 @@ def test_setup_refuses_existing_installation_without_touching_it(tmp_path, fake_
     assert not result.exists()
 
 
-def test_unsupported_python_stops_before_creating_folders(tmp_path):
+def test_python2_stops_before_creating_folders(tmp_path):
     executable = tmp_path / "python3"
-    executable.write_text("#!/bin/sh\necho 'Select Python 3.12 or 3.13' >&2\nexit 1\n")
+    executable.write_text(f"#!{sys.executable}\nimport sys\nsys.version = '2.7.18'\nsys.version_info = (2, 7, 18)\nexec(sys.argv[2])\n")
     executable.chmod(0o700)
     plan = InstallPlan(tmp_path / "ComfyUI", str(executable))
     result = tmp_path / "result.json"
@@ -157,3 +162,12 @@ def test_distro_instructions_include_fedora_dnf(app):
     assert "sudo dnf install" in dialog.package_commands.toPlainText()
     dialog.distro.setCurrentText("Arch Linux")
     assert "sudo pacman" in dialog.package_commands.toPlainText()
+
+
+def test_setup_prefers_existing_python3_over_version_specific_interpreters(app):
+    def which(name):
+        return {"python3": "/usr/bin/python3", "python3.13": "/usr/bin/python3.13"}.get(name)
+    with patch("comfyui_control.setup.shutil.which", side_effect=which):
+        dialog = InstallDialog()
+    assert dialog.python.text() == "/usr/bin/python3"
+    assert "python3.13" not in dialog.package_commands.toPlainText()

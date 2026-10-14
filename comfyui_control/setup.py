@@ -17,9 +17,9 @@ from .config import Config, config_path, expand
 
 
 PYTHON_COMMANDS = {
-    "Fedora": "python3 --version\nsudo dnf install python3 python3-pip git\n# If needed, install a supported interpreter:\nsudo dnf install python3.13\npython3.13 --version",
-    "Ubuntu / Debian": "python3 --version\nsudo apt update\nsudo apt install python3 python3-pip python3-venv git -y",
-    "Arch Linux": "python3 --version\nsudo pacman -S python python-pip git",
+    "Fedora": "python3 --version\n# Only if prerequisites are missing:\nsudo dnf install python3 python3-pip git",
+    "Ubuntu / Debian": "python3 --version\n# Only if prerequisites are missing:\nsudo apt update\nsudo apt install python3 python3-pip python3-venv git -y",
+    "Arch Linux": "python3 --version\n# Only if prerequisites are missing:\nsudo pacman -S python python-pip git",
 }
 
 
@@ -41,7 +41,7 @@ class InstallPlan:
         if self.environment.exists() or self.environment.is_symlink():
             raise ValueError("The companion environment folder already exists. Choose another installation folder name.")
         if not self.python.strip() or not shutil.which(self.python):
-            raise ValueError("Select an installed Python 3.12 or 3.13 executable. See the Python installation commands above.")
+            raise ValueError("Select an installed Python 3 executable. Use the package commands above if Python is missing.")
         if self.gpu not in ("", "--nvidia", "--amd", "--cpu"):
             raise ValueError("Unknown GPU installation option.")
 
@@ -62,7 +62,7 @@ class InstallPlan:
             f"SETUP_PYTHON={shlex.quote(self.python)}\n"
             f"SETUP_RESULT={shlex.quote(str(result_path))}\n\n"
             '"$SETUP_PYTHON" -c \'import sys; print(sys.version); '
-            'sys.exit(0 if sys.version_info[:2] in ((3, 12), (3, 13)) else "Select Python 3.12 or 3.13 and retry.")\'\n'
+            'sys.exit(0 if sys.version_info[0] == 3 else "Select a Python 3 executable and retry.")\'\n'
             'command -v git >/dev/null || { echo "Install Git with your distribution package manager first." >&2; exit 1; }\n'
             'if [[ -e "$COMFYUI_DIR" || -L "$COMFYUI_DIR" || -e "$COMFY_ENV" || -L "$COMFY_ENV" ]]; then\n'
             '  echo "Installation or environment folder already exists. Choose a new location." >&2\n'
@@ -131,7 +131,7 @@ class InstallDialog(QDialog):
         self.result_path = None
         self.script_path = None
         layout = QVBoxLayout(self)
-        introduction = QLabel("1. Install Python 3.12 or 3.13 and Git if needed.\n2. Choose the new ComfyUI location below.\n3. Open the setup terminal and answer Comfy CLI's prompts.")
+        introduction = QLabel("1. Use your installed Python 3 and Git; install missing prerequisites if needed.\n2. Choose the new ComfyUI location below.\n3. Open the setup terminal and answer Comfy CLI's prompts.")
         introduction.setWordWrap(True)
         layout.addWidget(introduction)
         self.distro = QComboBox()
@@ -141,11 +141,11 @@ class InstallDialog(QDialog):
         self.package_commands.setReadOnly(True)
         self.package_commands.setMaximumHeight(120)
         layout.addWidget(self.package_commands)
-        note = QLabel("Check the version after installing: some distributions ship a different Python version. Select a 3.12 or 3.13 executable below. Run package-manager commands in your terminal.")
+        note = QLabel("Your existing Python 3 is used, including Python 3.14. Run package-manager commands only for missing prerequisites. You can select another installed interpreter below.")
         note.setWordWrap(True)
         layout.addWidget(note)
         form = QFormLayout()
-        self.python = QLineEdit(shutil.which("python3.13") or shutil.which("python3.12") or "python3")
+        self.python = QLineEdit(shutil.which("python3") or "python3")
         self.location = QLineEdit(str(Path.home() / "ComfyUI"))
         self.location.setPlaceholderText("New ComfyUI installation folder")
         self.gpu = QComboBox()
@@ -201,7 +201,7 @@ class InstallDialog(QDialog):
         return row
 
     def _browse_python(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Select Python 3.12 or 3.13 executable", "/usr/bin")
+        path, _ = QFileDialog.getOpenFileName(self, "Select installed Python 3 executable", "/usr/bin")
         if path:
             self.python.setText(path)
 

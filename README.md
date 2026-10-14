@@ -47,19 +47,18 @@ Keep your existing environment activation and flags if you already have them. `e
 
 ### Install a new ComfyUI with Comfy CLI
 
-The startup installer shows Python commands for Fedora, Ubuntu/Debian, and Arch Linux. Its workflow uses **Python 3.12 or 3.13**; check the version before continuing:
+The startup installer reuses your **installed Python 3**, including Python 3.14. It preselects `python3` from your PATH. Check the version if needed:
 
 ```bash
 python3 --version
 ```
 
+Run the following package commands only if prerequisites are missing. Existing, working installations can be selected directly in the startup dialog.
+
 Fedora:
 
 ```bash
 sudo dnf install python3 python3-pip git
-# If the distribution's default Python is not 3.12 or 3.13:
-sudo dnf install python3.13
-python3.13 --version
 ```
 
 Ubuntu/Debian:
@@ -75,7 +74,7 @@ Arch Linux:
 sudo pacman -S python python-pip git
 ```
 
-Distribution defaults vary. If the installed `python3` is a different version, install a supported interpreter for your distribution and select its executable in the installer. Package-manager commands are shown for you to run in your terminal; the app does not run sudo itself.
+You can select another installed Python executable if needed for your environment. Package-manager commands are shown for missing prerequisites; the app does not run sudo itself. Comfy CLI and package installers report their own dependency requirements in the terminal.
 
 Choose a **new installation folder**, select the Python executable, and optionally choose NVIDIA, AMD/ROCm, or CPU. **Open setup terminal…** opens Konsole (or another available terminal) and runs a visible setup script. Comfy CLI can ask questions there, including hardware selection when none was selected in the dialog.
 
