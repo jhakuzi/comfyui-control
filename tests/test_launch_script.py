@@ -79,3 +79,18 @@ def test_activation_failure_does_not_launch_server(tmp_path):
     result = subprocess.run(["bash", str(destination)], capture_output=True)
     assert result.returncode != 0
     assert not marker.exists()
+
+
+def test_launch_script_supports_environment_outside_installation(tmp_path):
+    directory = tmp_path / "ComfyUI"
+    directory.mkdir()
+    (directory / "main.py").write_text('import os\nprint(os.environ["VIRTUAL_ENV"])\n')
+    environment = tmp_path / "ComfyUI-env"
+    (environment / "bin").mkdir(parents=True)
+    interpreter = environment / "bin" / "python"
+    interpreter.symlink_to(sys.executable)
+    (environment / "bin" / "activate").write_text("export VIRTUAL_ENV=" + shlex.quote(str(environment)) + "\n")
+    script = tmp_path / "launch.sh"
+    create_launch_script(directory, script, [], python=str(interpreter))
+    result = subprocess.run(["bash", str(script)], check=True, capture_output=True, text=True)
+    assert result.stdout.strip() == str(environment)

@@ -18,6 +18,7 @@ from .config import Config, config_path, expand
 from .controller import Controller
 from .launch_script import create_launch_script
 from .flag_widgets import LaunchFlags, LaunchScriptDialog
+from .setup import InstallDialog, WelcomeDialog
 
 
 class SettingsDialog(QDialog):
@@ -32,7 +33,7 @@ class SettingsDialog(QDialog):
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         self.folder = QLineEdit(config.comfy_dir)
         self.python = QLineEdit(config.python)
-        self.python.setPlaceholderText("Auto: .venv/bin/python, venv/bin/python, or python3")
+        self.python.setPlaceholderText("Auto: comfy-env, .venv, venv, or python3")
         self.script = QLineEdit(config.script)
         self.mode = QComboBox()
         self.mode.addItem("Python — launch main.py", "python")
@@ -203,17 +204,20 @@ class MainWindow(QMainWindow):
         title.setStyleSheet("font-size: 18px; font-weight: 600;")
         header.addWidget(title)
         header.addStretch()
+        self.setup_button = QPushButton("Set up ComfyUI…")
+        self.setup_button.clicked.connect(self._first_setup)
+        header.addWidget(self.setup_button)
         self.status = QLabel("●  Stopped")
         header.addWidget(self.status)
         layout.addLayout(header)
         path_row = QHBoxLayout()
-        self.path_label = QLabel(config.comfy_dir)
+        self.path_label = QLabel(config.comfy_dir or "No installation selected")
         self.path_label.setTextFormat(Qt.TextFormat.PlainText)
         self.path_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.path_label.setWordWrap(True)
         path_row.addWidget(self.path_label, 1)
         self.create_script_button = QPushButton("Create launch script…")
-        self.create_script_button.setToolTip("Create a Bash script using comfy-env and your HIP launch flags.")
+        self.create_script_button.setToolTip("Create a Bash script using your Python environment and selected launch flags.")
         self.create_script_button.clicked.connect(self._create_script)
         path_row.addWidget(self.create_script_button)
         self.change_folder = QPushButton("Change folder…")
@@ -257,8 +261,17 @@ class MainWindow(QMainWindow):
         return button
 
     def _first_setup(self):
-        if self._choose_folder():
+        choice = WelcomeDialog(self)
+        if choice.exec() != QDialog.DialogCode.Accepted:
+            return
+        if choice.choice == "existing" and self._choose_folder():
             self._settings()
+        elif choice.choice == "install":
+            dialog = InstallDialog(self)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                self._set_config(dialog.result_config)
+                self.log.append_output(f"\nComfy CLI setup complete: {dialog.result_config.comfy_dir}\n")
+                self._settings()
 
     def _choose_folder(self):
         path = QFileDialog.getExistingDirectory(self, "Select ComfyUI folder (containing main.py)", str(self.controller.config.directory))
@@ -278,12 +291,13 @@ class MainWindow(QMainWindow):
 
     def _set_config(self, config):
         self.controller.config = config
-        self.path_label.setText(config.comfy_dir)
+        self.path_label.setText(config.comfy_dir or "No installation selected")
         self.path_label.setToolTip(str(config.directory))
+        self._state_changed(self.controller.state)
 
     def _create_script(self):
         config = self.controller.config
-        if not (config.directory / "main.py").is_file():
+        if not config.comfy_dir.strip() or not (config.directory / "main.py").is_file():
             QMessageBox.warning(self, "Choose ComfyUI folder", "Choose the ComfyUI folder containing main.py first.")
             return
         dialog = LaunchScriptDialog(config, self)
@@ -307,7 +321,10 @@ class MainWindow(QMainWindow):
         if not destination.suffix:
             destination = destination.with_suffix(".sh")
         try:
-            create_launch_script(config.directory, destination, shlex.split(arguments))
+            interpreter = config.interpreter()
+            if not config.python and not any(candidate.is_file() for candidate in config.local_interpreters()):
+                interpreter = str(config.directory / "comfy-env" / "bin" / "python")
+            create_launch_script(config.directory, destination, shlex.split(arguments), python=interpreter)
         except FileExistsError:
             QMessageBox.warning(self, "Script already exists", "Choose a new filename. Existing launch scripts are not overwritten.")
             return
@@ -316,7 +333,7 @@ class MainWindow(QMainWindow):
             return
         updated = replace(
             config, mode="script", script=str(destination), arguments=arguments, managed_script=True,
-            python=str(config.directory / "comfy-env" / "bin" / "python"),
+            python=interpreter,
         )
         try:
             updated.save()
@@ -326,7 +343,7 @@ class MainWindow(QMainWindow):
         self._set_config(updated)
         self.log.append_output(
             f"\nCreated and selected launch script: {destination}\n"
-            "Uses comfy-env, the HIP allocator, and your selected flags.\n"
+            "Uses your selected Python environment, the HIP allocator, and your selected flags.\n"
             "Use Edit launch configuration to change the flag checkboxes before the next start.\n"
         )
 
@@ -348,14 +365,18 @@ class MainWindow(QMainWindow):
         self.status.setStyleSheet(f"color: {color};")
         active = state in ("starting", "running")
         idle = state == "stopped"
+        configured = bool(self.controller.config.comfy_dir.strip()) and (self.controller.config.directory / "main.py").is_file()
         self.start_stop.setText("Stop" if active else "Start")
         self.start_stop.setIcon(QIcon.fromTheme("media-playback-stop" if active else "media-playback-start"))
-        self.start_stop.setEnabled((idle or active) and not self._closing)
-        self.restart.setEnabled((idle or active) and not self._closing)
-        self.update.setEnabled((idle or active) and not self._closing)
-        self.config_button.setEnabled(idle and not self._closing)
+        self.start_stop.setEnabled(((idle and configured) or active) and not self._closing)
+        self.restart.setEnabled(((idle and configured) or active) and not self._closing)
+        self.update.setEnabled(((idle and configured) or active) and not self._closing)
+        self.config_button.setEnabled(idle and configured and not self._closing)
         self.change_folder.setEnabled(idle and not self._closing)
-        self.create_script_button.setEnabled(idle and not self._closing)
+        self.create_script_button.setEnabled(idle and configured and not self._closing)
+        self.setup_button.setEnabled(idle and not self._closing)
+        self.output_button.setEnabled(configured and not self._closing)
+        self.models_button.setEnabled(configured and not self._closing)
         if self._closing and idle:
             QTimer.singleShot(0, self.close)
 
@@ -418,7 +439,8 @@ def main():
         config = Config.load(path)
     except (ValueError, OSError) as exc:
         config, load_error = Config(), str(exc)
-    window = MainWindow(config, first_run=not path.exists(), load_error=load_error)
+    configured = bool(config.comfy_dir.strip()) and (config.directory / "main.py").is_file()
+    window = MainWindow(config, first_run=not configured, load_error=load_error)
     window.show()
     result = app.exec()
     window.deleteLater()

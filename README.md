@@ -8,7 +8,7 @@ The preview uses sample server output. Qt's appearance follows the available des
 
 ## Install on Fedora
 
-This application controls an **existing, working ComfyUI installation**. It does not install ComfyUI, GPU drivers, or models.
+This application controls an existing ComfyUI installation or guides you through installing a new one with Comfy CLI. GPU drivers and models are configured separately.
 
 Extract the archive, open a terminal in the `comfyui-control` folder, then run:
 
@@ -29,19 +29,70 @@ python3 -m venv .venv
 
 ## First launch and configuration
 
-On first launch, a folder picker suggests `/mnt/Ironforge/ComfyUI`. Select the folder containing `main.py`, then choose a launch method in the configuration dialog:
+When no installation is configured, startup asks you to **Choose existing installation…** or **Install with Comfy CLI…**. Existing users choose their own folder containing `main.py`; there is no preset installation path. A saved, available installation opens directly on later launches. If its folder has moved or is unavailable, setup is shown again. **Set up ComfyUI…** reopens both choices, and **Change folder…** selects another existing installation.
 
-- **Python:** starts `main.py` using the specified Python executable. Leave Python blank to detect `.venv/bin/python`, then `venv/bin/python`, then `python3`. For Conda or an environment elsewhere, browse to its actual `bin/python` executable. Put flags such as `--listen 127.0.0.1 --port 8188` in Launch arguments.
+![Startup choices](startup-preview.png)
+
+- **Python:** starts `main.py` using the specified Python executable. Leave Python blank to detect `comfy-env/bin/python`, then `.venv/bin/python`, then `venv/bin/python`, then a companion `<installation-name>-env/bin/python` next to the installation, then `python3`. For Conda or an environment elsewhere, browse to its actual `bin/python` executable. Put flags such as `--listen 127.0.0.1 --port 8188` in Launch arguments.
 - **Existing Bash launch script:** select your `.sh` file. It runs with `/bin/bash` and the ComfyUI folder as its working directory. **Edit launch script…** opens it in KWrite or Kate so you can change flags already hardcoded there. Additional Launch arguments are appended to the script; your script must forward them with `"$@"` to use them. This output viewer supports scripts that run without interactive prompts.
 
 For a script you can adapt, the last lines should look like:
 
 ```bash
-cd /mnt/Ironforge/ComfyUI || exit 1
+cd "/path/to/your/ComfyUI" || exit 1
 exec .venv/bin/python -u main.py --listen 127.0.0.1 --port 8188 "$@"
 ```
 
 Keep your existing environment activation and flags if you already have them. `exec` helps the controller track the server; avoid backgrounding or daemonizing it. Stopping also signals child processes in the controller's process group.
+
+### Install a new ComfyUI with Comfy CLI
+
+The startup installer shows Python commands for Fedora, Ubuntu/Debian, and Arch Linux. Its workflow uses **Python 3.12 or 3.13**; check the version before continuing:
+
+```bash
+python3 --version
+```
+
+Fedora:
+
+```bash
+sudo dnf install python3 python3-pip git
+# If the distribution's default Python is not 3.12 or 3.13:
+sudo dnf install python3.13
+python3.13 --version
+```
+
+Ubuntu/Debian:
+
+```bash
+sudo apt update
+sudo apt install python3 python3-pip python3-venv git -y
+```
+
+Arch Linux:
+
+```bash
+sudo pacman -S python python-pip git
+```
+
+Distribution defaults vary. If the installed `python3` is a different version, install a supported interpreter for your distribution and select its executable in the installer. Package-manager commands are shown for you to run in your terminal; the app does not run sudo itself.
+
+Choose a **new installation folder**, select the Python executable, and optionally choose NVIDIA, AMD/ROCm, or CPU. **Open setup terminal…** opens Konsole (or another available terminal) and runs a visible setup script. Comfy CLI can ask questions there, including hardware selection when none was selected in the dialog.
+
+The script checks Python's version, creates a companion virtual environment next to the chosen folder, activates it, and runs:
+
+```bash
+python -m pip install comfy-cli
+comfy --workspace "/path/to/your/ComfyUI" install
+```
+
+This is the `pip install comfy-cli` → `comfy install` workflow with an explicit destination and an isolated Python environment. The environment is outside the ComfyUI checkout, so it does not block Git updates. Existing installation or environment folders are refused; use the existing-installation option for those. The app's own GUI environment is kept separate.
+
+After setup succeeds and `main.py` is present, **Use this installation** saves both the chosen location and its Python executable. Choosing CPU in the app also preselects `--cpu` in the launch flags; select that checkbox yourself if you chose CPU interactively in the terminal. No installation is selected on failure. Check the terminal output to resolve failures; an incomplete installation may require Comfy CLI's restore workflow or a fresh location. Canceling the app dialog does not stop the detached setup terminal; stop that terminal if you want to cancel installation too.
+
+**Copy setup commands** lets you run the same installation steps manually. After completing copied commands, select the folder with **Choose existing installation…**. The app's generated terminal script and result marker remain under its configuration folder for troubleshooting. Comfy CLI's upstream instructions are available in its [README](https://github.com/Comfy-Org/comfy-cli#installation).
+
+![Comfy CLI setup](install-preview.png)
 
 ### Select launch flags
 
@@ -53,7 +104,7 @@ Choose options such as `--disable-smart-memory`, `--use-pytorch-cross-attention`
 
 ### Create a launch script
 
-The small **Create launch script…** button beside the installation path first opens the checkbox selector, then saves an executable `.sh` file and selects it as the launch method. Existing configured flags are preselected; when none are configured, your HIP preset is suggested. The generated script activates `comfy-env` inside your selected ComfyUI folder, changes into that folder, sets `PYTORCH_HIP_ALLOC_CONF=expandable_segments:True`, then launches with the selected flags. The initial preset is equivalent to:
+The small **Create launch script…** button beside the installation path first opens the checkbox selector, then saves an executable `.sh` file and selects it as the launch method. Existing configured flags are preselected; when none are configured, the HIP preset is suggested. The generated script uses the selected Python executable, activates its virtual environment when an adjacent activation script is available, changes into the selected ComfyUI folder, sets `PYTORCH_HIP_ALLOC_CONF=expandable_segments:True`, then launches with the selected flags. For an installation with a `comfy-env` folder, the initial preset is equivalent to:
 
 ```bash
 exec ./comfy-env/bin/python main.py \
@@ -63,9 +114,9 @@ exec ./comfy-env/bin/python main.py \
   "$@"
 ```
 
-The `comfy-env` environment must already exist; the button creates the script, not the environment. Folder paths containing spaces or shell characters are quoted safely. `exec` keeps Start/Stop and Restart in control of the Python server. Additional arguments can be added in the configuration dialog.
+The Python environment must already exist; this button creates the launch script, not the environment. It also works with environments created by the Comfy CLI setup flow, `.venv`, or an explicitly selected interpreter. If no interpreter or local environment was found, the script targets `comfy-env/bin/python` inside the selected folder. Folder paths containing spaces or shell characters are quoted safely. `exec` keeps Start/Stop and Restart in control of the Python server. Additional arguments can be added in the configuration dialog.
 
-By default the script is saved next to the application's settings, outside the ComfyUI checkout, so it does not introduce an untracked file that blocks Update. You can choose another location and filename. Existing scripts are not overwritten. Creating a script preserves your chosen additional arguments and selects `comfy-env/bin/python` for optional dependency updates.
+By default the script is saved next to the application's settings, outside the ComfyUI checkout, so it does not introduce an untracked file that blocks Update. You can choose another location and filename. Existing scripts are not overwritten. Creating a script preserves your chosen additional arguments and selects the same Python executable for optional dependency updates.
 
 Scripts created by this version store your chosen defaults for standalone use. When started from the app, they receive the current checkbox selections instead, so unchecking a flag removes it even when it appeared in the original defaults. This also works when every flag is unchecked. The app uses a private argument marker that the generated script removes before launching ComfyUI. To change the environment activation or HIP setting, use **Edit launch configuration… → Edit launch script…**.
 
@@ -92,7 +143,7 @@ If ComfyUI is running, Update stops it and restarts it only after a successful u
 - **ComfyUI exits immediately:** check the log and the interpreter/launch script; confirm your normal launch command works in a terminal.
 - **Qt reports an xcb plugin error:** on Fedora install `libxcb`, `xcb-util-cursor`, and `libxkbcommon-x11`. KDE Wayland can also be selected with `QT_QPA_PLATFORM=wayland ~/.local/bin/comfyui-control`.
 - **No script editor:** install `kwrite` or `kate`, or edit the script in your preferred editor.
-- **Folder unavailable:** verify `/mnt/Ironforge` is mounted and choose the correct folder.
+- **Folder unavailable:** check that the drive is mounted and choose the correct installation folder.
 
 ## Tests
 

@@ -121,7 +121,7 @@ class LaunchScriptDialog(QDialog):
         self.setWindowTitle("Create launch script — choose flags")
         self.resize(660, 460)
         layout = QVBoxLayout(self)
-        explanation = QLabel("Activate comfy-env, set the HIP allocator, and launch with these flags:")
+        explanation = QLabel("Use the selected Python environment, set the HIP allocator, and launch with these flags:")
         explanation.setWordWrap(True)
         layout.addWidget(explanation)
         self.options = LaunchFlags(config.directory, config.arguments or shlex.join(HIP_PRESET))

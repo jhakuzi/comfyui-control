@@ -18,7 +18,7 @@ def expand(value: str) -> Path:
 
 @dataclass
 class Config:
-    comfy_dir: str = "/mnt/Ironforge/ComfyUI"
+    comfy_dir: str = ""
     python: str = ""
     mode: str = "python"
     script: str = ""
@@ -61,7 +61,7 @@ class Config:
 
     @property
     def directory(self) -> Path:
-        return expand(self.comfy_dir)
+        return expand(self.comfy_dir) if self.comfy_dir.strip() else Path.home()
 
     def interpreter(self) -> str:
         if self.python.strip():
@@ -69,11 +69,16 @@ class Config:
             if "/" in value:
                 return str(expand(value))
             return shutil.which(value) or value
-        for name in (".venv", "venv"):
-            candidate = self.directory / name / "bin" / "python"
+        for candidate in self.local_interpreters():
             if candidate.is_file():
                 return str(candidate)
         return shutil.which("python3") or "python3"
+
+    def local_interpreters(self) -> list[Path]:
+        return [
+            *(self.directory / name / "bin" / "python" for name in ("comfy-env", ".venv", "venv")),
+            self.directory.parent / (self.directory.name + "-env") / "bin" / "python",
+        ]
 
     def command(self) -> list[str]:
         args = shlex.split(self.arguments)

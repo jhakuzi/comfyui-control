@@ -21,6 +21,7 @@ def test_streamed_escape_sequences_and_progress(app):
 
 
 def test_control_states_and_native_folder_open(app, tmp_path):
+    (tmp_path / "main.py").touch()
     (tmp_path / "output").mkdir()
     window = MainWindow(Config(comfy_dir=str(tmp_path)))
     assert window.start_stop.text() == "Start"

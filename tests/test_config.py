@@ -55,3 +55,15 @@ def test_custom_folder_does_not_modify_launch_flags(tmp_path):
     assert config.folder("output") == tmp_path / "different"
     assert config.folder("models") == tmp_path / "models"
     assert config.arguments == ""
+
+
+def test_existing_selection_detects_companion_environment(tmp_path):
+    directory = tmp_path / "ComfyUI"
+    directory.mkdir()
+    (directory / "main.py").touch()
+    interpreter = tmp_path / "ComfyUI-env" / "bin" / "python"
+    interpreter.parent.mkdir(parents=True)
+    interpreter.symlink_to(sys.executable)
+    config = Config(comfy_dir=str(directory))
+    config.validate()
+    assert config.interpreter() == str(interpreter)
