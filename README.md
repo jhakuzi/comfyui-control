@@ -8,6 +8,10 @@ The preview uses sample server output. Qt's appearance follows the available des
 
 ## Install on Fedora
 
+Fedora RPM build instructions and a prepared COPR source-build recipe are in
+[packaging/README.md](packaging/README.md). A public COPR repository has not yet
+been created.
+
 This application controls an existing ComfyUI installation or guides you through installing a new one with Comfy CLI. GPU drivers and models are configured separately.
 
 Extract the archive, open a terminal in the `comfyui-control` folder, then run:

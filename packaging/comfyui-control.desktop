@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=ComfyUI Control
+Comment=Start, stop, and update a local ComfyUI server
+Exec=comfyui-control
+Icon=utilities-terminal
+Terminal=false
+Categories=Graphics;
+StartupNotify=true

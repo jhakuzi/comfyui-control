@@ -1,0 +1,58 @@
+Name:           comfyui-control
+Version:        0.5.0
+Release:        1%{?dist}
+Summary:        A compact Qt controller for a local ComfyUI installation
+
+# Private builds only until the project owner chooses a distribution license.
+License:        LicenseRef-Proprietary
+URL:            https://github.com/jhakuzi/comfyui-control
+Source0:        %{name}-%{version}.tar.gz
+BuildArch:      noarch
+
+BuildRequires:  python3-devel
+BuildRequires:  pyproject-rpm-macros
+BuildRequires:  python3-setuptools
+BuildRequires:  python3-wheel
+BuildRequires:  python3-pyside6 >= 6.7
+BuildRequires:  python3-pytest
+BuildRequires:  desktop-file-utils
+BuildRequires:  git-core
+Requires:       python3-pyside6 >= 6.7
+Requires:       python3-pip
+Requires:       git-core
+Requires:       /bin/bash
+Recommends:     konsole
+
+%description
+A native Qt window with live ComfyUI server output, start, stop, restart,
+and update controls, folder shortcuts, launch flag selection, and guided
+Comfy CLI setup. ComfyUI, its models, and GPU drivers are installed separately.
+
+%prep
+%autosetup
+# Fedora supplies the complete PySide6 distribution rather than the PyPI-only
+# PySide6-Essentials wheel. Keep matching installed Python metadata in the RPM.
+sed -i 's/PySide6-Essentials/PySide6/' pyproject.toml
+
+%build
+%pyproject_wheel
+
+%install
+%pyproject_install
+%pyproject_save_files comfyui_control
+desktop-file-install --dir=%{buildroot}%{_datadir}/applications packaging/%{name}.desktop
+install -Dpm 0644 packaging/README.md %{buildroot}%{_docdir}/%{name}/RPM.md
+
+%check
+QT_QPA_PLATFORM=offscreen %pytest
+desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
+
+%files -f %{pyproject_files}
+%doc README.md
+%doc %{_docdir}/%{name}/RPM.md
+%{_bindir}/%{name}
+%{_datadir}/applications/%{name}.desktop
+
+%changelog
+* Wed Oct 14 2026 ComfyUI Control contributors - 0.5.0-1
+- Add Fedora packaging and COPR source RPM preparation.
