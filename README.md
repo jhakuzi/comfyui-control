@@ -43,6 +43,22 @@ exec .venv/bin/python -u main.py --listen 127.0.0.1 --port 8188 "$@"
 
 Keep your existing environment activation and flags if you already have them. `exec` helps the controller track the server; avoid backgrounding or daemonizing it. Stopping also signals child processes in the controller's process group.
 
+### Create a launch script
+
+The small **Create launch script…** button beside the installation path saves an executable `.sh` file and selects it as the launch method. The generated script activates `comfy-env` inside your selected ComfyUI folder, changes into that folder, sets `PYTORCH_HIP_ALLOC_CONF=expandable_segments:True`, then runs:
+
+```bash
+exec ./comfy-env/bin/python main.py \
+  --use-pytorch-cross-attention \
+  --disable-smart-memory \
+  --reserve-vram 1 \
+  "$@"
+```
+
+The `comfy-env` environment must already exist; the button creates the script, not the environment. Folder paths containing spaces or shell characters are quoted safely. `exec` keeps Start/Stop and Restart in control of the Python server. Additional arguments can be added in the configuration dialog.
+
+By default the script is saved next to the application's settings, outside the ComfyUI checkout, so it does not introduce an untracked file that blocks Update. You can choose another location and filename. Existing scripts are not overwritten. Creating a script clears any previously configured additional launch arguments and selects `comfy-env/bin/python` for optional dependency updates. Use **Edit launch configuration… → Edit launch script…** to edit the generated flags later.
+
 The settings are stored in `~/.config/comfyui-control/config.json` (or `$XDG_CONFIG_HOME/comfyui-control/config.json`). Settings can be edited while stopped. Changing installation folders resets the interpreter, script, arguments, and custom folder paths, so configure the new installation before starting it.
 
 Output and models buttons use the installation's `output` and `models` subfolders. If your flags or scripts relocate these folders, set the corresponding custom paths in the configuration dialog too. These custom paths control the folder buttons; they do not change ComfyUI's flags.

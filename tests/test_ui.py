@@ -25,9 +25,11 @@ def test_control_states_and_native_folder_open(app, tmp_path):
     window = MainWindow(Config(comfy_dir=str(tmp_path)))
     assert window.start_stop.text() == "Start"
     assert window.change_folder.isEnabled()
+    assert window.create_script_button.isEnabled()
     window._state_changed("running")
     assert window.start_stop.text() == "Stop"
     assert not window.change_folder.isEnabled()
+    assert not window.create_script_button.isEnabled()
     assert not window.config_button.isEnabled()
     window._state_changed("updating")
     assert not window.start_stop.isEnabled()
@@ -71,3 +73,50 @@ def test_close_waits_for_owned_process(app):
         assert window._closing
     window.controller.state = "stopped"
     assert window.close()
+
+
+def test_create_script_selects_preset_and_persists_config(app, tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "settings"))
+    (tmp_path / "main.py").touch()
+    original = Config(comfy_dir=str(tmp_path), arguments="--reserve-vram 7", output_dir="/custom/output")
+    original.save()
+    window = MainWindow(original)
+    destination = tmp_path / "launch file"
+    with patch("comfyui_control.app.QFileDialog.getSaveFileName", return_value=(str(destination), "")):
+        window._create_script()
+    script = destination.with_suffix(".sh")
+    saved = Config.load()
+    assert script.is_file()
+    assert saved.mode == "script"
+    assert saved.script == str(script)
+    assert saved.python == str(tmp_path / "comfy-env" / "bin" / "python")
+    assert saved.arguments == ""
+    assert saved.output_dir == "/custom/output"
+    assert window.controller.config == saved
+    assert saved.command() == ["/bin/bash", str(script)]
+    window.close()
+
+
+def test_cancel_script_creation_leaves_settings_unchanged(app, tmp_path):
+    (tmp_path / "main.py").touch()
+    original = Config(comfy_dir=str(tmp_path), arguments="--port 9999")
+    window = MainWindow(original)
+    with patch("comfyui_control.app.QFileDialog.getSaveFileName", return_value=("", "")):
+        window._create_script()
+    assert window.controller.config == original
+    assert list(tmp_path.iterdir()) == [tmp_path / "main.py"]
+    window.close()
+
+
+def test_create_script_collision_preserves_settings(app, tmp_path):
+    (tmp_path / "main.py").touch()
+    destination = tmp_path / "launch.sh"
+    destination.write_text("existing script")
+    original = Config(comfy_dir=str(tmp_path), arguments="--port 9999")
+    window = MainWindow(original)
+    with patch("comfyui_control.app.QFileDialog.getSaveFileName", return_value=(str(destination), "")), patch("comfyui_control.app.QMessageBox.warning") as warning:
+        window._create_script()
+    warning.assert_called_once()
+    assert destination.read_text() == "existing script"
+    assert window.controller.config == original
+    window.close()

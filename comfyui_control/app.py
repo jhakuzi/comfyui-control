@@ -1,4 +1,6 @@
 """Native Qt Widgets interface. The output pane is a read-only log viewer."""
+from dataclasses import replace
+from pathlib import Path
 import re
 import shutil
 import sys
@@ -13,6 +15,7 @@ from PySide6.QtWidgets import (
 
 from .config import Config, config_path, expand
 from .controller import Controller
+from .launch_script import create_launch_script
 
 
 class SettingsDialog(QDialog):
@@ -190,6 +193,10 @@ class MainWindow(QMainWindow):
         self.path_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.path_label.setWordWrap(True)
         path_row.addWidget(self.path_label, 1)
+        self.create_script_button = QPushButton("Create launch script…")
+        self.create_script_button.setToolTip("Create a Bash script using comfy-env and your HIP launch flags.")
+        self.create_script_button.clicked.connect(self._create_script)
+        path_row.addWidget(self.create_script_button)
         self.change_folder = QPushButton("Change folder…")
         self.change_folder.clicked.connect(self._choose_folder)
         path_row.addWidget(self.change_folder)
@@ -255,6 +262,47 @@ class MainWindow(QMainWindow):
         self.path_label.setText(config.comfy_dir)
         self.path_label.setToolTip(str(config.directory))
 
+    def _create_script(self):
+        config = self.controller.config
+        if not (config.directory / "main.py").is_file():
+            QMessageBox.warning(self, "Choose ComfyUI folder", "Choose the ComfyUI folder containing main.py first.")
+            return
+        # Keep personal scripts outside the Git checkout so updates stay clean.
+        default = config_path().parent / "launch-comfyui.sh"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Create a new launch script", str(default),
+            "Shell scripts (*.sh);;All files (*)",
+            options=QFileDialog.Option.DontConfirmOverwrite,
+        )
+        if not path:
+            return
+        destination = Path(path)
+        if not destination.suffix:
+            destination = destination.with_suffix(".sh")
+        try:
+            create_launch_script(config.directory, destination)
+        except FileExistsError:
+            QMessageBox.warning(self, "Script already exists", "Choose a new filename. Existing launch scripts are not overwritten.")
+            return
+        except (ValueError, OSError) as exc:
+            QMessageBox.warning(self, "Could not create script", str(exc))
+            return
+        updated = replace(
+            config, mode="script", script=str(destination), arguments="",
+            python=str(config.directory / "comfy-env" / "bin" / "python"),
+        )
+        try:
+            updated.save()
+        except OSError as exc:
+            QMessageBox.warning(self, "Could not save launch settings", f"The script was created at {destination}, but could not be selected:\n{exc}")
+            return
+        self._set_config(updated)
+        self.log.append_output(
+            f"\nCreated and selected launch script: {destination}\n"
+            "Uses comfy-env and your HIP launch flags. Additional launch arguments were cleared.\n"
+            "Use Edit launch configuration → Edit launch script to change its flags.\n"
+        )
+
     def _settings(self):
         dialog = SettingsDialog(self.controller.config, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -280,6 +328,7 @@ class MainWindow(QMainWindow):
         self.update.setEnabled((idle or active) and not self._closing)
         self.config_button.setEnabled(idle and not self._closing)
         self.change_folder.setEnabled(idle and not self._closing)
+        self.create_script_button.setEnabled(idle and not self._closing)
         if self._closing and idle:
             QTimer.singleShot(0, self.close)
 
