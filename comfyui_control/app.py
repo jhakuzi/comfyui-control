@@ -1,0 +1,355 @@
+"""Native Qt Widgets interface. The output pane is a read-only log viewer."""
+import re
+import shutil
+import sys
+
+from PySide6.QtCore import QCoreApplication, QEvent, QLockFile, QProcess, QTimer, Qt, QUrl
+from PySide6.QtGui import QDesktopServices, QFontDatabase, QIcon, QTextCursor
+from PySide6.QtWidgets import (
+    QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
+    QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMainWindow,
+    QMessageBox, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget,
+)
+
+from .config import Config, config_path, expand
+from .controller import Controller
+
+
+class SettingsDialog(QDialog):
+    def __init__(self, config, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("ComfyUI launch configuration")
+        self.resize(610, 490)
+        self.result_config = None
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        self.folder = QLineEdit(config.comfy_dir)
+        self.python = QLineEdit(config.python)
+        self.python.setPlaceholderText("Auto: .venv/bin/python, venv/bin/python, or python3")
+        self.script = QLineEdit(config.script)
+        self.mode = QComboBox()
+        self.mode.addItem("Python — launch main.py", "python")
+        self.mode.addItem("Existing Bash launch script", "script")
+        self.mode.setCurrentIndex(1 if config.mode == "script" else 0)
+        self.arguments = QPlainTextEdit(config.arguments)
+        self.arguments.setPlaceholderText('--listen 127.0.0.1 --port 8188\nUse quotes for paths containing spaces.')
+        self.arguments.setMaximumHeight(100)
+        self.output_dir = QLineEdit(config.output_dir)
+        self.output_dir.setPlaceholderText("Default: ComfyUI/output")
+        self.models_dir = QLineEdit(config.models_dir)
+        self.models_dir.setPlaceholderText("Default: ComfyUI/models")
+        form.addRow("ComfyUI folder", self._path_row(self.folder, directory=True))
+        form.addRow("Launch method", self.mode)
+        form.addRow("ComfyUI Python", self._path_row(self.python))
+        form.addRow("Launch script", self._path_row(self.script, scripts=True))
+        form.addRow("Launch arguments", self.arguments)
+        self.note = QLabel()
+        self.note.setWordWrap(True)
+        form.addRow(self.note)
+        self.edit_script = QPushButton("Edit launch script…")
+        self.edit_script.clicked.connect(self._edit_script)
+        form.addRow(self.edit_script)
+        form.addRow("Output folder", self._path_row(self.output_dir, directory=True))
+        form.addRow("Models folder", self._path_row(self.models_dir, directory=True))
+        self.requirements = QCheckBox("Install requirements.txt after updating")
+        self.requirements.setChecked(config.install_requirements)
+        self.requirements.setToolTip("Runs pip in the ComfyUI Python selected above. May change installed packages, including GPU dependencies.")
+        form.addRow(self.requirements)
+        layout.addLayout(form)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(self._save)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        self.mode.currentIndexChanged.connect(self._mode_changed)
+        self._mode_changed()
+
+    def _path_row(self, field, directory=False, scripts=False):
+        row = QWidget()
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(field)
+        button = QPushButton("Browse…")
+        button.clicked.connect(lambda: self._browse(field, directory, scripts))
+        layout.addWidget(button)
+        return row
+
+    def _browse(self, field, directory, scripts):
+        start = str(expand(field.text() or self.folder.text()))
+        if directory:
+            path = QFileDialog.getExistingDirectory(self, "Choose folder", start)
+        else:
+            path, _ = QFileDialog.getOpenFileName(self, "Choose launch script" if scripts else "Choose Python executable", start, "Shell scripts (*.sh);;All files (*)" if scripts else "All files (*)")
+        if path:
+            field.setText(path)
+
+    def _mode_changed(self):
+        script_mode = self.mode.currentData() == "script"
+        self.script.parentWidget().setEnabled(script_mode)
+        self.edit_script.setEnabled(script_mode)
+        self.note.setText(
+            'Arguments are appended to the script. The script must forward them using "$@". '
+            'For flags hardcoded in the script, use “Edit launch script”. End the script with exec python … to keep server ownership clear.'
+            if script_mode else
+            "Arguments are passed directly to main.py. They are saved here and take effect on the next start."
+        )
+
+    def _edit_script(self):
+        path = expand(self.script.text())
+        if not self.script.text().strip() or not path.is_file():
+            QMessageBox.warning(self, "Select a script", "Choose an existing launch script first.")
+            return
+        editor = shutil.which("kwrite") or shutil.which("kate")
+        if not editor:
+            QMessageBox.information(self, "Text editor unavailable", f"Open {path} in your text editor, or install KWrite or Kate.")
+            return
+        ok, _ = QProcess.startDetached(editor, [str(path)])
+        if not ok:
+            QMessageBox.warning(self, "Editor unavailable", "Could not open the launch script in the text editor.")
+
+    def _save(self):
+        config = Config(
+            comfy_dir=self.folder.text().strip(), python=self.python.text().strip(),
+            mode=self.mode.currentData(), script=self.script.text().strip(),
+            arguments=self.arguments.toPlainText().strip(),
+            output_dir=self.output_dir.text().strip(), models_dir=self.models_dir.text().strip(),
+            install_requirements=self.requirements.isChecked(),
+        )
+        try:
+            config.validate()
+            config.save()
+        except (ValueError, OSError) as exc:
+            QMessageBox.warning(self, "Check configuration", str(exc))
+            return
+        self.result_config = config
+        self.accept()
+
+
+class LogView(QPlainTextEdit):
+    """Stream text incrementally, removing ANSI sequences across read boundaries."""
+    def __init__(self):
+        super().__init__()
+        self.setReadOnly(True)
+        self.setMaximumBlockCount(5000)
+        self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
+        self.setStyleSheet("QPlainTextEdit { background: #171b20; color: #d6dde5; border: 1px solid #424b57; border-radius: 5px; padding: 10px; }")
+        self._escape = ""
+        self._pending_cr = False
+
+    def append_output(self, text):
+        text = self._escape + text
+        self._escape = ""
+        text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07]*?(?:\x07|\x1b\\)", "", text)
+        # Hold an incomplete CSI/OSC escape until the next read.
+        match = re.search(r"\x1b(?:\[[0-?]*[ -/]*|\][^\x07]*|)$", text)
+        if match:
+            self._escape, text = text[match.start():], text[:match.start()]
+            if len(self._escape) > 8192:
+                self._escape = ""
+        text = re.sub(r"\x1b[@-_]", "", text)
+        # Render progress carriage returns as separate log lines, not control text.
+        if self._pending_cr and text.startswith("\n"):
+            text = text[1:]
+        self._pending_cr = text.endswith("\r")
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        scroll = self.verticalScrollBar()
+        follow = scroll.value() >= scroll.maximum() - 4
+        old_value = scroll.value()
+        cursor = QTextCursor(self.document())
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        cursor.insertText(text)
+        scroll.setValue(scroll.maximum() if follow else old_value)
+
+
+class MainWindow(QMainWindow):
+    def __init__(self, config, first_run=False, load_error=""):
+        super().__init__()
+        self.setWindowTitle("ComfyUI Control")
+        self.setWindowIcon(QIcon.fromTheme("utilities-terminal"))
+        self.resize(800, 570)
+        self.setMinimumSize(580, 400)
+        self._closing = False
+        self.controller = Controller(config, self)
+        body = QWidget()
+        self.setCentralWidget(body)
+        layout = QVBoxLayout(body)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(12)
+        header = QHBoxLayout()
+        title = QLabel("ComfyUI")
+        title.setStyleSheet("font-size: 18px; font-weight: 600;")
+        header.addWidget(title)
+        header.addStretch()
+        self.status = QLabel("●  Stopped")
+        header.addWidget(self.status)
+        layout.addLayout(header)
+        path_row = QHBoxLayout()
+        self.path_label = QLabel(config.comfy_dir)
+        self.path_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.path_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.path_label.setWordWrap(True)
+        path_row.addWidget(self.path_label, 1)
+        self.change_folder = QPushButton("Change folder…")
+        self.change_folder.clicked.connect(self._choose_folder)
+        path_row.addWidget(self.change_folder)
+        layout.addLayout(path_row)
+        self.log = LogView()
+        layout.addWidget(self.log, 1)
+        controls = QHBoxLayout()
+        left, right = QVBoxLayout(), QVBoxLayout()
+        self.start_stop = self._button("Start", "media-playback-start", self._start_stop)
+        self.restart = self._button("Restart", "view-refresh", self.controller.restart)
+        self.update = self._button("Update ComfyUI", "system-software-update", self._update)
+        left.addWidget(self.start_stop)
+        left.addWidget(self.restart)
+        left.addWidget(self.update)
+        self.output_button = self._button("Open output folder", "folder-open", lambda: self._open_folder("output"))
+        self.models_button = self._button("Open models folder", "folder-open", lambda: self._open_folder("models"))
+        self.config_button = self._button("Edit launch configuration…", "configure", self._settings)
+        right.addWidget(self.output_button)
+        right.addWidget(self.models_button)
+        right.addWidget(self.config_button)
+        controls.addLayout(left, 1)
+        controls.addSpacing(20)
+        controls.addLayout(right, 1)
+        layout.addLayout(controls)
+        self.controller.output.connect(self.log.append_output)
+        self.controller.changed.connect(self._state_changed)
+        self.controller.problem.connect(self._problem)
+        self._state_changed("stopped")
+        self.log.append_output("Ready. Select your ComfyUI installation and launch settings, then press Start.\nThis panel shows server output; it does not accept terminal commands.\n")
+        if load_error:
+            self.log.append_output(f"\nConfiguration could not be loaded: {load_error}\nYour existing file was left untouched.\n")
+        if first_run:
+            QTimer.singleShot(0, self._first_setup)
+
+    def _button(self, text, icon, callback):
+        button = QPushButton(QIcon.fromTheme(icon), text)
+        button.setMinimumHeight(36)
+        button.clicked.connect(callback)
+        return button
+
+    def _first_setup(self):
+        if self._choose_folder():
+            self._settings()
+
+    def _choose_folder(self):
+        path = QFileDialog.getExistingDirectory(self, "Select ComfyUI folder (containing main.py)", str(self.controller.config.directory))
+        if not path:
+            return False
+        # A new installation should get its own interpreter, script, and folders.
+        config = Config(comfy_dir=path)
+        try:
+            config.validate()
+            config.save()
+        except (ValueError, OSError) as exc:
+            QMessageBox.warning(self, "Check ComfyUI folder", str(exc))
+            return False
+        self._set_config(config)
+        self.log.append_output(f"\nSelected ComfyUI folder: {path}\nLaunch settings reset for this installation. Choose an existing script in Edit launch configuration if needed.\n")
+        return True
+
+    def _set_config(self, config):
+        self.controller.config = config
+        self.path_label.setText(config.comfy_dir)
+        self.path_label.setToolTip(str(config.directory))
+
+    def _settings(self):
+        dialog = SettingsDialog(self.controller.config, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self._set_config(dialog.result_config)
+
+    def _start_stop(self):
+        if self.controller.state == "stopped":
+            self.controller.start()
+        else:
+            self.controller.stop()
+
+    def _state_changed(self, state):
+        labels = {"stopped": "Stopped", "starting": "Starting…", "running": "Process running", "stopping": "Stopping…", "updating": "Updating…"}
+        self.status.setText("●  " + labels[state])
+        color = {"stopped": "#8795a5", "running": "#48a878"}.get(state, "#d69c42")
+        self.status.setStyleSheet(f"color: {color};")
+        active = state in ("starting", "running")
+        idle = state == "stopped"
+        self.start_stop.setText("Stop" if active else "Start")
+        self.start_stop.setIcon(QIcon.fromTheme("media-playback-stop" if active else "media-playback-start"))
+        self.start_stop.setEnabled((idle or active) and not self._closing)
+        self.restart.setEnabled((idle or active) and not self._closing)
+        self.update.setEnabled((idle or active) and not self._closing)
+        self.config_button.setEnabled(idle and not self._closing)
+        self.change_folder.setEnabled(idle and not self._closing)
+        if self._closing and idle:
+            QTimer.singleShot(0, self.close)
+
+    def _problem(self, message):
+        if not self._closing:
+            QMessageBox.warning(self, "ComfyUI Control", message)
+
+    def _update(self):
+        running = self.controller.state in ("starting", "running")
+        message = "Update the ComfyUI Git checkout with git pull --ff-only? Local changes will cause the update to stop."
+        if self.controller.config.install_requirements:
+            message += "\n\nThen install requirements.txt with your selected ComfyUI Python. This may change installed dependencies."
+        if running:
+            message += "\n\nThe running server will stop first and restart after a successful update."
+        if QMessageBox.question(self, "Update ComfyUI", message, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
+            self.controller.update()
+
+    def _open_folder(self, kind):
+        path = self.controller.config.folder(kind)
+        if not path.is_dir():
+            QMessageBox.information(self, "Folder unavailable", f"Folder does not exist:\n{path}\n\nSet a custom folder in Edit launch configuration if needed.")
+        elif not QDesktopServices.openUrl(QUrl.fromLocalFile(str(path))):
+            QMessageBox.warning(self, "Could not open folder", f"Could not open {path} in the file manager.")
+
+    def closeEvent(self, event):
+        if self.controller.state == "stopped":
+            event.accept()
+            return
+        if not self._closing:
+            question = "Stop ComfyUI and close the window?" if self.controller.state != "updating" else "Cancel the update and close? If packages are being installed, rerun the update before starting ComfyUI."
+            if QMessageBox.question(self, "Close ComfyUI Control", question, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+                event.ignore()
+                return
+            self._closing = True
+            self.controller.shutdown()
+            self._state_changed(self.controller.state)
+        event.ignore()
+
+
+def main():
+    app = QApplication(sys.argv)
+    app.setApplicationName("ComfyUI Control")
+    app.setDesktopFileName("comfyui-control")
+    if sys.platform != "linux":
+        QMessageBox.critical(None, "Linux required", "ComfyUI Control currently supports Linux only.")
+        return 1
+    path = config_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        QMessageBox.critical(None, "Cannot save settings", str(exc))
+        return 1
+    lock = QLockFile(str(path.parent / "control.lock"))
+    lock.setStaleLockTime(0)
+    if not lock.tryLock(0):
+        QMessageBox.information(None, "Already open", "ComfyUI Control is already running for this user.")
+        return 1
+    load_error = ""
+    try:
+        config = Config.load(path)
+    except (ValueError, OSError) as exc:
+        config, load_error = Config(), str(exc)
+    window = MainWindow(config, first_run=not path.exists(), load_error=load_error)
+    window.show()
+    result = app.exec()
+    window.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    lock.unlock()
+    return result
+
+
+if __name__ == "__main__":
+    sys.exit(main())

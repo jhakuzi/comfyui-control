@@ -1,0 +1,73 @@
+from unittest.mock import patch
+
+from PySide6.QtCore import QUrl
+from PySide6.QtWidgets import QDialog, QMessageBox
+
+from comfyui_control.app import LogView, MainWindow, SettingsDialog
+from comfyui_control.config import Config
+
+
+def test_streamed_escape_sequences_and_progress(app):
+    log = LogView()
+    log.append_output("hello \x1b[3")
+    log.append_output("1mred\x1b[0m\r")
+    log.append_output("\nnext\n")
+    assert log.toPlainText() == "hello red\nnext\n"
+    log.append_output("\x1b]0;title\x07clean")
+    assert log.toPlainText().endswith("clean")
+    log.append_output("\x1b]0;title\x1b\\")
+    log.append_output("still visible")
+    assert log.toPlainText().endswith("cleanstill visible")
+
+
+def test_control_states_and_native_folder_open(app, tmp_path):
+    (tmp_path / "output").mkdir()
+    window = MainWindow(Config(comfy_dir=str(tmp_path)))
+    assert window.start_stop.text() == "Start"
+    assert window.change_folder.isEnabled()
+    window._state_changed("running")
+    assert window.start_stop.text() == "Stop"
+    assert not window.change_folder.isEnabled()
+    assert not window.config_button.isEnabled()
+    window._state_changed("updating")
+    assert not window.start_stop.isEnabled()
+    with patch("comfyui_control.app.QDesktopServices.openUrl", return_value=True) as opened:
+        window._open_folder("output")
+        opened.assert_called_once_with(QUrl.fromLocalFile(str(tmp_path / "output")))
+    window.close()
+
+
+def test_change_folder_resets_and_persists_settings(app, tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "settings"))
+    new = tmp_path / "new install"
+    new.mkdir()
+    (new / "main.py").touch()
+    window = MainWindow(Config(script="/old/script.sh", mode="script", arguments="--old-flag"))
+    with patch("comfyui_control.app.QFileDialog.getExistingDirectory", return_value=str(new)):
+        assert window._choose_folder()
+    assert window.controller.config.comfy_dir == str(new)
+    assert window.controller.config.script == ""
+    assert window.controller.config.arguments == ""
+    assert Config.load().comfy_dir == str(new)
+    window.close()
+
+
+def test_settings_validate_and_save(app, tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "settings"))
+    (tmp_path / "main.py").touch()
+    dialog = SettingsDialog(Config(comfy_dir=str(tmp_path)))
+    dialog.arguments.setPlainText('--port 9999 --name "quoted value"')
+    dialog._save()
+    assert dialog.result() == QDialog.DialogCode.Accepted
+    assert Config.load().arguments == '--port 9999 --name "quoted value"'
+
+
+def test_close_waits_for_owned_process(app):
+    window = MainWindow(Config())
+    window.controller.state = "running"
+    with patch("comfyui_control.app.QMessageBox.question", return_value=QMessageBox.StandardButton.Yes), patch.object(window.controller, "shutdown") as shutdown:
+        assert not window.close()
+        shutdown.assert_called_once()
+        assert window._closing
+    window.controller.state = "stopped"
+    assert window.close()

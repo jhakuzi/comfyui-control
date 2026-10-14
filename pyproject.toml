@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "comfyui-control"
+version = "0.1.0"
+description = "A compact Qt controller for a local ComfyUI installation"
+requires-python = ">=3.10"
+dependencies = ["PySide6-Essentials>=6.7,<7"]
+
+[project.scripts]
+comfyui-control = "comfyui_control.app:main"
+
+[tool.setuptools.packages.find]
+include = ["comfyui_control*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
