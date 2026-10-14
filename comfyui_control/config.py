@@ -26,6 +26,7 @@ class Config:
     output_dir: str = ""
     models_dir: str = ""
     install_requirements: bool = False
+    managed_script: bool = False
 
     @classmethod
     def load(cls, path: Path | None = None) -> "Config":
@@ -38,7 +39,7 @@ class Config:
         accepted = {f.name for f in fields(cls)}
         data = {k: v for k, v in data.items() if k in accepted}
         for key, value in data.items():
-            expected = bool if key == "install_requirements" else str
+            expected = bool if key in ("install_requirements", "managed_script") else str
             if not isinstance(value, expected):
                 raise ValueError(f"Invalid value for {key}.")
         if data.get("mode", "python") not in ("python", "script"):
@@ -77,7 +78,8 @@ class Config:
     def command(self) -> list[str]:
         args = shlex.split(self.arguments)
         if self.mode == "script":
-            return ["/bin/bash", str(expand(self.script)), *args]
+            marker = ["--comfyui-control-args"] if self.managed_script else []
+            return ["/bin/bash", str(expand(self.script)), *marker, *args]
         return [self.interpreter(), "-u", "main.py", *args]
 
     def folder(self, kind: str) -> Path:

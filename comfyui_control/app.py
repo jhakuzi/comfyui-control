@@ -2,6 +2,7 @@
 from dataclasses import replace
 from pathlib import Path
 import re
+import shlex
 import shutil
 import sys
 
@@ -10,19 +11,21 @@ from PySide6.QtGui import QDesktopServices, QFontDatabase, QIcon, QTextCursor
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
     QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMainWindow,
-    QMessageBox, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget,
+    QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
 from .config import Config, config_path, expand
 from .controller import Controller
 from .launch_script import create_launch_script
+from .flag_widgets import LaunchFlags, LaunchScriptDialog
 
 
 class SettingsDialog(QDialog):
     def __init__(self, config, parent=None):
         super().__init__(parent)
         self.setWindowTitle("ComfyUI launch configuration")
-        self.resize(610, 490)
+        self.resize(680, 740)
+        self.original_config = config
         self.result_config = None
         layout = QVBoxLayout(self)
         form = QFormLayout()
@@ -35,9 +38,8 @@ class SettingsDialog(QDialog):
         self.mode.addItem("Python — launch main.py", "python")
         self.mode.addItem("Existing Bash launch script", "script")
         self.mode.setCurrentIndex(1 if config.mode == "script" else 0)
-        self.arguments = QPlainTextEdit(config.arguments)
-        self.arguments.setPlaceholderText('--listen 127.0.0.1 --port 8188\nUse quotes for paths containing spaces.')
-        self.arguments.setMaximumHeight(100)
+        self.launch_options = LaunchFlags(config.directory, config.arguments)
+        self.arguments = self.launch_options.extra_arguments
         self.output_dir = QLineEdit(config.output_dir)
         self.output_dir.setPlaceholderText("Default: ComfyUI/output")
         self.models_dir = QLineEdit(config.models_dir)
@@ -46,7 +48,7 @@ class SettingsDialog(QDialog):
         form.addRow("Launch method", self.mode)
         form.addRow("ComfyUI Python", self._path_row(self.python))
         form.addRow("Launch script", self._path_row(self.script, scripts=True))
-        form.addRow("Launch arguments", self.arguments)
+        form.addRow("Launch flags", self.launch_options)
         self.note = QLabel()
         self.note.setWordWrap(True)
         form.addRow(self.note)
@@ -59,12 +61,18 @@ class SettingsDialog(QDialog):
         self.requirements.setChecked(config.install_requirements)
         self.requirements.setToolTip("Runs pip in the ComfyUI Python selected above. May change installed packages, including GPU dependencies.")
         form.addRow(self.requirements)
-        layout.addLayout(form)
+        contents = QWidget()
+        contents.setLayout(form)
+        area = QScrollArea()
+        area.setWidgetResizable(True)
+        area.setWidget(contents)
+        layout.addWidget(area)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
         self.mode.currentIndexChanged.connect(self._mode_changed)
+        self.script.textChanged.connect(self._mode_changed)
         self._mode_changed()
 
     def _path_row(self, field, directory=False, scripts=False):
@@ -91,6 +99,9 @@ class SettingsDialog(QDialog):
         self.script.parentWidget().setEnabled(script_mode)
         self.edit_script.setEnabled(script_mode)
         self.note.setText(
+            'Checkbox selections replace the default flags when the app starts this generated script. '
+            'Uncheck a flag to remove it on the next start.'
+            if script_mode and self.original_config.managed_script and self.script.text().strip() == self.original_config.script else
             'Arguments are appended to the script. The script must forward them using "$@". '
             'For flags hardcoded in the script, use “Edit launch script”. End the script with exec python … to keep server ownership clear.'
             if script_mode else
@@ -111,12 +122,20 @@ class SettingsDialog(QDialog):
             QMessageBox.warning(self, "Editor unavailable", "Could not open the launch script in the text editor.")
 
     def _save(self):
+        try:
+            arguments = self.launch_options.argument_string()
+        except ValueError as exc:
+            QMessageBox.warning(self, "Check launch flags", str(exc))
+            return
         config = Config(
             comfy_dir=self.folder.text().strip(), python=self.python.text().strip(),
             mode=self.mode.currentData(), script=self.script.text().strip(),
-            arguments=self.arguments.toPlainText().strip(),
+            arguments=arguments,
             output_dir=self.output_dir.text().strip(), models_dir=self.models_dir.text().strip(),
             install_requirements=self.requirements.isChecked(),
+            managed_script=(self.original_config.managed_script and
+                            self.mode.currentData() == "script" and
+                            self.script.text().strip() == self.original_config.script),
         )
         try:
             config.validate()
@@ -267,6 +286,14 @@ class MainWindow(QMainWindow):
         if not (config.directory / "main.py").is_file():
             QMessageBox.warning(self, "Choose ComfyUI folder", "Choose the ComfyUI folder containing main.py first.")
             return
+        dialog = LaunchScriptDialog(config, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            arguments = dialog.options.argument_string()
+        except ValueError as exc:
+            QMessageBox.warning(self, "Check launch flags", str(exc))
+            return
         # Keep personal scripts outside the Git checkout so updates stay clean.
         default = config_path().parent / "launch-comfyui.sh"
         path, _ = QFileDialog.getSaveFileName(
@@ -280,7 +307,7 @@ class MainWindow(QMainWindow):
         if not destination.suffix:
             destination = destination.with_suffix(".sh")
         try:
-            create_launch_script(config.directory, destination)
+            create_launch_script(config.directory, destination, shlex.split(arguments))
         except FileExistsError:
             QMessageBox.warning(self, "Script already exists", "Choose a new filename. Existing launch scripts are not overwritten.")
             return
@@ -288,7 +315,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Could not create script", str(exc))
             return
         updated = replace(
-            config, mode="script", script=str(destination), arguments="",
+            config, mode="script", script=str(destination), arguments=arguments, managed_script=True,
             python=str(config.directory / "comfy-env" / "bin" / "python"),
         )
         try:
@@ -299,8 +326,8 @@ class MainWindow(QMainWindow):
         self._set_config(updated)
         self.log.append_output(
             f"\nCreated and selected launch script: {destination}\n"
-            "Uses comfy-env and your HIP launch flags. Additional launch arguments were cleared.\n"
-            "Use Edit launch configuration → Edit launch script to change its flags.\n"
+            "Uses comfy-env, the HIP allocator, and your selected flags.\n"
+            "Use Edit launch configuration to change the flag checkboxes before the next start.\n"
         )
 
     def _settings(self):

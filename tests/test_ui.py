@@ -82,7 +82,7 @@ def test_create_script_selects_preset_and_persists_config(app, tmp_path, monkeyp
     original.save()
     window = MainWindow(original)
     destination = tmp_path / "launch file"
-    with patch("comfyui_control.app.QFileDialog.getSaveFileName", return_value=(str(destination), "")):
+    with patch("comfyui_control.app.LaunchScriptDialog.exec", return_value=QDialog.DialogCode.Accepted), patch("comfyui_control.app.QFileDialog.getSaveFileName", return_value=(str(destination), "")):
         window._create_script()
     script = destination.with_suffix(".sh")
     saved = Config.load()
@@ -90,10 +90,11 @@ def test_create_script_selects_preset_and_persists_config(app, tmp_path, monkeyp
     assert saved.mode == "script"
     assert saved.script == str(script)
     assert saved.python == str(tmp_path / "comfy-env" / "bin" / "python")
-    assert saved.arguments == ""
+    assert saved.arguments == "--reserve-vram 7"
+    assert saved.managed_script
     assert saved.output_dir == "/custom/output"
     assert window.controller.config == saved
-    assert saved.command() == ["/bin/bash", str(script)]
+    assert saved.command() == ["/bin/bash", str(script), "--comfyui-control-args", "--reserve-vram", "7"]
     window.close()
 
 
@@ -101,7 +102,7 @@ def test_cancel_script_creation_leaves_settings_unchanged(app, tmp_path):
     (tmp_path / "main.py").touch()
     original = Config(comfy_dir=str(tmp_path), arguments="--port 9999")
     window = MainWindow(original)
-    with patch("comfyui_control.app.QFileDialog.getSaveFileName", return_value=("", "")):
+    with patch("comfyui_control.app.LaunchScriptDialog.exec", return_value=QDialog.DialogCode.Accepted), patch("comfyui_control.app.QFileDialog.getSaveFileName", return_value=("", "")):
         window._create_script()
     assert window.controller.config == original
     assert list(tmp_path.iterdir()) == [tmp_path / "main.py"]
@@ -114,9 +115,45 @@ def test_create_script_collision_preserves_settings(app, tmp_path):
     destination.write_text("existing script")
     original = Config(comfy_dir=str(tmp_path), arguments="--port 9999")
     window = MainWindow(original)
-    with patch("comfyui_control.app.QFileDialog.getSaveFileName", return_value=(str(destination), "")), patch("comfyui_control.app.QMessageBox.warning") as warning:
+    with patch("comfyui_control.app.LaunchScriptDialog.exec", return_value=QDialog.DialogCode.Accepted), patch("comfyui_control.app.QFileDialog.getSaveFileName", return_value=(str(destination), "")), patch("comfyui_control.app.QMessageBox.warning") as warning:
         window._create_script()
     warning.assert_called_once()
     assert destination.read_text() == "existing script"
     assert window.controller.config == original
     window.close()
+
+
+def test_cancel_flag_selection_does_not_offer_script_file(app, tmp_path):
+    (tmp_path / "main.py").touch()
+    window = MainWindow(Config(comfy_dir=str(tmp_path)))
+    with patch("comfyui_control.app.LaunchScriptDialog.exec", return_value=QDialog.DialogCode.Rejected), patch("comfyui_control.app.QFileDialog.getSaveFileName") as picker:
+        window._create_script()
+    picker.assert_not_called()
+    window.close()
+
+
+def test_settings_remove_generated_defaults_and_preserve_managed_mode(app, tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "settings"))
+    (tmp_path / "main.py").touch()
+    script = tmp_path / "launch.sh"
+    script.touch()
+    original = Config(comfy_dir=str(tmp_path), mode="script", script=str(script),
+                      managed_script=True, arguments="--disable-smart-memory --reserve-vram 1")
+    dialog = SettingsDialog(original)
+    dialog.launch_options.checkboxes["--disable-smart-memory"].setChecked(False)
+    dialog.launch_options.reserve.setChecked(False)
+    dialog._save()
+    saved = Config.load()
+    assert saved.arguments == ""
+    assert saved.command() == ["/bin/bash", str(script), "--comfyui-control-args"]
+
+
+def test_switching_scripts_clears_managed_mode(app, tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "settings"))
+    (tmp_path / "main.py").touch()
+    other = tmp_path / "custom.sh"
+    other.touch()
+    dialog = SettingsDialog(Config(comfy_dir=str(tmp_path), mode="script", script="/old/managed.sh", managed_script=True))
+    dialog.script.setText(str(other))
+    dialog._save()
+    assert not Config.load().managed_script

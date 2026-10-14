@@ -39,6 +39,17 @@ def test_generated_script_activates_venv_and_passes_exact_preset(tmp_path):
                  "--reserve-vram", "1", "--output-directory", "a path with spaces"],
     }
     assert os.access(destination, os.X_OK)
+    # App selections replace standalone defaults instead of appending to them.
+    selected = subprocess.run(
+        [str(destination), "--comfyui-control-args", "--cpu-vae"],
+        check=True, text=True, capture_output=True,
+    )
+    assert json.loads(selected.stdout)["args"] == ["main.py", "--cpu-vae"]
+    cleared = subprocess.run(
+        [str(destination), "--comfyui-control-args"],
+        check=True, text=True, capture_output=True,
+    )
+    assert json.loads(cleared.stdout)["args"] == ["main.py"]
 
 
 @pytest.mark.parametrize("symlink", [False, True])
