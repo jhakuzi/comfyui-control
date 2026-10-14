@@ -140,7 +140,8 @@ If ComfyUI is running, Update stops it and restarts it only after a successful u
 ## Troubleshooting
 
 - **ComfyUI exits immediately:** check the log and the interpreter/launch script; confirm your normal launch command works in a terminal.
-- **Qt reports an xcb plugin error:** on Fedora install `libxcb`, `xcb-util-cursor`, and `libxkbcommon-x11`. KDE Wayland can also be selected with `QT_QPA_PLATFORM=wayland ~/.local/bin/comfyui-control`.
+- **Qt reports an xcb plugin error:** on minimal Fedora installations run `sudo dnf install libxcb xcb-util-cursor xcb-util-wm xcb-util-keysyms libxkbcommon-x11`. KDE Wayland can also be selected with `QT_QPA_PLATFORM=wayland ~/.local/bin/comfyui-control`.
+- **Comfy CLI cannot write its configuration:** Comfy CLI 1.22.0 uses `~/.config/comfy-cli` even when `XDG_CONFIG_HOME` is set. Run it with a writable user home directory. A read-only home blocked the initial sandbox test; a Fedora container with a normal writable home completed setup successfully.
 - **No script editor:** install `kwrite` or `kate`, or edit the script in your preferred editor.
 - **Folder unavailable:** check that the drive is mounted and choose the correct installation folder.
 
@@ -152,6 +153,14 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest
 ```
 
 Tests use temporary fake servers and local Git repositories. They do not touch your ComfyUI installation or require a GPU.
+
+### Real installation verification
+
+On 2026-10-14, a fresh GitHub checkout of version 0.4.1 (commit `41b262d`) was downloaded and installed in an isolated Fedora 44 container. The actual Qt app ran on an X11 virtual display with Python **3.14.8** and PySide6 **6.12.0**. Its startup and setup buttons launched a real terminal, installed **Comfy CLI 1.22.0**, and used `comfy install --cpu` to install **ComfyUI 0.40.0** with **PyTorch 2.14.1+cpu** and frontend **1.55.17**. The installation was selected through the app after its success marker appeared.
+
+The app's Start button launched ComfyUI with `--cpu --listen 127.0.0.1 --port 8199`. Both `/` and `/system_stats` returned HTTP 200. Restart produced a new server process and both endpoints responded again. Stop shut down the process and closed the port. Real server output appeared in the app's output pane throughout. This validation covers CPU installation and server control; GPU/ROCm, KDE Plasma integration, and model inference were not exercised.
+
+![Actual app running the installed ComfyUI server](live-test-preview.png)
 
 ## Uninstall
 
