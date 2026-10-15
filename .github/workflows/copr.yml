@@ -88,7 +88,7 @@ jobs:
           }
           with tempfile.TemporaryDirectory() as temporary:
               path = Path(temporary) / 'copr'
-              with path.open('x', opener=lambda name, flags: os.open(name, flags, 0o600)) as output:
+              with open(path, 'x', opener=lambda name, flags: os.open(name, flags, 0o600)) as output:
                   config.write(output)
               subprocess.run([
                   'copr-cli', '--config', str(path), 'build',
