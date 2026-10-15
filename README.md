@@ -1,188 +1,152 @@
 # ComfyUI Control
 
-A small native Qt 6 window for Fedora Linux and KDE Plasma, matching the supplied sketch. Live server output sits above Start/Stop, Restart, Update, Open output folder, Open models folder, and Edit launch configuration buttons. A visible **Change folder…** button lets you switch installations later.
+A small Python + Qt 6 desktop app for ComfyUI on Linux, built with KDE Plasma in mind.
 
-![Window preview](preview.png)
+**Start / Stop · Restart · Git or Comfy CLI updates · Launch flag checkboxes · Folder shortcuts**
 
-The preview uses sample server output. Qt's appearance follows the available desktop theme and platform integration.
+![ComfyUI Control](update-preview.png)
 
-## Install on Fedora
+## Install
 
-Fedora RPM build instructions and a prepared COPR source-build recipe are in
-[packaging/README.md](packaging/README.md). A public COPR repository has not yet
-been created.
+[Download the source ZIP](https://github.com/jhakuzi/comfyui-control/archive/refs/heads/main.zip), extract it, and open a terminal in the extracted folder.
 
-This application controls an existing ComfyUI installation or guides you through installing a new one with Comfy CLI. GPU drivers and models are configured separately.
+Install prerequisites for your distribution:
 
-Extract the archive, open a terminal in the `comfyui-control` folder, then run:
-
-```bash
-sudo dnf install python3 python3-pip git
-bash install.sh
-```
-
-The installer downloads Qt's Python bindings and installs the application for your user, without sudo. Open **ComfyUI Control** from the KDE application menu, or run `~/.local/bin/comfyui-control`. GUI dependencies live in their own virtual environment; ComfyUI keeps its existing environment.
-
-For development or running directly from the source:
-
-```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install .
-.venv/bin/python -m comfyui_control
-```
-
-## First launch and configuration
-
-When no installation is configured, startup asks you to **Choose existing installation…** or **Install with Comfy CLI…**. Existing users choose their own folder containing `main.py`; there is no preset installation path. A saved, available installation opens directly on later launches. If its folder has moved or is unavailable, setup is shown again. **Set up ComfyUI…** reopens both choices, and **Change folder…** selects another existing installation.
-
-![Startup choices](startup-preview.png)
-
-- **Python:** starts `main.py` using the specified Python executable. Leave Python blank to detect `comfy-env/bin/python`, then `.venv/bin/python`, then `venv/bin/python`, then a companion `<installation-name>-env/bin/python` next to the installation, then `python3`. For Conda or an environment elsewhere, browse to its actual `bin/python` executable. Put flags such as `--listen 127.0.0.1 --port 8188` in Launch arguments.
-- **Existing Bash launch script:** select your `.sh` file. It runs with `/bin/bash` and the ComfyUI folder as its working directory. **Edit launch script…** opens it in KWrite or Kate so you can change flags already hardcoded there. Additional Launch arguments are appended to the script; your script must forward them with `"$@"` to use them. This output viewer supports scripts that run without interactive prompts.
-
-For a script you can adapt, the last lines should look like:
-
-```bash
-cd "/path/to/your/ComfyUI" || exit 1
-exec .venv/bin/python -u main.py --listen 127.0.0.1 --port 8188 "$@"
-```
-
-Keep your existing environment activation and flags if you already have them. `exec` helps the controller track the server; avoid backgrounding or daemonizing it. Stopping also signals child processes in the controller's process group.
-
-### Install a new ComfyUI with Comfy CLI
-
-The startup installer reuses your **installed Python 3**, including Python 3.14. It preselects `python3` from your PATH. Check the version if needed:
-
-```bash
-python3 --version
-```
-
-Run the following package commands only if prerequisites are missing. Existing, working installations can be selected directly in the startup dialog.
-
-Fedora:
+**Fedora**
 
 ```bash
 sudo dnf install python3 python3-pip git
 ```
 
-Ubuntu/Debian:
+**Debian / Ubuntu**
 
 ```bash
 sudo apt update
-sudo apt install python3 python3-pip python3-venv git -y
+sudo apt install python3 python3-pip python3-venv git
 ```
 
-Arch Linux:
+**Arch Linux**
 
 ```bash
-sudo pacman -S python python-pip git
+sudo pacman -S --needed python python-pip git
 ```
 
-You can select another installed Python executable if needed for your environment. Package-manager commands are shown for missing prerequisites; the app does not run sudo itself. Comfy CLI and package installers report their own dependency requirements in the terminal.
-
-Choose a **new installation folder**, select the Python executable, and optionally choose NVIDIA, AMD/ROCm, or CPU. **Open setup terminal…** opens Konsole (or another available terminal) and runs a visible setup script. Comfy CLI can ask questions there, including hardware selection when none was selected in the dialog.
-
-The script checks Python's version, creates a companion virtual environment next to the chosen folder, activates it, and runs:
+Then run the installer as your normal user, **without sudo**:
 
 ```bash
-python -m pip install comfy-cli
-comfy --workspace "/path/to/your/ComfyUI" install
+bash install.sh
 ```
 
-This is the `pip install comfy-cli` → `comfy install` workflow with an explicit destination and an isolated Python environment. The environment is outside the ComfyUI checkout, so it does not block Git updates. Existing installation or environment folders are refused; use the existing-installation option for those. The app's own GUI environment is kept separate.
+Open **ComfyUI Control** from your application menu, or run `~/.local/bin/comfyui-control`.
 
-After setup succeeds and `main.py` is present, **Use this installation** saves both the chosen location and its Python executable. Choosing CPU in the app also preselects `--cpu` in the launch flags; select that checkbox yourself if you chose CPU interactively in the terminal. No installation is selected on failure. Check the terminal output to resolve failures; an incomplete installation may require Comfy CLI's restore workflow or a fresh location. Canceling the app dialog does not stop the detached setup terminal; stop that terminal if you want to cancel installation too.
+The app uses its own Python/Qt environment. Your ComfyUI environment stays separate. Existing Python 3 installations, including 3.14, can be used; GPU drivers and models are configured separately.
 
-**Copy setup commands** lets you run the same installation steps manually. After completing copied commands, select the folder with **Choose existing installation…**. The app's generated terminal script and result marker remain under its configuration folder for troubleshooting. Comfy CLI's upstream instructions are available in its [README](https://github.com/Comfy-Org/comfy-cli#installation).
+[Fedora RPM / COPR build instructions](packaging/README.md) — no public COPR repository yet.
+
+## First launch
+
+| Option | Action |
+| --- | --- |
+| **Choose existing installation…** | Select the ComfyUI folder containing `main.py`. |
+| **Install with Comfy CLI…** | Choose a new folder, Python, and GPU/CPU option. Open the setup terminal, then click **Use this installation** after success. |
+
+![Startup choices](startup-preview.png)
+
+Use **Set up ComfyUI…** to reopen setup or **Change folder…** to switch installations. Switching folders resets launch settings.
+
+<details>
+<summary>New installation setup</summary>
+
+Setup creates a companion Python environment beside ComfyUI and runs `pip install comfy-cli` followed by `comfy install`. It uses Konsole, GNOME Terminal, or xterm; commands can also be copied into your own terminal. Canceling the dialog leaves the setup terminal running.
 
 ![Comfy CLI setup](install-preview.png)
 
-### Select launch flags
+</details>
 
-**Edit launch configuration…** includes searchable checkboxes for the boolean flags supported by your installed ComfyUI version. It reads `comfy/cli_args.py` as text without running or importing ComfyUI. Each flag's tooltip shows its help text. If that file is unavailable or cannot be read, a labeled list of common flags is used instead.
+## Launch settings
 
-Choose options such as `--disable-smart-memory`, `--use-pytorch-cross-attention`, `--lowvram`, and `--cpu-vae` with checkboxes. Mutually exclusive options automatically uncheck one another. **Reserve VRAM** enables a numeric GB field. **Other arguments** accepts options requiring other values, such as `--port 8188`, plus flags not listed as checkboxes. Selections are saved between sessions.
+Open **Edit launch configuration…** while stopped.
+
+| Setting | Use |
+| --- | --- |
+| **ComfyUI Python** | Auto-detect an environment or select its `bin/python`. |
+| **Launch method** | Run `main.py` directly or select an existing Bash script. |
+| **Launch flags** | Search checkboxes, set **Reserve VRAM**, or enter values such as `--port 8188` under **Other arguments**. |
+| **Output / Models folder** | Change the folder shortcuts if your files are stored elsewhere. |
 
 ![Launch flag checkboxes](flags-preview.png)
 
-### Create a launch script
+**Create launch script…** saves a new executable `.sh` with your environment, selected flags, and HIP allocator setting. Existing scripts are never overwritten. App-created scripts follow your current checkbox selections; hardcoded flags in custom scripts need manual editing. Custom scripts should forward `"$@"` and use `exec` to launch Python.
 
-The small **Create launch script…** button beside the installation path first opens the checkbox selector, then saves an executable `.sh` file and selects it as the launch method. Existing configured flags are preselected; when none are configured, the HIP preset is suggested. The generated script uses the selected Python executable, activates its virtual environment when an adjacent activation script is available, changes into the selected ComfyUI folder, sets `PYTORCH_HIP_ALLOC_CONF=expandable_segments:True`, then launches with the selected flags. For an installation with a `comfy-env` folder, the initial preset is equivalent to:
-
-```bash
-exec ./comfy-env/bin/python main.py \
-  --use-pytorch-cross-attention \
-  --disable-smart-memory \
-  --reserve-vram 1 \
-  "$@"
-```
-
-The Python environment must already exist; this button creates the launch script, not the environment. It also works with environments created by the Comfy CLI setup flow, `.venv`, or an explicitly selected interpreter. If no interpreter or local environment was found, the script targets `comfy-env/bin/python` inside the selected folder. Folder paths containing spaces or shell characters are quoted safely. `exec` keeps Start/Stop and Restart in control of the Python server. Additional arguments can be added in the configuration dialog.
-
-By default the script is saved next to the application's settings, outside the ComfyUI checkout, so it does not introduce an untracked file that blocks Update. You can choose another location and filename. Existing scripts are not overwritten. Creating a script preserves your chosen additional arguments and selects the same Python executable for optional dependency updates.
-
-Scripts created by this version store your chosen defaults for standalone use. When started from the app, they receive the current checkbox selections instead, so unchecking a flag removes it even when it appeared in the original defaults. This also works when every flag is unchecked. The app uses a private argument marker that the generated script removes before launching ComfyUI. To change the environment activation or HIP setting, use **Edit launch configuration… → Edit launch script…**.
-
-Existing custom scripts and scripts generated by versions before 0.3 continue to receive appended arguments; flags hardcoded inside them must be edited in the script or replaced by creating a new script with this version.
-
-The settings are stored in `~/.config/comfyui-control/config.json` (or `$XDG_CONFIG_HOME/comfyui-control/config.json`). Settings can be edited while stopped. Changing installation folders resets the interpreter, script, arguments, and custom folder paths, so configure the new installation before starting it.
-
-Output and models buttons use the installation's `output` and `models` subfolders. If your flags or scripts relocate these folders, set the corresponding custom paths in the configuration dialog too. These custom paths control the folder buttons; they do not change ComfyUI's flags.
-
-## Server output and lifecycle
-
-The output pane is a read-only log, not an interactive shell. It merges stdout and stderr, handles streamed UTF-8 and common ANSI escapes, and retains the last 5,000 lines. Scroll up to pause following new output. “Process running” indicates the process is alive; check ComfyUI's output for the URL and whether startup has completed.
-
-Stop sends SIGTERM to the process group, then SIGKILL after eight seconds if necessary. Restart waits for shutdown before launching again. Closing an active window asks to stop its process before exiting. Only one controller window per user is allowed. The app manages processes it launched; stop any separately running ComfyUI before using it.
+The output pane is read-only. The app controls servers it starts; stop any separately running ComfyUI first.
 
 ## Updates
 
-Choose **Git** or **Comfy CLI** in the drop-down beside **Update**. The choice is saved for the selected installation and is also available in **Edit launch configuration…**. Existing settings retain Git; new installations created through the app's Comfy CLI setup select Comfy CLI automatically.
+### ComfyUI
 
-| Method | What it does | When to choose it |
-| --- | --- | --- |
-| Git | `git pull --ff-only`; optionally install `requirements.txt` | You manage dependencies yourself or want to control when they change. |
-| Comfy CLI | `comfy --workspace "/your/ComfyUI" --skip-prompt update`, including requirements | You normally activate your ComfyUI environment and use `comfy update`. |
+Choose a method beside **Update**:
 
-For Comfy CLI, set **ComfyUI Python** to your ComfyUI virtual environment's `bin/python` (or use automatic detection of a supported local/companion environment). Conda environments are supported too. The app sets that environment for the update process without sourcing a shell activation script. This keeps requirements out of the GUI's own environment. The CLI executable is detected in the selected environment first, then on PATH; you can choose an explicit **Comfy CLI executable** in launch configuration for pipx or another tool installation. A missing executable or invalid environment is reported before stopping a running server. The app does not automatically install CLI packages or silently switch update methods.
+| Method | Behavior |
+| --- | --- |
+| **Git** | `git pull --ff-only`; optional requirements installation, off by default. |
+| **Comfy CLI** | `comfy update` for the selected folder and environment, including requirements. Choose this if you already use Comfy CLI. |
 
-Neither method is universally better. Comfy CLI matches its own update workflow and installs dependencies required by the new ComfyUI code. Git without dependency installation is narrower but can leave missing requirements after a code update. The Git method always requires a fast-forward; Comfy CLI uses its own Git pull policy. With either dependency-installing method, package resolution can change GPU dependencies. The app's Git-only **Install requirements.txt after updating** checkbox is off by default and disabled when Comfy CLI is selected, because CLI handles requirements itself. CLI update behavior is defined by your installed version; the current upstream implementation is in [Comfy CLI's update command](https://github.com/Comfy-Org/comfy-cli/blob/main/comfy_cli/cmdline.py).
+For CLI updates, select your ComfyUI virtual environment or Conda `bin/python`. The app detects `comfy` in that environment or on PATH; an explicit executable can be set in launch configuration.
 
-Both methods require the selected folder to be the root of its own Git checkout. Before invoking either updater, the app checks for tracked modifications and untracked files and refuses to proceed if any exist. It does not reset, clean, or stash them. If Git reports untracked models/output files, check the installation's `.gitignore` or move them before updating. Setup shell scripts with extra environment exports are not executed by the updater; configure your actual ComfyUI Python explicitly, especially when using a custom launch script.
+Both methods require a clean Git checkout and restart a running server only after success. Installing requirements can change GPU packages. Custom nodes and this controller app are updated separately.
 
-If ComfyUI is running, Update stops it and restarts it only after a successful update. On failure it stays stopped, with the command and output visible in the log. CLI runs without interactive prompts; authentication or unexpected input requirements must be resolved in a terminal. Neither method updates custom nodes, the Comfy CLI tool itself, or this controller app. There is no automatic rollback if Git succeeds but dependency installation fails.
+### This app
 
-![Update method selector after a real Comfy CLI test](update-preview.png)
+Close the app, extract the latest source ZIP, and rerun `bash install.sh`. Settings and your ComfyUI installation are kept.
 
-## Troubleshooting
-
-- **ComfyUI exits immediately:** check the log and the interpreter/launch script; confirm your normal launch command works in a terminal.
-- **Qt reports an xcb plugin error:** on minimal Fedora installations run `sudo dnf install libxcb xcb-util-cursor xcb-util-wm xcb-util-keysyms libxkbcommon-x11`. KDE Wayland can also be selected with `QT_QPA_PLATFORM=wayland ~/.local/bin/comfyui-control`.
-- **Comfy CLI cannot write its configuration:** Comfy CLI 1.22.0 uses `~/.config/comfy-cli` even when `XDG_CONFIG_HOME` is set. Run it with a writable user home directory. A read-only home blocked the initial sandbox test; a Fedora container with a normal writable home completed setup successfully.
-- **No script editor:** install `kwrite` or `kate`, or edit the script in your preferred editor.
-- **Folder unavailable:** check that the drive is mounted and choose the correct installation folder.
-
-## Tests
+From a Git checkout, run:
 
 ```bash
-.venv/bin/python -m pip install pytest
+git pull --ff-only
+bash install.sh
+```
+
+<details>
+<summary>Troubleshooting</summary>
+
+| Problem | Check |
+| --- | --- |
+| ComfyUI exits immediately | Read the log and verify your Python or launch script works in a terminal. |
+| Folder unavailable | Mount the drive or use **Change folder…**. |
+| CLI or setup terminal missing | Select/install `comfy-cli`; for setup, install Konsole, GNOME Terminal, or xterm. |
+| Script editor missing | Install Kate or KWrite, or edit the script manually. |
+| CLI cannot save configuration | Ensure `~/.config/comfy-cli` is writable. |
+
+For an **xcb plugin error on Fedora**:
+
+```bash
+sudo dnf install libxcb xcb-util-cursor xcb-util-wm xcb-util-keysyms libxkbcommon-x11
+```
+
+Settings: `~/.config/comfyui-control/config.json` (or your XDG config folder).
+
+</details>
+
+<details>
+<summary>Development and verification</summary>
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -e . pytest
 QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest
 ```
 
-Tests use temporary fake servers and local Git repositories. They do not touch your ComfyUI installation or require a GPU.
+61 tests pass. Real CPU installation, server controls, and update integration were verified on Fedora 44 with Python 3.14.8. CLI dependency isolation was checked with a disposable checkout and test package. GPU/ROCm, model inference, and KDE Wayland remain untested.
 
-### Real installation verification
+[Live ComfyUI server screenshot](live-test-preview.png)
 
-On 2026-10-14, a fresh GitHub checkout of version 0.4.1 (commit `41b262d`) was downloaded and installed in an isolated Fedora 44 container. The actual Qt app ran on an X11 virtual display with Python **3.14.8** and PySide6 **6.12.0**. Its startup and setup buttons launched a real terminal, installed **Comfy CLI 1.22.0**, and used `comfy install --cpu` to install **ComfyUI 0.40.0** with **PyTorch 2.14.1+cpu** and frontend **1.55.17**. The installation was selected through the app after its success marker appeared.
+</details>
 
-The app's Start button launched ComfyUI with `--cpu --listen 127.0.0.1 --port 8199`. Both `/` and `/system_stats` returned HTTP 200. Restart produced a new server process and both endpoints responded again. Stop shut down the process and closed the port. Real server output appeared in the app's output pane throughout. This validation covers CPU installation and server control; GPU/ROCm, KDE Plasma integration, and model inference were not exercised.
+<details>
+<summary>Uninstall</summary>
 
-![Actual app running the installed ComfyUI server](live-test-preview.png)
+For a default per-user install, remove `~/.local/share/comfyui-control`, `~/.local/share/applications/comfyui-control.desktop`, and `~/.local/bin/comfyui-control`. Use your XDG data folder if customized. Settings can be kept for reinstalling; ComfyUI and models are unaffected.
 
-### Update method verification
+For an RPM install: `sudo dnf remove comfyui-control`.
 
-Version 0.6.0 was additionally tested on Fedora 44 / Python 3.14.8 using the actual Comfy CLI 1.22.0 executable from the earlier installation. A disposable Git checkout with ComfyUI marker files and a small test server was updated by clicking Update and accepting the app's confirmation dialog. The CLI pulled a new revision and installed a local test-wheel requirement into a separate selected environment; the requirement was absent from both the GUI's system Python and the CLI tool's own environment. The server restarted only after success. Switching the saved selector to Git pulled another revision and restarted the server again; Stop then shut it down. This checks update integration and environment selection without updating the earlier full ComfyUI installation or exercising GPU dependencies. The CLI reported its optional custom-node ID cache unavailable in the minimal test environment; the code and requirement updates succeeded. The automated suite now has 61 passing tests, including CLI failure and missing-tool behavior.
-
-## Uninstall
-
-Remove `~/.local/share/comfyui-control`, `~/.local/share/applications/comfyui-control.desktop`, and `~/.local/bin/comfyui-control` (use your configured XDG data folder if different). Settings under `~/.config/comfyui-control` can be kept for reinstalling or removed separately. Your ComfyUI installation is unchanged.
+</details>
