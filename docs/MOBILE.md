@@ -1,7 +1,7 @@
 # Mobile WebUI — preliminary testing
 
 This feature is integrated into the desktop app on **`testing/mobile-webui`**
-(`0.9.0.dev1`). It is not in the stable COPR release. No separate service or
+(`0.9.0.dev2`). It is not in the stable COPR release. No separate service or
 mobile installation is required. Keep the desktop app open while using it.
 
 ## Try it without replacing your stable installation
@@ -137,6 +137,41 @@ The interface shows an uncertain submission rather than blindly retrying if
 ComfyUI's response was lost. Check the queue before explicitly starting a new
 request in that situation. After a ComfyUI restart, history may be gone; local
 output images remain browsable.
+
+### Screen locking, app switching, and reconnecting
+
+When Safari becomes active again (including returning from its back/forward
+cache), the page reopens its live connection automatically. It shows the desktop
+backend's cached sampling progress immediately, then reconciles the ComfyUI
+queue and history. Images that completed while the phone was disconnected
+appear automatically. A temporary VPN outage retries with a bounded backoff;
+there is no recurring queue polling while connected. No generation is restarted
+or submitted by this recovery path.
+
+The desktop keeps its existing ComfyUI WebSocket open independently of the
+phone. The phone uses Server-Sent Events. Sampling counters resume when ComfyUI
+provides them; if the desktop itself lost its upstream connection, it resumes
+live counters on the next ComfyUI progress event. Queue/history APIs cannot
+invent sampling counters that ComfyUI does not expose.
+
+The selected workflow, unsent prompt/settings, unsaved input mappings, expanded
+sections, selected tab, and scroll position are saved in browser storage.
+Refreshing restores these edits rather than replacing them with the last
+submitted prompt. Request IDs survive connection failures to prevent duplicate
+submissions. Generation controls stay disabled while recovery is in progress.
+
+Each browser profile has a persistent HttpOnly client-identity cookie. Its
+jobs, progress, previews, cancellation, and reuse metadata are isolated from
+other profiles. Tabs in the same profile share that identity; presets and the
+output-image gallery remain shared. Clearing site cookies or using a new
+private-browsing session creates a new identity. Clearing browser storage loses
+local drafts/UI state. Sign-out explicitly clears local drafts. Authentication
+still expires after 12 hours, or on a mobile-server restart; signing in again
+with the same identity restores its jobs.
+
+Jobs from the earlier `0.9.0.dev1` testing build had no browser ownership and
+are not assigned to a new browser automatically. Their output files remain
+browsable in the gallery. This avoids exposing one client's old jobs to another.
 
 Gallery entries reference existing output files or ComfyUI's image API; image
 files are not copied into a second library. Recent history and a bounded scan

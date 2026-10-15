@@ -60,7 +60,10 @@ class MobileService:
         self.preview = None
         self.preview_version = 0
         self.preview_job = None
-        self.subscribers = set()
+        self.subscribers = {}
+        self.instance_id = uuid.uuid4().hex
+        self.state_version = 0
+        self.resume_task = None
         self.info = {}
         self.info_time = 0
         self.session = None
@@ -98,7 +101,7 @@ class MobileService:
             if subscriber.full():
                 subscriber.get_nowait()
             subscriber.put_nowait(None)
-        tasks = [t for t in (self.socket_task, self.refresh_task) if t]
+        tasks = [t for t in (self.socket_task, self.refresh_task, self.resume_task) if t]
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
@@ -113,21 +116,28 @@ class MobileService:
                 self.jobs.pop(key, None)
         save_json(self.directory / "jobs.json", {"client_id": self.client_id, "jobs": self.jobs})
 
-    def state(self, include_details=True):
-        jobs = self.current_jobs()[-100:]
+    @staticmethod
+    def public_job(job):
+        return {k: v for k, v in job.items() if k not in {"graph", "scope", "owner"}}
+
+    def state(self, include_details=True, owner=None):
+        jobs = [j for j in self.current_jobs() if owner is None or j.get("owner") == owner][-100:]
         if include_details:
-            public = [{k: v for k, v in job.items() if k not in {"graph", "scope"}} for job in jobs]
+            public = [self.public_job(job) for job in jobs]
         else:
             keys = {"id", "status", "progress", "prompt_id", "position", "preset_name", "error"}
             public = [{**{k: v for k, v in job.items() if k in keys}, "image_count": len(job.get("images", []))} for job in jobs]
-        return json_safe({"online": self.online, "connection": self.connection, "desktop": self.desktop_state,
+        preview_allowed = owner is None or any(j["id"] == self.preview_job for j in jobs)
+        return json_safe({"instance": self.instance_id, "version": self.state_version,
+                "online": self.online, "connection": self.connection, "desktop": self.desktop_state,
                 "jobs": public, "partial": not include_details, "queue_remaining": len(self.queue.get("queue_running", [])) + len(self.queue.get("queue_pending", [])),
-                "preview": f"/api/preview?v={self.preview_version}" if self.preview else None,
-                "preview_job": self.preview_job})
+                "preview": f"/api/preview?v={self.preview_version}" if self.preview and preview_allowed else None,
+                "preview_job": self.preview_job if preview_allowed else None})
 
     def broadcast(self):
-        state = self.state(include_details=False)
-        for subscriber in self.subscribers:
+        self.state_version += 1
+        for subscriber, owner in self.subscribers.items():
+            state = self.state(include_details=False, owner=owner)
             if subscriber.full():
                 subscriber.get_nowait()
             subscriber.put_nowait(state)
@@ -148,7 +158,7 @@ class MobileService:
                 "fields": fields_for(preset, info), "candidates": [{k: v for k, v in item.items() if k != "default"} for item in candidates(preset["graph"], info)],
                 "missing_nodes": missing}
 
-    async def submit(self, body):
+    async def submit(self, body, owner=None):
         request_id = body.get("request_id")
         try:
             if str(uuid.UUID(request_id)) != request_id:
@@ -157,6 +167,8 @@ class MobileService:
             raise ValueError("A valid request ID is required to prevent duplicate submissions.") from None
         async with self.submit_lock:
             if request_id in self.jobs:
+                if owner is not None and self.jobs[request_id].get("owner") != owner:
+                    raise ValueError("This request belongs to another browser session.")
                 return self.jobs[request_id]
             if len([j for j in self.current_jobs() if j["status"] not in {"complete", "failed", "cancelled"}]) >= 20:
                 raise ValueError("There are already 20 unfinished mobile jobs.")
@@ -169,7 +181,7 @@ class MobileService:
                 raise ValueError("ComfyUI is missing these nodes: " + ", ".join(sorted(missing)))
             graph, actual = render(preset, body.get("values", {}), body.get("random_seed", False), body.get("disabled_loras", []), info)
             # Journal before the network request. A lost response never retries a prompt blindly.
-            job = {"id": request_id, "scope": self.output_scope, "preset": preset["id"], "preset_name": preset["name"], "revision": revision(preset),
+            job = {"id": request_id, "owner": owner, "scope": self.output_scope, "preset": preset["id"], "preset_name": preset["name"], "revision": revision(preset),
                    "values": actual, "disabled_loras": body.get("disabled_loras", []), "created": time.time(),
                    "status": "submitting", "progress": None, "images": [], "prompt_id": None}
             job["controls"] = [{k: field[k] for k in ("key", "label", "role", "kind")} for field in fields_for(preset, info)]
@@ -193,6 +205,15 @@ class MobileService:
         self.refresh_needed = True
         if not self.refresh_task or self.refresh_task.done():
             self.refresh_task = asyncio.create_task(self._refresh_scheduled())
+
+    async def resume(self):
+        # Concurrent phones share one upstream refresh. Never submit or restart work.
+        if not self.resume_task or self.resume_task.done():
+            self.resume_task = asyncio.create_task(self.refresh())
+        try:
+            await asyncio.wait_for(asyncio.shield(self.resume_task), 5)
+        except asyncio.TimeoutError:
+            pass  # The continuous WebSocket and refresh task will deliver the result.
 
     async def _refresh_scheduled(self):
         await asyncio.sleep(0.08)
@@ -222,6 +243,17 @@ class MobileService:
             try:
                 queue, history = await asyncio.gather(self.client.request("GET", "/queue"), self.client.request("GET", "/history?max_items=100"))
                 self.queue = queue
+                visible = {item[1] for items in queue.values() if isinstance(items, list) for item in items}
+                missing = {j["prompt_id"] for j in self.current_jobs() if j.get("prompt_id") and j["prompt_id"] not in history and j["prompt_id"] not in visible
+                           and j["status"] in {"submitting", "queued", "running", "cancelling", "unknown"}}
+                async def recover_history(prompt_id):
+                    from urllib.parse import quote
+                    try:
+                        return await asyncio.wait_for(self.client.request("GET", "/history/" + quote(prompt_id, safe="")), 5)
+                    except (ComfyError, asyncio.TimeoutError):
+                        return {}
+                for recovered in await asyncio.gather(*(recover_history(pid) for pid in list(missing)[:20])):
+                    history.update(recovered)
                 for values in queue.values():
                     if not isinstance(values, list):
                         continue
@@ -281,9 +313,9 @@ class MobileService:
                 self.connection = "ComfyUI is offline; reconnecting…"
             self.broadcast()
 
-    async def cancel(self, identifier):
+    async def cancel(self, identifier, owner=None):
         job = self.jobs.get(identifier)
-        if not job or job not in self.current_jobs() or not job.get("prompt_id"):
+        if not job or job not in self.current_jobs() or not job.get("prompt_id") or owner is not None and job.get("owner") != owner:
             raise ValueError("No cancellable job was found.")
         queue = await self.client.request("GET", "/queue")
         prompt_id = job["prompt_id"]
@@ -329,13 +361,22 @@ class MobileService:
                                 event = json.loads(message.data)
                                 kind, data = event.get("type"), event.get("data", {})
                                 job = next((j for j in self.current_jobs() if j.get("prompt_id") == data.get("prompt_id")), None)
+                                if kind == "executing" and not data.get("prompt_id"):
+                                    running = [j for j in self.current_jobs() if j["status"] == "running"]
+                                    job = running[0] if len(running) == 1 else None
                                 if job:
                                     if kind in {"execution_start", "executing"}:
                                         job["status"] = "running"
                                     if kind == "executing":
-                                        job["progress"] = None
+                                        if job.get("node") != data.get("node"):
+                                            job["progress"] = None
+                                        job["node"] = data.get("node")
                                     if kind == "progress":
                                         job["progress"] = {"value": data.get("value", 0), "max": data.get("max", 1)}
+                                    if kind == "progress_state":
+                                        active = [n for n in data.get("nodes", {}).values() if n.get("state") == "running" and n.get("max", 0) > 0]
+                                        if active:
+                                            job["progress"] = {"value": active[-1].get("value", 0), "max": active[-1]["max"]}
                                     if kind in {"execution_error", "execution_interrupted"}:
                                         job.update(status="failed", error=str(data.get("exception_message", "Generation interrupted."))[:2500])
                                     if kind == "execution_success":
@@ -375,7 +416,7 @@ class MobileService:
             await asyncio.sleep(delay)
             delay = min(delay * 2, 15)
 
-    async def gallery(self):
+    async def gallery(self, owner=None):
         # Explicit refresh only: no recurring filesystem scans or image duplication.
         root = self.output_dir
         def scan():
@@ -410,7 +451,8 @@ class MobileService:
             return item.get("created", self.jobs.get(item.get("job"), {}).get("created", 0))
         ordered = sorted(self.images.values(), key=created, reverse=True)
         self.images = {item["id"]: item for item in ordered[:500]}
-        return ordered[:200]
+        return [{**item, "job": item.get("job") if owner is None or self.jobs.get(item.get("job"), {}).get("owner") == owner else None}
+                for item in ordered[:200]]
 
     def local_image(self, item):
         if item.get("type") != "output":

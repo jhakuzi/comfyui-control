@@ -1,6 +1,6 @@
 Name:           comfyui-control
 Version:        0.9.0
-Release:        0.1.dev1%{?dist}
+Release:        0.2.dev2%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
 License:        MIT
@@ -62,6 +62,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Thu Oct 15 2026 ComfyUI Control contributors - 0.9.0-0.2.dev2
+- Restore mobile sessions on foreground/network recovery; isolate browser jobs.
+
 * Thu Oct 15 2026 ComfyUI Control contributors - 0.9.0-0.1.dev1
 - Preliminary integrated Mobile WebUI with explicit API workflow mapping.
 

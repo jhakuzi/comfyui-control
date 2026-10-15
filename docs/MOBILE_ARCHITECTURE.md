@@ -71,8 +71,11 @@ the only new runtime dependencies; QR generation does not require Pillow.
   rather than continuous HTTP polling. SSE heartbeats carry no generation work.
 - Gallery scans are requested by the user, bounded to 10,000 directory entries
   and 200 displayed images; unavailable or symlinked local images are refused.
-- Browser jobs are shared by this app instance. This is a private-network,
-  password-protected single-owner interface, not a public multi-tenant service.
+- Browser jobs are scoped to a persistent HttpOnly identity cookie; only its
+  hash is journaled as job ownership. Each state/SSE response filters jobs and
+  previews by owner, and mutation endpoints enforce ownership. Presets and
+  output files remain shared. This separates browser sessions within a private
+  single-owner app; it does not introduce multiple user accounts.
 
 ## Verification performed
 
@@ -88,6 +91,12 @@ the only new runtime dependencies; QR generation does not require Pillow.
   submit, preview, completion, reload/restore, download, and settings reuse were
   exercised against an explicitly simulated ComfyUI backend, not model inference.
 - The desktop QR was decoded with ZXing, including a changed advertised port.
+- Chromium also exercised simulated pagehide/pageshow, offline/online recovery
+  during sampling, restored live counters before completion, preserved unsent
+  draft/UI state across reload, completion while disconnected, and two separate
+  browser profiles. Protocol tests cover owner-filtered SSE/state/previews,
+  cancellation/retry ownership, durable identity/job restoration, lost enqueue
+  responses, and recovery from history beyond the recent-history window.
 - An actual ComfyUI 0.40.0 / CPU PyTorch 2.14.1 workflow ran
   `EmptyImage → ImageScale → SaveImage`, produced two 128×128 PNGs, and served
   them through the mobile gallery/image endpoints. A repeated request used the
@@ -112,8 +121,8 @@ The separate manual browser checks need Playwright/Chromium. SSE progress
 snapshots omit prompt/control values; full job details are fetched on new jobs
 and image changes rather than on every progress event. Packaging must
 include `mobile/web/*` in the wheel/app ZIP and `aiohttp`/`qrcode` in Fedora
-dependencies. The Python development version is `0.9.0.dev1`; RPM uses
-`0.9.0-0.1.dev1`, so a later stable `0.9.0-1` sorts above it.
+dependencies. The Python development version is `0.9.0.dev2`; RPM uses
+`0.9.0-0.2.dev2`, so a later stable `0.9.0-1` sorts above it.
 
 Optional, reproducible manual checks from the repository root:
 

@@ -24,6 +24,7 @@ async def check(comfy_url, output):
         service = MobileService(root/'state', settings, output or root/'output')
         client = TestClient(TestServer(MobileHTTP(service).app()))
         await client.start_server()
+        await client.get('/api/session')
         origin = str(client.make_url('/')).rstrip('/')
         try:
             await service.start()

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "comfyui-control"
-version = "0.9.0.dev1"
+version = "0.9.0.dev2"
 description = "A compact Qt controller for a local ComfyUI installation"
 license = {file = "LICENSE"}
 requires-python = ">=3.10"

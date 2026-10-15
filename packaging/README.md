@@ -1,6 +1,6 @@
 # Fedora RPM and COPR
 
-This branch builds a preliminary `0.9.0.dev1` app / `0.9.0-0.1.dev1` RPM.
+This branch builds a preliminary `0.9.0.dev2` app / `0.9.0-0.2.dev2` RPM.
 Build artifacts for testing only; stable COPR publishing is guarded against
 development versions. See [Mobile WebUI testing](../docs/MOBILE.md).
 
@@ -39,7 +39,7 @@ On Fedora, install the build tools:
 sudo dnf install python3 rpm-build dnf5-plugins
 sudo dnf builddep packaging/comfyui-control.spec
 python3 packaging/make_srpm.py --outdir dist
-rpmbuild --rebuild dist/comfyui-control-0.9.0-0.1.dev1*.src.rpm
+rpmbuild --rebuild dist/comfyui-control-0.9.0-0.2.dev2*.src.rpm
 ```
 
 For a clean build environment, `mock` can build the generated SRPM instead.
@@ -50,7 +50,7 @@ Fedora's Python minor version and installation paths can change between releases
 Install the RPM built for your Fedora release:
 
 ```bash
-sudo dnf install ./comfyui-control-0.9.0-0.1.dev1.fc44.noarch.rpm
+sudo dnf install ./comfyui-control-0.9.0-0.2.dev2.fc44.noarch.rpm
 ```
 
 The first RPM was built and installed in an isolated Fedora 44 container with

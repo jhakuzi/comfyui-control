@@ -2,10 +2,12 @@
 import asyncio
 from collections import defaultdict, deque, OrderedDict
 import io
+import hashlib
 import json
 import mimetypes
 from pathlib import Path
 import secrets
+import re
 import time
 from urllib.parse import urlsplit
 
@@ -19,6 +21,7 @@ from .settings import check_password, lan_address
 
 ASSETS = Path(__file__).with_name("web")
 ICON = Path(__file__).parents[1] / "assets" / "comfyui-control.png"
+OWNER = web.RequestKey("mobile_owner", str) if hasattr(web, "RequestKey") else "mobile_owner"
 PUBLIC = {"/", "/app.js", "/style.css", "/manifest.webmanifest", "/sw.js", "/icon.png", "/icon-192.png", "/icon-512.png", "/api/login", "/api/session"}
 
 
@@ -76,7 +79,17 @@ class MobileHTTP:
                     raise web.HTTPUnsupportedMediaType(text="Send application/json.")
             if request.path not in PUBLIC and not self.authenticated(request):
                 return json_response({"error": "Sign in to use the mobile interface."}, status=401)
+            identity = request.cookies.get("mobile_client", "")
+            issue_identity = request.path in {"/api/session", "/api/login"} and not re.fullmatch(r"[A-Za-z0-9_-]{43}", identity)
+            if issue_identity:
+                identity = secrets.token_urlsafe(32)
+            request[OWNER] = hashlib.sha256(identity.encode()).hexdigest() if re.fullmatch(r"[A-Za-z0-9_-]{43}", identity) else None
+            if request.path.startswith("/api/") and request.path not in PUBLIC and request[OWNER] is None:
+                return json_response({"error": "Reopen the mobile page to restore this browser session."}, status=409)
             response = await handler(request)
+            if issue_identity:
+                # Separate from the short-lived authentication cookie; survives app restarts.
+                response.set_cookie("mobile_client", identity, httponly=True, samesite="Strict", secure=self.settings.url().startswith("https:"), max_age=180 * 24 * 3600)
         except (ValueError, KeyError, TypeError, FileNotFoundError) as exc:
             response = web.json_response({"error": str(exc)[:2500] or "Invalid request."}, status=400)
         except ComfyError as exc:
@@ -125,7 +138,12 @@ class MobileHTTP:
         return response
 
     async def state(self, request):
-        return json_response(self.service.state())
+        return json_response(self.service.state(owner=request[OWNER]))
+
+    async def resume(self, request):
+        await object_body(request)
+        await self.service.resume()
+        return json_response(self.service.state(owner=request[OWNER]))
 
     async def events(self, request):
         if len(self.service.subscribers) >= 12:
@@ -133,8 +151,8 @@ class MobileHTTP:
         response = web.StreamResponse(headers={"Content-Type": "text/event-stream", "Cache-Control": "no-store", "X-Accel-Buffering": "no"})
         await response.prepare(request)
         queue = asyncio.Queue(maxsize=2)
-        self.service.subscribers.add(queue)
-        queue.put_nowait(self.service.state())
+        self.service.subscribers[queue] = request[OWNER]
+        queue.put_nowait(self.service.state(owner=request[OWNER]))
         try:
             while not self.service.closed:
                 if not self.authenticated(request):
@@ -145,11 +163,11 @@ class MobileHTTP:
                         break
                     await asyncio.wait_for(response.write(b"data: " + json.dumps(state).encode() + b"\n\n"), 10)
                 except asyncio.TimeoutError:
-                    await asyncio.wait_for(response.write(b": heartbeat\n\n"), 10)
+                    await asyncio.wait_for(response.write(b"event: ping\ndata: {}\n\n"), 10)
         except (ConnectionError, asyncio.CancelledError, asyncio.TimeoutError):
             pass
         finally:
-            self.service.subscribers.discard(queue)
+            self.service.subscribers.pop(queue, None)
         return response
 
     async def presets(self, request):
@@ -173,16 +191,17 @@ class MobileHTTP:
         return json_response(await self.service.describe(preset))
 
     async def generate(self, request):
-        return json_response(await self.service.submit(await object_body(request)), status=202)
+        job = await self.service.submit(await object_body(request), owner=request[OWNER])
+        return json_response(self.service.public_job(job), status=202)
 
     async def cancel(self, request):
         body = await object_body(request)
         if body.get("confirm_interrupt") is not True:
             raise ValueError("Confirm interruption before cancelling a running job.")
-        return json_response(await self.service.cancel(request.match_info["id"]))
+        return json_response(self.service.public_job(await self.service.cancel(request.match_info["id"], owner=request[OWNER])))
 
     async def gallery(self, request):
-        return json_response(await self.service.gallery())
+        return json_response(await self.service.gallery(owner=request[OWNER]))
 
     async def image(self, request):
         item = self.service.images.get(request.match_info["id"])
@@ -270,7 +289,8 @@ class MobileHTTP:
         return web.Response(body=self.thumbnails[key], content_type="image/jpeg")
 
     async def preview(self, request):
-        if not self.service.preview:
+        job = self.service.jobs.get(self.service.preview_job, {})
+        if not self.service.preview or job.get("owner") != request[OWNER]:
             raise web.HTTPNotFound()
         data, content_type = self.service.preview
         return web.Response(body=data, content_type=content_type)
@@ -299,7 +319,7 @@ class MobileHTTP:
         app = web.Application(middlewares=[self.middleware], client_max_size=5 * 1024 * 1024)
         app.add_routes([
             web.post('/api/login', self.login), web.get('/api/session', self.session), web.post('/api/logout', self.logout),
-            web.get('/api/state', self.state), web.get('/api/events', self.events),
+            web.get('/api/state', self.state), web.post('/api/resume', self.resume), web.get('/api/events', self.events),
             web.get('/api/presets', self.presets), web.post('/api/presets', self.presets),
             web.get('/api/presets/{id}', self.preset), web.put('/api/presets/{id}', self.preset), web.delete('/api/presets/{id}', self.preset),
             web.post('/api/generate', self.generate), web.post('/api/jobs/{id}/cancel', self.cancel),

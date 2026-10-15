@@ -21,6 +21,17 @@ let mappingDraft = new Map(),
   viewerIndex = 0;
 let fullStatePending = false;
 let fullStateAgain = false;
+let connected = false,
+  recovering = false,
+  initialized = false;
+let recoveryPromise = null,
+  recoveryEpoch = 0,
+  retryTimer,
+  retryDelay = 500,
+  heartbeatTimer;
+const requests = new Set();
+let uiReady = false,
+  uiState = readStore("ui", {});
 let noticeTimer,
   pendingSubmission = readStore("pending", null);
 
@@ -51,19 +62,26 @@ function notice(message) {
   }, 10000);
 }
 async function api(path, options = {}) {
-  let response;
+  const controller = new AbortController();
+  requests.add(controller);
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  let response, text;
   try {
     response = await fetch(path, {
       credentials: "same-origin",
       ...options,
+      signal: controller.signal,
       headers: { "Content-Type": "application/json", ...options.headers },
     });
+    text = await response.text();
   } catch {
     throw new Error(
       "Connection lost. Your settings are kept; reconnect and try again.",
     );
+  } finally {
+    clearTimeout(timeout);
+    requests.delete(controller);
   }
-  const text = await response.text();
   let body;
   try {
     body = JSON.parse(text);
@@ -83,6 +101,9 @@ function showLogin() {
   $("offline").hidden = true;
   if (events) events.close();
   events = null;
+  clearTimeout(retryTimer);
+  clearTimeout(heartbeatTimer);
+  connected = false;
   $("login").hidden = false;
   $("workspace").hidden = true;
   $("connection").textContent = "Sign in";
@@ -95,18 +116,51 @@ function saveDraft() {
       values: draft,
       randomSeed,
       disabledLoras: [...disabledLoras],
+      mappings: [...mappingDraft.values()],
     });
+}
+function saveUI() {
+  if (!uiReady) return;
+  uiState = {
+    tab: $("gallery-page").hidden ? "create" : "gallery",
+    details: Object.fromEntries(
+      [...document.querySelectorAll("details[id]")].map((el) => [
+        el.id,
+        el.open,
+      ]),
+    ),
+    search: $("mapping-search").value,
+    importName: $("import-name").value,
+    scroll: window.scrollY,
+  };
+  writeStore("ui", uiState);
+}
+function restoreUI() {
+  for (const [id, open] of Object.entries(uiState.details || {})) {
+    if ($(id)?.tagName === "DETAILS") $(id).open = !!open;
+  }
+  $("mapping-search").value = uiState.search || "";
+  $("import-name").value = uiState.importName || "";
+  renderMappings();
+  selectTab(uiState.tab === "gallery" ? "gallery" : "create");
+  if (uiState.tab === "gallery") loadGallery();
+  const scroll = uiState.scroll || 0;
+  requestAnimationFrame(() => window.scrollTo(0, scroll));
+  uiReady = true;
 }
 function selectTab(name) {
   $("create-page").hidden = name !== "create";
   $("gallery-page").hidden = name !== "gallery";
   $("create-tab").classList.toggle("selected", name === "create");
   $("gallery-tab").classList.toggle("selected", name === "gallery");
+  saveUI();
 }
 function updateGenerate() {
   const job = state.jobs.find((item) => item.id === selectedJob);
   $("generate").disabled =
     busy ||
+    !connected ||
+    recovering ||
     !preset ||
     !state.online ||
     preset.missing_nodes.length > 0 ||
@@ -158,7 +212,10 @@ async function choosePreset(id, reuse) {
   randomSeed = same ? !!stored.randomSeed : false;
   disabledLoras = new Set(same ? stored.disabledLoras || [] : []);
   mappingDraft = new Map(
-    preset.fields.map((field) => [
+    (same && Array.isArray(stored.mappings)
+      ? stored.mappings
+      : preset.fields
+    ).map((field) => [
       field.node + "\0" + field.input,
       {
         key: field.key,
@@ -245,6 +302,7 @@ function renderFields() {
   for (const field of roles("positive")) control(field, $("prompt-controls"));
   if (roles("negative").length) {
     const details = node("details");
+    details.id = "negative-controls";
     details.append(node("summary", "Negative prompt"));
     for (const field of roles("negative")) control(field, details);
     $("prompt-controls").append(details);
@@ -378,6 +436,7 @@ function renderMappings() {
         });
       labelInput.hidden = !select.value;
       group.hidden = !select.value.startsWith("lora_");
+      saveDraft();
     }
     select.addEventListener("change", update);
     labelInput.addEventListener("input", update);
@@ -402,7 +461,7 @@ function requestId() {
 }
 async function generate(event) {
   event.preventDefault();
-  if (busy || !preset) return;
+  if (busy || !preset || !connected || recovering) return;
   busy = true;
   updateGenerate();
   const body = pendingSubmission || {
@@ -448,13 +507,19 @@ function refreshFullState() {
   fullStatePending = true;
   api("/api/state")
     .then(applyState)
-    .catch((error) => notice(error.message))
+    .catch(connectionFailure)
     .finally(() => {
       fullStatePending = false;
       if (fullStateAgain) refreshFullState();
     });
 }
 function applyState(value) {
+  if (value.instance === state.instance && value.version < state.version)
+    return;
+  if (value.instance !== state.instance && value.partial) {
+    refreshFullState();
+    return;
+  }
   if (value.partial) {
     let needsDetails = false;
     value.jobs = value.jobs.map((summary) => {
@@ -500,6 +565,8 @@ function applyState(value) {
   $("job-card").hidden = !job;
   if (job) {
     selectedJob = job.id;
+    writeStore("job", job.id);
+    writeStore("active", { id: job.id, prompt_id: job.prompt_id });
     const titles = {
       submitting: "Sending your idea…",
       queued: "In the queue",
@@ -616,6 +683,7 @@ async function reuseJob(job, variation = false) {
       "This preset’s mappings changed. Choose it again and review the settings before generating.",
     );
   selectedJob = "new";
+  writeStore("job", "new");
   await loadPresets(job.preset);
   await choosePreset(job.preset, {
     revision: job.revision,
@@ -639,37 +707,125 @@ function guarded(action) {
     }
   };
 }
-function connectEvents() {
+function closeEvents() {
   if (events) events.close();
-  events = new EventSource("/api/events");
-  events.onmessage = (event) => {
+  events = null;
+  clearTimeout(heartbeatTimer);
+}
+function liveContact() {
+  clearTimeout(heartbeatTimer);
+  heartbeatTimer = setTimeout(() => {
+    closeEvents();
+    connectionFailure(
+      new Error("Connection paused; reconnecting automatically."),
+    );
+  }, 45000);
+}
+function connectEvents() {
+  closeEvents();
+  const source = new EventSource("/api/events");
+  events = source;
+  source.onopen = () => {
+    if (events === source) liveContact();
+  };
+  source.addEventListener("ping", () => {
+    if (events === source) liveContact();
+  });
+  source.onmessage = (event) => {
+    if (events !== source) return;
+    liveContact();
     try {
       applyState(JSON.parse(event.data));
     } catch {
-      notice("Could not read a live update. Reload to reconnect.");
+      scheduleRecovery();
     }
   };
-  events.onerror = async () => {
-    $("connection").textContent = "Reconnecting…";
-    $("connection").classList.remove("online");
-    try {
-      if (!(await api("/api/session")).authenticated) showLogin();
-    } catch {}
+  source.onerror = () => {
+    if (events !== source) return;
+    closeEvents();
+    connectionFailure(
+      new Error("Connection paused; reconnecting automatically."),
+    );
   };
 }
+function scheduleRecovery() {
+  if (document.hidden || !$("login").hidden || retryTimer) return;
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    bootstrap().catch(connectionFailure);
+  }, retryDelay);
+  retryDelay = Math.min(retryDelay * 2, 15000);
+}
 async function bootstrap() {
-  const session = await api("/api/session");
-  $("logout").hidden = !session.authentication_required;
-  if (!session.authenticated) {
-    showLogin();
-    return;
+  if (document.hidden) return;
+  if (recoveryPromise) return recoveryPromise;
+  clearTimeout(retryTimer);
+  retryTimer = null;
+  const epoch = recoveryEpoch;
+  recovering = true;
+  updateGenerate();
+  recoveryPromise = (async () => {
+    const session = await api("/api/session");
+    if (epoch !== recoveryEpoch) return;
+    $("logout").hidden = !session.authentication_required;
+    if (!session.authenticated) {
+      showLogin();
+      return;
+    }
+    $("login").hidden = true;
+    $("workspace").hidden = false;
+    connectEvents();
+    // First show the backend's latest cached sampling progress, then reconcile
+    // queue/history. Neither operation resubmits a prompt or replaces draft edits.
+    const snapshot = api("/api/state").then((value) => {
+      if (epoch === recoveryEpoch) applyState(value);
+    });
+    const reconciled = api("/api/resume", { method: "POST", body: "{}" }).then(
+      (value) => {
+        if (epoch === recoveryEpoch) applyState(value);
+      },
+    );
+    await Promise.all([snapshot, reconciled]);
+    if (epoch !== recoveryEpoch) return;
+    if (!initialized) {
+      await loadPresets();
+      if (epoch !== recoveryEpoch) return;
+      restoreUI();
+      initialized = true;
+    }
+    connected = true;
+    retryDelay = 500;
+    $("offline").hidden = true;
+    if (!$("gallery-page").hidden) loadGallery();
+  })();
+  try {
+    await recoveryPromise;
+  } finally {
+    if (epoch === recoveryEpoch) {
+      recovering = false;
+      recoveryPromise = null;
+      updateGenerate();
+    }
   }
-  $("login").hidden = true;
-  $("offline").hidden = true;
-  $("workspace").hidden = false;
-  applyState(await api("/api/state"));
-  await loadPresets();
-  connectEvents();
+}
+function pauseConnection() {
+  saveDraft();
+  saveUI();
+  recoveryEpoch++;
+  closeEvents();
+  clearTimeout(retryTimer);
+  retryTimer = null;
+  for (const controller of requests) controller.abort();
+  fullStatePending = false;
+  fullStateAgain = false;
+  recoveryPromise = null;
+  connected = false;
+  recovering = false;
+  updateGenerate();
+}
+function foreground() {
+  if (document.hidden || !$("login").hidden) return;
+  bootstrap().catch(connectionFailure);
 }
 $("login-form").addEventListener(
   "submit",
@@ -762,6 +918,7 @@ $("new-request").addEventListener("click", () => {
     )
   ) {
     selectedJob = "new";
+    writeStore("job", "new");
     $("job-card").hidden = true;
     updateGenerate();
   }
@@ -852,31 +1009,63 @@ $("logout").addEventListener(
   "click",
   guarded(async () => {
     await api("/api/logout", { method: "POST", body: "{}" });
+    pauseConnection();
     try {
       for (const key of Object.keys(localStorage))
         if (key.startsWith("comfy-mobile-")) localStorage.removeItem(key);
     } catch {}
     pendingSubmission = null;
+    initialized = false;
+    preset = null;
+    selectedJob = null;
+    state = { jobs: [], online: false };
+    uiReady = false;
+    uiState = {};
     showLogin();
   }),
 );
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && !$("workspace").hidden)
-    api("/api/state")
-      .then(applyState)
-      .catch((error) => notice(error.message));
+  document.hidden ? pauseConnection() : foreground();
 });
+window.addEventListener("pagehide", pauseConnection);
+window.addEventListener("pageshow", foreground);
+window.addEventListener("focus", foreground);
+window.addEventListener("offline", () => {
+  pauseConnection();
+  connectionFailure(new Error("Offline. Reconnect to your LAN or VPN."));
+});
+window.addEventListener("online", foreground);
+document.addEventListener(
+  "toggle",
+  (event) => {
+    if (event.target.matches("details[id]")) saveUI();
+  },
+  true,
+);
+let scrollTimer;
+window.addEventListener(
+  "scroll",
+  () => {
+    if (!scrollTimer)
+      scrollTimer = setTimeout(() => {
+        scrollTimer = null;
+        saveUI();
+      }, 200);
+  },
+  { passive: true },
+);
+$("mapping-search").addEventListener("input", saveUI);
+$("import-name").addEventListener("input", saveUI);
 if ("serviceWorker" in navigator && window.isSecureContext)
   navigator.serviceWorker.register("/sw.js").catch(() => {});
 function connectionFailure(error) {
+  if (document.hidden || !$("login").hidden) return;
+  connected = false;
   $("offline").hidden = false;
   $("connection").textContent = "Reconnecting…";
-  notice(error.message);
+  $("connection").classList.remove("online");
+  updateGenerate();
+  scheduleRecovery();
 }
-$("reconnect").addEventListener("click", () =>
-  bootstrap().catch(connectionFailure),
-);
-window.addEventListener("online", () => {
-  if (!$("offline").hidden) bootstrap().catch(connectionFailure);
-});
+$("reconnect").addEventListener("click", foreground);
 bootstrap().catch(connectionFailure);

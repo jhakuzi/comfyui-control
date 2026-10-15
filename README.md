@@ -1,6 +1,6 @@
 # ComfyUI Control
 
-> **Mobile WebUI testing branch (`0.9.0.dev1`).** See the [setup and workflow-mapping guide](docs/MOBILE.md).
+> **Mobile WebUI testing branch (`0.9.0.dev2`).** See the [setup and workflow-mapping guide](docs/MOBILE.md).
 > The COPR commands below install the stable desktop app; use the testing guide or this branch's ZIP for Mobile WebUI.
 
 A small Qt app for ComfyUI on Linux, built with KDE Plasma in mind.
