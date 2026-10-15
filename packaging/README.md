@@ -71,48 +71,70 @@ If you previously used `install.sh`, first remove its per-user app, wrapper, and
 desktop entry as described in the main README. Both installation methods share
 the same settings. Remove the RPM with `sudo dnf remove comfyui-control`.
 
-## COPR preparation
+## COPR publishing
 
-COPR setup requires a Fedora account and that account's COPR API configuration.
-A linked GitHub account does not grant access to COPR. Get the configuration
-from https://copr.fedorainfracloud.org/api/ and save it locally as
-`~/.config/copr` with permissions `0600`. Never commit or paste its secret values.
+Project: [jhakuzi/comfyui-control](https://copr.fedorainfracloud.org/coprs/jhakuzi/comfyui-control/).
+The project currently targets **Fedora 44 x86_64**. The application is MIT licensed.
 
-**Public publishing is pending the owner's choice of an open-source license.**
-Until then, the spec uses `LicenseRef-Proprietary` for private test builds.
-No live COPR project has been created by adding these files.
+### First build: upload a source RPM
 
-After choosing and adding the license, install `copr-cli`, check which Fedora
-chroots are available, create the project, then upload a source RPM:
+[Download the source RPM](https://github.com/jhakuzi/comfyui-control/raw/refs/heads/main/downloads/comfyui-control.src.rpm),
+then open the project's **New Build** page, select **Upload**, and submit the
+`.src.rpm` file. COPR builds and tests the binary package before publishing it.
+The source RPM includes tests and the license, but excludes screenshots and the
+app-download ZIP. Uploading it publishes its source even if GitHub is private.
+
+To build a new source RPM yourself on Fedora:
 
 ```bash
-sudo dnf install copr-cli
-copr-cli list-chroots
-copr-cli create comfyui-control --chroot fedora-44-x86_64
-copr-cli build comfyui-control dist/comfyui-control-0.8.0-1*.src.rpm
+sudo dnf install python3 rpm-build
+python3 packaging/make_srpm.py --outdir dist
 ```
 
-Select your actual Fedora release from the available chroots. Additional
-architectures/releases must be built and verified before advertising support.
-Uploading an SRPM works even while the GitHub repository is private; COPR's
-public build will publish the source contained in it. The repository's visibility
-is not changed by this packaging work.
+### Automated builds: one-time setup
 
-For future SCM builds, `.copr/Makefile` supports COPR's **make srpm** method.
-See the [official COPR source-build documentation](https://docs.copr.fedorainfracloud.org/user_documentation.html#scm).
-Once COPR can access the source repository, select Git, its clone URL, the
-desired branch/tag, and the make-srpm method. The Makefile must run from the
-repository root and receives COPR's `outdir` variable. No GitHub Actions secrets
-or automatic publishing workflow are installed.
+The repository includes [a GitHub Actions workflow](../.github/workflows/copr.yml)
+that creates downloadable source RPM/app ZIP artifacts and can submit the RPM
+to COPR. This also works with a private repository.
 
-Once a project exists and a build succeeds, users can install with:
+1. Sign in to [COPR's API page](https://copr.fedorainfracloud.org/api/).
+2. In [GitHub Actions secrets](https://github.com/jhakuzi/comfyui-control/settings/secrets/actions),
+   add **COPR_LOGIN** from the API configuration's `login` field and
+   **COPR_TOKEN** from its `token` field. The Fedora username is already set to
+   `jhakuzi` in the workflow. Do not paste credentials into issues or commits.
+3. Open **Actions → Build and publish to COPR → Run workflow**, select `main`,
+   check **Submit the source RPM**, and run it. Leave the checkbox off to only
+   generate downloadable artifacts without COPR credentials.
+
+The workflow waits for COPR and reports a failed build as a failed run.
+Artifacts are available from the run page for 30 days. COPR retains the published
+packages independently of GitHub artifact retention.
+
+For later releases, update the app version in `pyproject.toml` and
+`comfyui_control/__init__.py`, update the RPM spec's `Version` and changelog,
+reset `Release` to `1`, and rebuild the app ZIP on `main`. Then push a matching
+version tag, for example:
 
 ```bash
-sudo dnf copr enable <fedora-account>/comfyui-control
+git tag -a v0.9.0 -m 'Release 0.9.0'
+git push origin main v0.9.0
+```
+
+Tag pushes automatically build and submit to COPR; ordinary commits do not.
+The existing `v0.8.0` tag predates this workflow: use the manual run for the first
+build. For packaging-only changes, keep the app version, increment the spec's
+`Release`, and use a manual publishing run. Do not move existing release tags.
+
+### Install after the first successful build
+
+```bash
+sudo dnf copr enable jhakuzi/comfyui-control
 sudo dnf install comfyui-control
 ```
 
-The Fedora account placeholder above is not a published repository address.
-Future app versions update both `pyproject.toml` and the spec's `Version`, then
-build and submit a new SRPM. Subsequent app updates arrive through `dnf upgrade`;
-the app's Update button updates the selected ComfyUI checkout.
+Future app updates arrive through `sudo dnf upgrade`. The app's **Update ComfyUI**
+button updates ComfyUI itself.
+
+An alternative to Actions is COPR's Git/SCM **make srpm** method using
+`.copr/Makefile` and a GitHub webhook. That requires COPR to be able to clone the
+repository; the Actions upload route does not.

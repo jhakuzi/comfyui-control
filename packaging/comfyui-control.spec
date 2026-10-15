@@ -1,10 +1,9 @@
 Name:           comfyui-control
 Version:        0.8.0
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
-# Private builds only until the project owner chooses a distribution license.
-License:        LicenseRef-Proprietary
+License:        MIT
 URL:            https://github.com/jhakuzi/comfyui-control
 Source0:        %{name}-%{version}.tar.gz
 BuildArch:      noarch
@@ -48,12 +47,16 @@ QT_QPA_PLATFORM=offscreen %pytest
 desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 
 %files -f %{pyproject_files}
+%license LICENSE
 %doc README.md
 %doc %{_docdir}/%{name}/RPM.md
 %{_bindir}/%{name}
 %{_datadir}/applications/%{name}.desktop
 
 %changelog
+* Thu Oct 15 2026 ComfyUI Control contributors - 0.8.0-2
+- License the application under MIT and prepare automated COPR submissions.
+
 * Thu Oct 15 2026 ComfyUI Control contributors - 0.8.0-1
 - Allow unrelated untracked files during updates and select venv folders directly.
 - Inspect existing launch scripts and show baked-in flags without duplicating them.

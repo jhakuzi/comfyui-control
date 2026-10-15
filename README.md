@@ -43,7 +43,7 @@ Open **ComfyUI Control** from your application menu, or run `~/.local/bin/comfyu
 
 The app uses its own Python/Qt environment. Your ComfyUI environment stays separate. Existing Python 3 installations, including 3.14, can be used; GPU drivers and models are configured separately.
 
-[Fedora RPM / COPR build instructions](packaging/README.md) — no public COPR repository yet.
+[Fedora RPM / COPR instructions](packaging/README.md) · [COPR project](https://copr.fedorainfracloud.org/coprs/jhakuzi/comfyui-control/)
 
 ## First launch
 

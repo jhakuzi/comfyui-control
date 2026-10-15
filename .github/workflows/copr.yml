@@ -1,0 +1,97 @@
+name: Build and publish to COPR
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Submit the source RPM to jhakuzi/comfyui-control
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: copr-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: fedora:44
+    timeout-minutes: 90
+    steps:
+      - name: Install packaging tools
+        run: dnf -y install git python3 rpm-build copr-cli
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Check version tag
+        if: github.ref_type == 'tag'
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import tomllib
+          from pathlib import Path
+          version = tomllib.loads(Path('pyproject.toml').read_text())['project']['version']
+          expected = f'v{version}'
+          if os.environ['RELEASE_TAG'] != expected:
+              raise SystemExit(f'Tag must match app version: expected {expected}')
+          PY
+
+      - name: Build source RPM and app ZIP
+        run: |
+          python3 packaging/make_srpm.py --outdir dist
+          python3 packaging/make_app_zip.py --outdir dist
+
+      - name: Save downloads
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: comfyui-control-downloads
+          path: |
+            dist/*.src.rpm
+            dist/comfyui-control.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Submit to COPR and wait for build results
+        if: github.event_name == 'push' || inputs.publish
+        env:
+          COPR_LOGIN: ${{ secrets.COPR_LOGIN }}
+          COPR_TOKEN: ${{ secrets.COPR_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import configparser
+          import os
+          import subprocess
+          import tempfile
+          from pathlib import Path
+
+          login, token = os.environ['COPR_LOGIN'], os.environ['COPR_TOKEN']
+          if not login or not token:
+              raise SystemExit('Add COPR_LOGIN and COPR_TOKEN in repository Settings > Secrets and variables > Actions.')
+          rpms = list(Path('dist').glob('*.src.rpm'))
+          if len(rpms) != 1:
+              raise SystemExit('Expected exactly one source RPM')
+          config = configparser.ConfigParser(interpolation=None)
+          config['copr-cli'] = {
+              'copr_url': 'https://copr.fedorainfracloud.org',
+              'username': 'jhakuzi',
+              'login': login,
+              'token': token,
+          }
+          with tempfile.TemporaryDirectory() as temporary:
+              path = Path(temporary) / 'copr'
+              with path.open('x', opener=lambda name, flags: os.open(name, flags, 0o600)) as output:
+                  config.write(output)
+              subprocess.run([
+                  'copr-cli', '--config', str(path), 'build',
+                  'jhakuzi/comfyui-control', str(rpms[0]),
+              ], check=True)
+          PY
