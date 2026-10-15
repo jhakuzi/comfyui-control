@@ -3,7 +3,7 @@
 A small Qt app for ComfyUI on Linux, built with KDE Plasma in mind.
 Start/stop, restart, Git or Comfy CLI updates, launch flags, and folder shortcuts.
 
-![ComfyUI Control](update-preview.png)
+![ComfyUI Control 0.8.1 with the dark theme](docs/screenshots/comfyui-control-0.8.1-dark.png)
 
 ## Install
 
