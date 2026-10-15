@@ -1,5 +1,5 @@
 Name:           comfyui-control
-Version:        0.6.0
+Version:        0.7.0
 Release:        1%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
@@ -54,6 +54,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/applications/%{name}.desktop
 
 %changelog
+* Thu Oct 15 2026 ComfyUI Control contributors - 0.7.0-1
+- Add update-method confirmation, align header controls, and collapse launch flags.
+
 * Wed Oct 14 2026 ComfyUI Control contributors - 0.6.0-1
 - Add Comfy CLI update selection with explicit workspace and environment.
 

@@ -10,8 +10,8 @@ from PySide6.QtCore import QCoreApplication, QEvent, QLockFile, QProcess, QTimer
 from PySide6.QtGui import QDesktopServices, QFontDatabase, QIcon, QTextCursor
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
-    QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMainWindow,
-    QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QFileDialog, QFormLayout, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMainWindow,
+    QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QToolButton, QVBoxLayout, QWidget,
 )
 
 from .config import Config, config_path, expand
@@ -19,13 +19,15 @@ from .controller import Controller
 from .launch_script import create_launch_script
 from .flag_widgets import LaunchFlags, LaunchScriptDialog
 from .setup import InstallDialog, WelcomeDialog
+from .update_widgets import UpdateDialog
+from . import __version__
 
 
 class SettingsDialog(QDialog):
     def __init__(self, config, parent=None):
         super().__init__(parent)
         self.setWindowTitle("ComfyUI launch configuration")
-        self.resize(680, 740)
+        self.resize(680, 520)
         self.original_config = config
         self.result_config = None
         layout = QVBoxLayout(self)
@@ -49,11 +51,22 @@ class SettingsDialog(QDialog):
         form.addRow("Launch method", self.mode)
         form.addRow("ComfyUI Python", self._path_row(self.python))
         form.addRow("Launch script", self._path_row(self.script, scripts=True))
-        form.addRow("Launch flags", self.launch_options)
+        self.flags_toggle = QToolButton()
+        self.flags_toggle.setCheckable(True)
+        self.flags_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.flags_toggle.setArrowType(Qt.ArrowType.RightArrow)
+        self.flags_toggle.toggled.connect(self._toggle_flags)
+        form.addRow(self.flags_toggle)
+        self.flags_contents = QWidget()
+        flags_layout = QVBoxLayout(self.flags_contents)
+        flags_layout.setContentsMargins(0, 0, 0, 0)
+        flags_layout.addWidget(self.launch_options)
         self.note = QLabel()
         self.note.setWordWrap(True)
-        form.addRow(self.note)
-        self.edit_script = QPushButton("Edit launch script…")
+        flags_layout.addWidget(self.note)
+        form.addRow(self.flags_contents)
+        self.flags_contents.hide()
+        self.edit_script = QPushButton("Edit script file…")
         self.edit_script.clicked.connect(self._edit_script)
         form.addRow(self.edit_script)
         form.addRow("Output folder", self._path_row(self.output_dir, directory=True))
@@ -89,6 +102,10 @@ class SettingsDialog(QDialog):
         self._mode_changed()
         self._update_mode_changed()
 
+    def _toggle_flags(self, expanded):
+        self.flags_contents.setVisible(expanded)
+        self.flags_toggle.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
+
     def _path_row(self, field, directory=False, scripts=False, title=None):
         row = QWidget()
         layout = QHBoxLayout(row)
@@ -112,12 +129,14 @@ class SettingsDialog(QDialog):
         script_mode = self.mode.currentData() == "script"
         self.script.parentWidget().setEnabled(script_mode)
         self.edit_script.setEnabled(script_mode)
+        managed = script_mode and self.original_config.managed_script and self.script.text().strip() == self.original_config.script
+        self.flags_toggle.setText("Edit script flags" if managed else "Additional script arguments" if script_mode else "Edit launch flags")
         self.note.setText(
             'Checkbox selections replace the default flags when the app starts this generated script. '
             'Uncheck a flag to remove it on the next start.'
-            if script_mode and self.original_config.managed_script and self.script.text().strip() == self.original_config.script else
+            if managed else
             'Arguments are appended to the script. The script must forward them using "$@". '
-            'For flags hardcoded in the script, use “Edit launch script”. End the script with exec python … to keep server ownership clear.'
+            'Flags already written in the script must be changed with “Edit script file…”.'
             if script_mode else
             "Arguments are passed directly to main.py. They are saved here and take effect on the next start."
         )
@@ -207,7 +226,7 @@ class LogView(QPlainTextEdit):
 class MainWindow(QMainWindow):
     def __init__(self, config, first_run=False, load_error=""):
         super().__init__()
-        self.setWindowTitle("ComfyUI Control")
+        self.setWindowTitle(f"ComfyUI Control {__version__}")
         self.setWindowIcon(QIcon.fromTheme("utilities-terminal"))
         self.resize(800, 570)
         self.setMinimumSize(580, 400)
@@ -218,31 +237,39 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(body)
         layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(12)
-        header = QHBoxLayout()
+        header = QGridLayout()
+        header.setColumnStretch(0, 1)
+        header.setHorizontalSpacing(10)
+        header.setVerticalSpacing(8)
         title = QLabel("ComfyUI")
         title.setStyleSheet("font-size: 18px; font-weight: 600;")
-        header.addWidget(title)
-        header.addStretch()
+        header.addWidget(title, 0, 0)
         self.setup_button = QPushButton("Set up ComfyUI…")
         self.setup_button.clicked.connect(self._first_setup)
-        header.addWidget(self.setup_button)
+        header.addWidget(self.setup_button, 0, 1)
         self.status = QLabel("●  Stopped")
-        header.addWidget(self.status)
-        layout.addLayout(header)
-        path_row = QHBoxLayout()
+        self.status.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        header.addWidget(self.status, 0, 2)
         self.path_label = QLabel(config.comfy_dir or "No installation selected")
         self.path_label.setTextFormat(Qt.TextFormat.PlainText)
         self.path_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.path_label.setWordWrap(True)
-        path_row.addWidget(self.path_label, 1)
+        header.addWidget(self.path_label, 1, 0)
         self.create_script_button = QPushButton("Create launch script…")
         self.create_script_button.setToolTip("Create a Bash script using your Python environment and selected launch flags.")
         self.create_script_button.clicked.connect(self._create_script)
-        path_row.addWidget(self.create_script_button)
+        header.addWidget(self.create_script_button, 1, 1)
         self.change_folder = QPushButton("Change folder…")
         self.change_folder.clicked.connect(self._choose_folder)
-        path_row.addWidget(self.change_folder)
-        layout.addLayout(path_row)
+        header.addWidget(self.change_folder, 1, 2)
+        for button in (self.setup_button, self.create_script_button, self.change_folder):
+            button.setMinimumHeight(30)
+        self.status.setMinimumHeight(30)
+        status_width = max(self.status.fontMetrics().horizontalAdvance("●  Process running") + 8, self.change_folder.sizeHint().width())
+        self.status.setFixedWidth(status_width)
+        self.change_folder.setFixedWidth(status_width)
+        header.setColumnMinimumWidth(2, status_width)
+        layout.addLayout(header)
         self.log = LogView()
         layout.addWidget(self.log, 1)
         controls = QHBoxLayout()
@@ -250,7 +277,7 @@ class MainWindow(QMainWindow):
         self.start_stop = self._button("Start", "media-playback-start", self._start_stop)
         self.restart = self._button("Restart", "view-refresh", self.controller.restart)
         self.update = self._button("Update", "system-software-update", self._update)
-        self.update.setToolTip("Update the selected ComfyUI installation using the method beside this button.")
+        self.update.setToolTip("Choose Git or Comfy CLI and review the Python environment before updating.")
         self.update_method = QComboBox()
         self.update_method.addItem("Git", "git")
         self.update_method.addItem("Comfy CLI", "cli")
@@ -430,19 +457,16 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "ComfyUI Control", message)
 
     def _update(self):
-        running = self.controller.state in ("starting", "running")
-        cli = self.controller.config.update_method == "cli"
-        message = (
-            "Run comfy update for the selected ComfyUI folder using its configured Python environment? Comfy CLI updates code and installs requirements, which may change GPU dependencies."
-            if cli else "Update the ComfyUI Git checkout with git pull --ff-only?"
-        )
-        message += "\n\nLocal changes or untracked files will cause the update to stop."
-        if not cli and self.controller.config.install_requirements:
-            message += "\n\nThen install requirements.txt with your selected ComfyUI Python. This may change installed dependencies."
-        if running:
-            message += "\n\nThe running server will stop first and restart after a successful update."
-        if QMessageBox.question(self, "Update ComfyUI", message, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
-            self.controller.update()
+        dialog = UpdateDialog(self.controller.config, running=self.controller.state in ("starting", "running"), parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            dialog.result_config.save()
+        except OSError as exc:
+            QMessageBox.warning(self, "Could not save update settings", str(exc))
+            return
+        self._set_config(dialog.result_config)
+        self.controller.update()
 
     def _open_folder(self, kind):
         path = self.controller.config.folder(kind)
@@ -469,6 +493,7 @@ class MainWindow(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("ComfyUI Control")
+    app.setApplicationVersion(__version__)
     app.setDesktopFileName("comfyui-control")
     if sys.platform != "linux":
         QMessageBox.critical(None, "Linux required", "ComfyUI Control currently supports Linux only.")

@@ -1,6 +1,8 @@
 from unittest.mock import patch
+from dataclasses import replace
 
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QUrl, Qt
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QDialog, QMessageBox
 
 from comfyui_control.app import LogView, MainWindow, SettingsDialog
@@ -170,10 +172,11 @@ def test_update_method_selection_persists_and_is_locked_during_update(app, tmp_p
     assert not window.update_method.isEnabled()
     window._state_changed("stopped")
     assert window.update_method.isEnabled()
-    with patch("comfyui_control.app.QMessageBox.question", return_value=QMessageBox.StandardButton.Yes) as confirm, patch.object(window.controller, "update") as update:
+    with patch("comfyui_control.app.UpdateDialog") as dialog_class, patch.object(window.controller, "update") as update:
+        dialog_class.return_value.exec.return_value = QDialog.DialogCode.Accepted
+        dialog_class.return_value.result_config = window.controller.config
         window._update()
-    assert "comfy update" in confirm.call_args.args[2]
-    assert "git pull --ff-only" not in confirm.call_args.args[2]
+    assert dialog_class.call_args.args[0].update_method == "cli"
     update.assert_called_once()
     dialog = SettingsDialog(window.controller.config)
     assert not dialog.requirements.isEnabled()
@@ -182,3 +185,76 @@ def test_update_method_selection_persists_and_is_locked_during_update(app, tmp_p
     assert Config.load().comfy_cli == "/path with spaces/comfy"
     assert Config.load().update_method == "cli"
     window.close()
+
+
+def test_update_dialog_choice_is_saved_before_starting(app, tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "settings"))
+    (tmp_path / "main.py").touch()
+    window = MainWindow(Config(comfy_dir=str(tmp_path)))
+    chosen = replace(window.controller.config, update_method="cli", python="/chosen/env/bin/python")
+    with patch("comfyui_control.app.UpdateDialog") as dialog_class, patch.object(window.controller, "update") as update:
+        dialog_class.return_value.exec.return_value = QDialog.DialogCode.Accepted
+        dialog_class.return_value.result_config = chosen
+        window._update()
+        update.assert_called_once()
+    assert Config.load() == chosen
+    assert window.controller.config == chosen
+    assert window.update_method.currentData() == "cli"
+
+
+def test_cancel_update_does_not_change_settings_or_stop_server(app, tmp_path):
+    (tmp_path / "main.py").touch()
+    original = Config(comfy_dir=str(tmp_path))
+    window = MainWindow(original)
+    with patch("comfyui_control.app.UpdateDialog") as dialog_class, patch.object(window.controller, "update") as update:
+        dialog_class.return_value.exec.return_value = QDialog.DialogCode.Rejected
+        window._update()
+        update.assert_not_called()
+    assert window.controller.config == original
+
+
+def test_header_columns_align_and_stay_put_when_status_changes(app, tmp_path):
+    (tmp_path / "main.py").touch()
+    window = MainWindow(Config(comfy_dir=str(tmp_path)))
+    window.show()
+    for width in (680, 800):
+        window.resize(width, 570)
+        app.processEvents()
+        original_left = window.setup_button.x()
+        for state in ("stopped", "running", "updating", "stopping"):
+            window._state_changed(state)
+            app.processEvents()
+            assert window.setup_button.x() == window.create_script_button.x() == original_left
+            assert window.setup_button.width() == window.create_script_button.width()
+            assert window.status.x() == window.change_folder.x()
+            assert window.status.width() == window.change_folder.width()
+            assert window.setup_button.height() == window.create_script_button.height() == window.change_folder.height()
+    window.close()
+
+
+def test_flags_are_collapsed_until_explicit_edit_and_keep_selections(app, tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "settings"))
+    (tmp_path / "main.py").touch()
+    script = tmp_path / "script.sh"
+    script.touch()
+    original = Config(comfy_dir=str(tmp_path), mode="script", script=str(script), managed_script=True, arguments="--disable-smart-memory --reserve-vram 3")
+    dialog = SettingsDialog(original)
+    dialog.show()
+    app.processEvents()
+    assert not dialog.flags_contents.isVisible()
+    assert dialog.flags_toggle.text() == "Edit script flags"
+    QTest.mouseClick(dialog.flags_toggle, Qt.MouseButton.LeftButton)
+    assert dialog.flags_contents.isVisible()
+    dialog.launch_options.reserve_value.setValue(5)
+    QTest.mouseClick(dialog.flags_toggle, Qt.MouseButton.LeftButton)
+    assert not dialog.flags_contents.isVisible()
+    dialog._save()
+    assert "--reserve-vram 5" in Config.load().arguments
+    assert "--disable-smart-memory" in Config.load().arguments
+
+
+def test_custom_script_flags_are_labeled_as_extra_arguments(app, tmp_path):
+    dialog = SettingsDialog(Config(comfy_dir=str(tmp_path), mode="script"))
+    assert dialog.flags_toggle.text() == "Additional script arguments"
+    assert "Edit script file" in dialog.note.text()
+    assert not dialog.flags_toggle.isChecked()

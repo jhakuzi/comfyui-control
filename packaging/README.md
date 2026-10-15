@@ -12,7 +12,7 @@ On Fedora, install the build tools:
 ```bash
 sudo dnf install rpm-build python3-devel pyproject-rpm-macros python3-setuptools python3-wheel python3-pyside6 python3-pytest desktop-file-utils git-core
 python3 packaging/make_srpm.py --outdir dist
-rpmbuild --rebuild dist/comfyui-control-0.6.0-1*.src.rpm
+rpmbuild --rebuild dist/comfyui-control-0.7.0-1*.src.rpm
 ```
 
 For a clean build environment, `mock` can build the generated SRPM instead.
@@ -23,7 +23,7 @@ Fedora's Python minor version and installation paths can change between releases
 Install the RPM built for your Fedora release:
 
 ```bash
-sudo dnf install ./comfyui-control-0.6.0-1.fc44.noarch.rpm
+sudo dnf install ./comfyui-control-0.7.0-1.fc44.noarch.rpm
 ```
 
 The first RPM was built and installed in an isolated Fedora 44 container with
@@ -36,6 +36,10 @@ Version 0.6.0 adds the saved Git/Comfy CLI update selector. Its suite has 61
 tests, including CLI environment isolation, failure handling, and GUI selection.
 The actual Comfy CLI was also tested through the GUI against a disposable local
 checkout and requirement wheel, as described in the main README.
+
+Version 0.7.0 adds an update-method dialog, aligned header controls, collapsed
+launch flags, and a visible window version. All 70 tests pass, and both update
+methods were exercised through the new dialog with the actual CLI.
 
 If you previously used `install.sh`, first remove its per-user app, wrapper, and
 desktop entry as described in the main README. Both installation methods share
@@ -59,7 +63,7 @@ chroots are available, create the project, then upload a source RPM:
 sudo dnf install copr-cli
 copr-cli list-chroots
 copr-cli create comfyui-control --chroot fedora-44-x86_64
-copr-cli build comfyui-control dist/comfyui-control-0.6.0-1*.src.rpm
+copr-cli build comfyui-control dist/comfyui-control-0.7.0-1*.src.rpm
 ```
 
 Select your actual Fedora release from the available chroots. Additional

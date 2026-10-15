@@ -65,7 +65,7 @@ Setup creates a companion Python environment beside ComfyUI and runs `pip instal
 
 ## Launch settings
 
-Open **Edit launch configuration…** while stopped.
+Open **Edit launch configuration…** while stopped. Flags are collapsed by default: expand **Edit script flags** (app-created scripts), **Additional script arguments** (custom scripts), or **Edit launch flags** (direct Python).
 
 | Setting | Use |
 | --- | --- |
@@ -74,9 +74,11 @@ Open **Edit launch configuration…** while stopped.
 | **Launch flags** | Search checkboxes, set **Reserve VRAM**, or enter values such as `--port 8188` under **Other arguments**. |
 | **Output / Models folder** | Change the folder shortcuts if your files are stored elsewhere. |
 
-![Launch flag checkboxes](flags-preview.png)
+![Launch settings with flags collapsed](settings-preview.png)
 
 **Create launch script…** saves a new executable `.sh` with your environment, selected flags, and HIP allocator setting. Existing scripts are never overwritten. App-created scripts follow your current checkbox selections; hardcoded flags in custom scripts need manual editing. Custom scripts should forward `"$@"` and use `exec` to launch Python.
+
+[Flag selection when creating a script](flags-preview.png)
 
 The output pane is read-only. The app controls servers it starts; stop any separately running ComfyUI first.
 
@@ -84,7 +86,9 @@ The output pane is read-only. The app controls servers it starts; stop any separ
 
 ### ComfyUI
 
-Choose a method beside **Update**:
+Click **Update** to choose either method and review the ComfyUI Python environment. The drop-down beside the button sets your saved default.
+
+![Update method and Python environment](update-dialog-preview.png)
 
 | Method | Behavior |
 | --- | --- |
@@ -115,6 +119,7 @@ bash install.sh
 | Folder unavailable | Mount the drive or use **Change folder…**. |
 | CLI or setup terminal missing | Select/install `comfy-cli`; for setup, install Konsole, GNOME Terminal, or xterm. |
 | Script editor missing | Install Kate or KWrite, or edit the script manually. |
+| Bash reports `or: command not found` | Replace Fish-style `; or exit 1` with Bash `\|\| exit 1` in the launch script. |
 | CLI cannot save configuration | Ensure `~/.config/comfy-cli` is writable. |
 
 For an **xcb plugin error on Fedora**:
@@ -136,7 +141,7 @@ python3 -m venv .venv
 QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest
 ```
 
-61 tests pass. Real CPU installation, server controls, and update integration were verified on Fedora 44 with Python 3.14.8. CLI dependency isolation was checked with a disposable checkout and test package. GPU/ROCm, model inference, and KDE Wayland remain untested.
+70 tests pass, including update choices, collapsed flags, and header alignment. Real CPU installation, server controls, and update integration were verified on Fedora 44 with Python 3.14.8. CLI dependency isolation was checked with a disposable checkout and test package. GPU/ROCm, model inference, and KDE Wayland remain untested.
 
 [Live ComfyUI server screenshot](live-test-preview.png)
 
