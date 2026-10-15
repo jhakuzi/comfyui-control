@@ -16,6 +16,24 @@ from comfyui_control.mobile.server import MobileHTTP
 from comfyui_control.mobile.service import MobileService, revision
 
 
+def test_api_timeouts_are_reported_as_comfy_offline():
+    from comfyui_control.mobile.client import ComfyClient, ComfyError
+
+    class TimedOut:
+        async def __aenter__(self):
+            raise asyncio.TimeoutError()
+
+        async def __aexit__(self, *args):
+            pass
+
+    class Session:
+        def request(self, *args, **kwargs):
+            return TimedOut()
+
+    with pytest.raises(ComfyError, match='unavailable'):
+        asyncio.run(ComfyClient(Session(), 'http://127.0.0.1:8188').request('GET', '/queue'))
+
+
 def test_custom_workflow_changes_only_explicit_inputs(tmp_path, mobile_graph):
     store = Presets(tmp_path)
     graph = deepcopy(mobile_graph)

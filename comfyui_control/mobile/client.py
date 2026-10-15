@@ -1,4 +1,5 @@
 """Small asynchronous client for ComfyUI's documented HTTP/WS interfaces."""
+import asyncio
 import json
 
 import aiohttp
@@ -39,5 +40,5 @@ class ComfyClient:
                         details = str(details) + " · " + " · ".join(summaries)
                     raise ComfyError(str(details)[:2500], rejected=response.status < 500)
                 return value
-        except (aiohttp.ClientError, TimeoutError) as exc:
+        except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
             raise ComfyError("ComfyUI is unavailable. Start it in the desktop app and check its API URL.") from exc

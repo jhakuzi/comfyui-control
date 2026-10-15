@@ -367,7 +367,7 @@ class MobileService:
                                             self.broadcast()
                                     except (ValueError, TypeError, AttributeError):
                                         pass
-            except (aiohttp.ClientError, TimeoutError, ComfyError, OSError):
+            except (aiohttp.ClientError, asyncio.TimeoutError, ComfyError, OSError):
                 pass
             self.online = False
             self.connection = "ComfyUI is offline; reconnecting…"
