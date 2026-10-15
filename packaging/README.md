@@ -11,9 +11,11 @@ python3 packaging/make_app_zip.py --outdir dist
 This creates a versioned ZIP and `dist/comfyui-control.zip` containing only
 the Python app, `pyproject.toml`, `install.sh`, and a short README. A project
 license is included when present. Tests, screenshots, Git files, caches, and
-packaging tools stay in the development repository. Publish
-`comfyui-control.zip` as a GitHub Release asset so the main README's download
-link points to the clean app download.
+packaging tools stay in the development repository. The main README links to
+`comfyui-control.zip` on the separate `downloads` branch. After building a new
+version, replace that branch's ZIP and push it to update the download. The same
+ZIP can also be uploaded as a GitHub Release asset when release-upload access
+is available.
 
 Tests remain in source RPMs so Fedora builds can run the required checks.
 

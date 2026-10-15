@@ -33,7 +33,7 @@ def main():
             info.external_attr = (stat.S_IFREG | (0o755 if relative == "install.sh" else 0o644)) << 16
             info.compress_type = zipfile.ZIP_DEFLATED
             output.writestr(info, source.read_bytes())
-    # A stable asset name keeps the README's latest-release download link valid.
+    # A stable filename keeps the README's app-download link valid.
     stable = args.outdir / "comfyui-control.zip"
     shutil.copyfile(archive, stable)
     print(f"{archive} ({archive.stat().st_size:,} bytes, {len(files)} files)")
