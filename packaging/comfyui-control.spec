@@ -1,6 +1,6 @@
 Name:           comfyui-control
-Version:        0.8.0
-Release:        3%{?dist}
+Version:        0.8.1
+Release:        1%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
 License:        MIT
@@ -21,6 +21,7 @@ Requires:       python3-pyside6 >= 6.7
 Requires:       python3-pip
 Requires:       git-core
 Requires:       /bin/bash
+Requires:       hicolor-icon-theme
 Recommends:     konsole
 
 %description
@@ -41,6 +42,7 @@ sed -i 's/PySide6-Essentials/PySide6/' pyproject.toml
 %pyproject_install
 %pyproject_save_files comfyui_control
 desktop-file-install --dir=%{buildroot}%{_datadir}/applications packaging/%{name}.desktop
+install -Dpm 0644 comfyui_control/assets/comfyui-control.png %{buildroot}%{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 install -Dpm 0644 packaging/README.md %{buildroot}%{_docdir}/%{name}/RPM.md
 
 %check
@@ -53,8 +55,12 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %doc %{_docdir}/%{name}/RPM.md
 %{_bindir}/%{name}
 %{_datadir}/applications/%{name}.desktop
+%{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Thu Oct 15 2026 ComfyUI Control contributors - 0.8.1-1
+- Add the application icon to Qt, desktop launchers, and both installation methods.
+
 * Thu Oct 15 2026 ComfyUI Control contributors - 0.8.0-3
 - Declare pip as a build dependency for clean Fedora and COPR builds.
 

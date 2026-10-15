@@ -18,11 +18,16 @@ python3 -m venv "$app_target/venv"
 # Generate quoted paths for both a shell wrapper and the desktop file.
 "$app_target/venv/bin/python" - "$app_target" "$app_bin" "$app_desktops" <<'PY'
 from pathlib import Path
+import comfyui_control
 import shlex
+import shutil
 import sys
 
 target, bin_dir, desktop_dir = map(Path, sys.argv[1:])
 executable = str(target / 'venv' / 'bin' / 'comfyui-control')
+icon = target / 'comfyui-control.png'
+shutil.copyfile(Path(comfyui_control.__file__).with_name('assets') / 'comfyui-control.png', icon)
+icon_value = str(icon).replace('\\', '\\\\').replace('\n', '\\n').replace('\r', '\\r')
 wrapper = bin_dir / 'comfyui-control'
 wrapper.write_text('#!/bin/sh\nexec ' + shlex.quote(executable) + ' "$@"\n', encoding='utf-8')
 wrapper.chmod(0o755)
@@ -32,7 +37,7 @@ quoted = quoted.replace('\\', '\\\\')  # Escape at the desktop string layer too.
 (desktop_dir / 'comfyui-control.desktop').write_text(
     '[Desktop Entry]\nType=Application\nName=ComfyUI Control\n'
     'Comment=Start, stop, and update a local ComfyUI server\n'
-    f'Exec="{quoted}"\nIcon=utilities-terminal\nTerminal=false\n'
+    f'Exec="{quoted}"\nIcon={icon_value}\nTerminal=false\n'
     'Categories=Graphics;\nStartupNotify=true\n', encoding='utf-8'
 )
 PY

@@ -24,6 +24,11 @@ from .update_widgets import UpdateDialog
 from . import __version__
 
 
+def application_icon():
+    icon = QIcon(str(Path(__file__).with_name("assets") / "comfyui-control.png"))
+    return icon if not icon.isNull() else QIcon.fromTheme("utilities-terminal")
+
+
 class SettingsDialog(QDialog):
     def __init__(self, config, parent=None):
         super().__init__(parent)
@@ -246,7 +251,7 @@ class MainWindow(QMainWindow):
     def __init__(self, config, first_run=False, load_error=""):
         super().__init__()
         self.setWindowTitle(f"ComfyUI Control {__version__}")
-        self.setWindowIcon(QIcon.fromTheme("utilities-terminal"))
+        self.setWindowIcon(application_icon())
         self.resize(800, 570)
         self.setMinimumSize(580, 400)
         self._closing = False
@@ -514,6 +519,7 @@ def main():
     app.setApplicationName("ComfyUI Control")
     app.setApplicationVersion(__version__)
     app.setDesktopFileName("comfyui-control")
+    app.setWindowIcon(application_icon())
     if sys.platform != "linux":
         QMessageBox.critical(None, "Linux required", "ComfyUI Control currently supports Linux only.")
         return 1

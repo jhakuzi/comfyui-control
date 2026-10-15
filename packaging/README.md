@@ -9,7 +9,7 @@ python3 packaging/make_app_zip.py --outdir downloads
 ```
 
 This creates a versioned ZIP and `downloads/comfyui-control.zip` containing only
-the Python app, `pyproject.toml`, `install.sh`, and a short README. A project
+the Python app and its icon, `pyproject.toml`, `install.sh`, and a short README. A project
 license is included when present. Tests, screenshots, Git files, caches, and
 packaging tools stay in the development repository. The main README links to
 `downloads/comfyui-control.zip` on `main`; no separate download branch is needed.
@@ -34,7 +34,7 @@ On Fedora, install the build tools:
 ```bash
 sudo dnf install rpm-build python3-devel pyproject-rpm-macros python3-setuptools python3-wheel python3-pyside6 python3-pytest desktop-file-utils git-core
 python3 packaging/make_srpm.py --outdir dist
-rpmbuild --rebuild dist/comfyui-control-0.8.0-1*.src.rpm
+rpmbuild --rebuild dist/comfyui-control-0.8.1-1*.src.rpm
 ```
 
 For a clean build environment, `mock` can build the generated SRPM instead.
@@ -45,7 +45,7 @@ Fedora's Python minor version and installation paths can change between releases
 Install the RPM built for your Fedora release:
 
 ```bash
-sudo dnf install ./comfyui-control-0.8.0-1.fc44.noarch.rpm
+sudo dnf install ./comfyui-control-0.8.1-1.fc44.noarch.rpm
 ```
 
 The first RPM was built and installed in an isolated Fedora 44 container with
