@@ -5,17 +5,18 @@
 Build the user download with Python 3.11 or newer:
 
 ```bash
-python3 packaging/make_app_zip.py --outdir dist
+python3 packaging/make_app_zip.py --outdir downloads
 ```
 
-This creates a versioned ZIP and `dist/comfyui-control.zip` containing only
+This creates a versioned ZIP and `downloads/comfyui-control.zip` containing only
 the Python app, `pyproject.toml`, `install.sh`, and a short README. A project
 license is included when present. Tests, screenshots, Git files, caches, and
 packaging tools stay in the development repository. The main README links to
-`comfyui-control.zip` on the separate `downloads` branch. After building a new
-version, replace that branch's ZIP and push it to update the download. The same
-ZIP can also be uploaded as a GitHub Release asset when release-upload access
-is available.
+`downloads/comfyui-control.zip` on `main`; no separate download branch is needed.
+After changing the app, rebuild the ZIP and commit the stable ZIP alongside the
+source changes to keep the download current. The versioned copy is ignored by
+Git. The same ZIP can also be uploaded as a GitHub Release asset when
+release-upload access is available.
 
 Tests remain in source RPMs so Fedora builds can run the required checks.
 

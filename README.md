@@ -8,7 +8,7 @@ A small Python + Qt 6 desktop app for ComfyUI on Linux, built with KDE Plasma in
 
 ## Install
 
-[Download the app ZIP](https://github.com/jhakuzi/comfyui-control/raw/refs/heads/downloads/comfyui-control.zip), extract it, and open a terminal in the extracted folder.
+[Download the app ZIP](https://github.com/jhakuzi/comfyui-control/raw/refs/heads/main/downloads/comfyui-control.zip), extract it, and open a terminal in the extracted folder.
 
 The app ZIP excludes screenshots and tests. GitHub's **Code → Download ZIP** on the main branch includes the full development repository.
 
