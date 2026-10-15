@@ -1,5 +1,24 @@
 # Fedora RPM and COPR
 
+## App ZIP download
+
+Build the user download with Python 3.11 or newer:
+
+```bash
+python3 packaging/make_app_zip.py --outdir dist
+```
+
+This creates a versioned ZIP and `dist/comfyui-control.zip` containing only
+the Python app, `pyproject.toml`, `install.sh`, and a short README. A project
+license is included when present. Tests, screenshots, Git files, caches, and
+packaging tools stay in the development repository. Publish
+`comfyui-control.zip` as a GitHub Release asset so the main README's download
+link points to the clean app download.
+
+Tests remain in source RPMs so Fedora builds can run the required checks.
+
+## Fedora packaging
+
 The RPM uses Fedora's system Python and `python3-pyside6`, installs
 `/usr/bin/comfyui-control`, and adds a desktop entry under
 `/usr/share/applications`. It does not bundle ComfyUI, PyTorch, drivers, or models.
