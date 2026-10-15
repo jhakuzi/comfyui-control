@@ -1,5 +1,8 @@
 # ComfyUI Control
 
+> **Mobile WebUI testing branch (`0.9.0.dev1`).** See the [setup and workflow-mapping guide](docs/MOBILE.md).
+> The COPR commands below install the stable desktop app; use the testing guide or this branch's ZIP for Mobile WebUI.
+
 A small Qt app for ComfyUI on Linux, built with KDE Plasma in mind.
 Start/stop, restart, Git or Comfy CLI updates, launch flags, and folder shortcuts.
 
@@ -16,7 +19,7 @@ sudo dnf install comfyui-control
 
 **ZIP install · Fedora, Debian/Ubuntu, Arch**
 
-[Download the app ZIP](https://github.com/jhakuzi/comfyui-control/raw/refs/heads/main/downloads/comfyui-control.zip), extract it, and open a terminal in the extracted folder.
+[Download the testing app ZIP](https://github.com/jhakuzi/comfyui-control/raw/refs/heads/testing/mobile-webui/downloads/comfyui-control.zip), extract it, and open a terminal in the extracted folder.
 
 | Distribution | Prerequisites |
 | --- | --- |

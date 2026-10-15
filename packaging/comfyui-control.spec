@@ -1,6 +1,6 @@
 Name:           comfyui-control
-Version:        0.8.1
-Release:        1%{?dist}
+Version:        0.9.0
+Release:        0.1.dev1%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
 License:        MIT
@@ -15,6 +15,8 @@ BuildRequires:  python3-setuptools
 BuildRequires:  python3-wheel
 BuildRequires:  python3-pyside6 >= 6.7
 BuildRequires:  python3-pytest
+BuildRequires:  python3-aiohttp >= 3.10
+BuildRequires:  python3-qrcode >= 7.4
 BuildRequires:  desktop-file-utils
 BuildRequires:  git-core
 Requires:       python3-pyside6 >= 6.7
@@ -22,6 +24,8 @@ Requires:       python3-pip
 Requires:       git-core
 Requires:       /bin/bash
 Requires:       hicolor-icon-theme
+Requires:       python3-aiohttp >= 3.10
+Requires:       python3-qrcode >= 7.4
 Recommends:     konsole
 
 %description
@@ -51,13 +55,16 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 
 %files -f %{pyproject_files}
 %license LICENSE
-%doc README.md
+%doc README.md docs
 %doc %{_docdir}/%{name}/RPM.md
 %{_bindir}/%{name}
 %{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Thu Oct 15 2026 ComfyUI Control contributors - 0.9.0-0.1.dev1
+- Preliminary integrated Mobile WebUI with explicit API workflow mapping.
+
 * Thu Oct 15 2026 ComfyUI Control contributors - 0.8.1-1
 - Add the application icon to Qt, desktop launchers, and both installation methods.
 

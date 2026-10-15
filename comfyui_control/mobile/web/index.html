@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#121318" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="apple-mobile-web-app-title" content="Comfy Control" />
+    <meta
+      name="description"
+      content="Your ComfyUI workflows, a simpler way to create."
+    />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="icon" href="/icon.png" />
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+    <title>comfyui-control Mobile</title>
+  </head>
+  <body>
+    <header class="masthead">
+      <a class="brand" href="/"
+        ><img src="/icon.png" alt="" width="34" height="34" /><span
+          >comfy<span class="muted"> control</span></span
+        ></a
+      ><span class="pill" id="connection" role="status">Connecting</span>
+    </header>
+    <main>
+      <section id="offline" class="card" hidden>
+        <h1>Connection paused.</h1>
+        <p class="muted">
+          Keep comfyui-control open on your computer and reconnect to your LAN
+          or VPN. Your saved job will be restored when the connection returns.
+        </p>
+        <button id="reconnect" type="button">Reconnect</button>
+      </section>
+      <section id="login" class="card" hidden>
+        <p class="eyebrow">YOUR CREATIVE SPACE</p>
+        <h1>Welcome back.</h1>
+        <p class="muted">Enter the mobile password set in your desktop app.</p>
+        <form id="login-form">
+          <label for="password">Password</label
+          ><input
+            id="password"
+            type="password"
+            autocomplete="current-password"
+            required
+            maxlength="256"
+          /><button class="primary" type="submit">Connect</button>
+        </form>
+      </section>
+      <div id="workspace" hidden>
+        <nav class="tabs" aria-label="Main">
+          <button id="create-tab" class="selected" type="button">Create</button
+          ><button id="gallery-tab" type="button">Gallery</button>
+        </nav>
+        <section id="create-page">
+          <div class="heading">
+            <div>
+              <p class="eyebrow">YOUR IDEAS, IN FOCUS</p>
+              <h1>What will you create?</h1>
+            </div>
+          </div>
+          <form id="generate-form">
+            <p id="comfy-offline" class="hint" hidden>
+              Start ComfyUI in the desktop app. This page will reconnect
+              automatically.
+            </p>
+            <section class="card">
+              <label for="preset">Workflow</label
+              ><select id="preset">
+                <option value="">Choose a workflow…</option>
+              </select>
+              <p id="empty-presets" class="hint">
+                Import an API-format workflow below to get started.
+              </p>
+              <div id="prompt-controls"></div>
+              <button id="reuse-last" class="text-button" type="button" hidden>
+                Reuse last generation
+              </button>
+              <div id="model-controls"></div>
+            </section>
+            <details class="card" id="lora-card" hidden>
+              <summary>
+                LoRAs <span id="lora-count" class="muted"></span>
+              </summary>
+              <div id="lora-controls"></div>
+            </details>
+            <details class="card" id="settings-card" hidden>
+              <summary>Generation settings</summary>
+              <div id="basic-controls" class="control-grid"></div>
+            </details>
+            <details class="card" id="advanced">
+              <summary>Advanced & workflows</summary>
+              <div id="advanced-controls" class="control-grid"></div>
+              <details id="mapping">
+                <summary>Map workflow inputs</summary>
+                <p class="hint">
+                  Choose the controls you want to expose. Unmapped inputs and
+                  connections keep their saved values. LoRA groups with strength
+                  controls can be switched off by setting those strengths to
+                  zero.
+                </p>
+                <input
+                  id="mapping-search"
+                  type="search"
+                  placeholder="Find a node or input…"
+                  aria-label="Find a node or input"
+                />
+                <div id="mapping-controls"></div>
+                <p id="mapping-count" class="hint"></p>
+                <button id="save-mapping" type="button">
+                  Save input mapping
+                </button>
+              </details>
+              <div class="import-box">
+                <h2>Import a workflow</h2>
+                <p class="hint">
+                  Use ComfyUI’s API export. The original file stays unchanged.
+                </p>
+                <label for="import-name">Preset name</label
+                ><input
+                  id="import-name"
+                  maxlength="100"
+                  placeholder="My image workflow"
+                />
+                <label for="import-file">API workflow JSON</label
+                ><input
+                  id="import-file"
+                  type="file"
+                  accept="application/json,.json"
+                />
+                <button id="import-button" type="button">
+                  Import workflow
+                </button>
+              </div>
+              <button
+                id="delete-preset"
+                class="text-button danger"
+                type="button"
+                hidden
+              >
+                Remove selected preset
+              </button>
+              <details>
+                <summary>Home-screen app</summary>
+                <p class="hint" id="pwa-note">
+                  On iPhone, use Safari’s Share → Add to Home Screen. A normal
+                  HTTP LAN/VPN connection supports the website; service workers
+                  require HTTPS or localhost. Only the app shell is cached,
+                  never prompts or images.
+                </p>
+              </details>
+              <button id="logout" class="text-button" type="button">
+                Sign out
+              </button>
+            </details>
+            <div class="generate-bar">
+              <button class="primary" id="generate" type="submit" disabled>
+                <span aria-hidden="true">✦</span> Generate
+              </button>
+            </div>
+          </form>
+          <section
+            class="card job-card"
+            id="job-card"
+            hidden
+            aria-live="polite"
+          >
+            <div class="heading">
+              <h2 id="job-title">In the queue</h2>
+              <button id="cancel" class="small" type="button" hidden>
+                Cancel
+              </button>
+            </div>
+            <p id="job-detail" class="hint"></p>
+            <progress id="progress" max="1" value="0" hidden></progress>
+            <img
+              id="preview"
+              class="preview"
+              alt="Current generation preview"
+              hidden
+            />
+            <div id="job-images" class="image-grid"></div>
+            <div class="actions">
+              <button id="same-seed" type="button" hidden>Same seed</button
+              ><button id="variation" type="button" hidden>New variation</button
+              ><button id="new-request" type="button" hidden>
+                Start a new request
+              </button>
+            </div>
+          </section>
+        </section>
+        <section id="gallery-page" hidden>
+          <div class="heading">
+            <div>
+              <p class="eyebrow">MADE BY YOU</p>
+              <h1>Your gallery</h1>
+            </div>
+            <button id="refresh-gallery" class="small" type="button">
+              Refresh
+            </button>
+          </div>
+          <p class="hint">
+            Recent images from ComfyUI output. Tap an image to view or save it.
+          </p>
+          <div id="gallery-grid" class="image-grid"></div>
+          <p id="gallery-empty" class="hint" hidden>
+            No images yet. Your next idea starts in Create.
+          </p>
+        </section>
+      </div>
+      <p id="notice" role="alert" hidden></p>
+    </main>
+    <dialog id="image-dialog">
+      <div class="viewer">
+        <div class="heading">
+          <span id="image-caption"></span
+          ><button
+            id="close-image"
+            class="small"
+            type="button"
+            aria-label="Close image"
+          >
+            Close
+          </button>
+        </div>
+        <img id="full-image" alt="Generated image" />
+        <div class="actions">
+          <button id="previous-image" type="button" aria-label="Previous image">
+            ←</button
+          ><a id="download-image" class="button primary" download>Save image</a
+          ><button id="next-image" type="button" aria-label="Next image">
+            →
+          </button>
+        </div>
+        <p class="hint">
+          On iPhone you can also touch and hold the image to save it to Photos.
+          Swipe left or right to browse.
+        </p>
+        <details>
+          <summary>Generation details</summary>
+          <div id="image-metadata"></div>
+        </details>
+        <div class="actions">
+          <button id="reuse-image" type="button">Reuse settings</button
+          ><button id="vary-image" type="button">New variation</button>
+        </div>
+      </div>
+    </dialog>
+  </body>
+</html>

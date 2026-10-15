@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "comfyui-control"
-version = "0.8.1"
+version = "0.9.0.dev1"
 description = "A compact Qt controller for a local ComfyUI installation"
 license = {file = "LICENSE"}
 requires-python = ">=3.10"
-dependencies = ["PySide6-Essentials>=6.7,<7"]
+dependencies = ["PySide6-Essentials>=6.7,<7", "aiohttp>=3.10,<4", "qrcode>=7.4,<9"]
 
 [project.scripts]
 comfyui-control = "comfyui_control.app:main"
@@ -18,6 +18,7 @@ include = ["comfyui_control*"]
 
 [tool.setuptools.package-data]
 comfyui_control = ["assets/*.png"]
+"comfyui_control.mobile" = ["web/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

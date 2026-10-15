@@ -1,0 +1,5 @@
+{
+  "canvas": {"class_type": "EmptyImage", "inputs": {"width": 64, "height": 64, "batch_size": 1, "color": 3200000}},
+  "upscale": {"class_type": "ImageScale", "inputs": {"image": ["canvas", 0], "upscale_method": "lanczos", "width": 128, "height": 128, "crop": "disabled"}},
+  "save": {"class_type": "SaveImage", "inputs": {"images": ["upscale", 0], "filename_prefix": "comfyui-control-mobile-smoke"}}
+}

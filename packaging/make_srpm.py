@@ -4,6 +4,7 @@
 import argparse
 import gzip
 import io
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -20,8 +21,11 @@ def main():
     version = tomllib.loads((root / "pyproject.toml").read_text())["project"]["version"]
     spec = root / "packaging/comfyui-control.spec"
     spec_version = next(line.split(":", 1)[1].strip() for line in spec.read_text().splitlines() if line.startswith("Version:"))
-    if version != spec_version:
+    if version != spec_version and not re.fullmatch(re.escape(spec_version) + r"\.dev[0-9]+", version):
         parser.error("pyproject.toml and RPM spec versions must match")
+    # Development Python versions use RPM Release 0.x so the final 1.x release
+    # upgrades them naturally. The source archive follows RPM's Version.
+    version = spec_version
     if not shutil.which("rpmbuild"):
         parser.error("Install RPM build tools first: sudo dnf install rpm-build")
     outdir = args.outdir.resolve()
@@ -35,8 +39,8 @@ def main():
         files = [root / "pyproject.toml", root / "README.md"]
         if (root / "LICENSE").exists():
             files.append(root / "LICENSE")
-        for directory in ("comfyui_control", "tests", "packaging"):
-            files.extend(path for path in (root / directory).rglob("*") if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc")
+        for directory in ("comfyui_control", "tests", "packaging", "docs", "examples"):
+            files.extend(path for path in (root / directory).rglob("*") if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc" and not (directory == "docs" and path.suffix == ".png"))
         with archive.open("wb") as output:
             with gzip.GzipFile(filename="", fileobj=output, mode="wb", mtime=0) as compressed:
                 with tarfile.open(fileobj=compressed, mode="w") as tar:

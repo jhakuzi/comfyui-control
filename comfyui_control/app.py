@@ -22,6 +22,9 @@ from .flag_widgets import LaunchFlags, LaunchScriptDialog
 from .setup import InstallDialog, WelcomeDialog
 from .update_widgets import UpdateDialog
 from . import __version__
+from .mobile.runtime import MobileRuntime
+from .mobile.settings import MobileSettings
+from .mobile_widgets import MobileDialog
 
 
 def application_icon():
@@ -256,6 +259,8 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(580, 400)
         self._closing = False
         self.controller = Controller(config, self)
+        self.mobile = MobileRuntime(self)
+        self.mobile.stopped.connect(self._mobile_stopped)
         body = QWidget()
         self.setCentralWidget(body)
         layout = QVBoxLayout(body)
@@ -294,6 +299,16 @@ class MainWindow(QMainWindow):
         self.change_folder.setFixedWidth(status_width)
         header.setColumnMinimumWidth(2, status_width)
         layout.addLayout(header)
+        mobile_row = QHBoxLayout()
+        self.mobile_button = QPushButton(QIcon.fromTheme("smartphone"), "Mobile WebUI…")
+        self.mobile_button.clicked.connect(self._mobile_settings)
+        self.mobile_status = QLabel("Disabled")
+        self.mobile_status.setWordWrap(True)
+        self.mobile_status.setTextFormat(Qt.TextFormat.PlainText)
+        mobile_row.addWidget(self.mobile_button)
+        mobile_row.addWidget(self.mobile_status, 1)
+        layout.addLayout(mobile_row)
+        self.mobile.changed.connect(lambda status, url: self.mobile_status.setText(status))
         self.log = LogView()
         layout.addWidget(self.log, 1)
         controls = QHBoxLayout()
@@ -335,6 +350,24 @@ class MainWindow(QMainWindow):
             self.log.append_output(f"\nConfiguration could not be loaded: {load_error}\nYour existing file was left untouched.\n")
         if first_run:
             QTimer.singleShot(0, self._first_setup)
+        QTimer.singleShot(0, self._start_mobile)
+
+    def _start_mobile(self):
+        if self._closing:
+            return
+        try:
+            settings = MobileSettings.load()
+            self.mobile.configure(settings, self.controller.config, self.controller.state)
+        except (ValueError, OSError) as exc:
+            self.mobile_status.setText("Check mobile settings")
+            self.log.append_output(f"\nMobile WebUI did not start: {exc}\n")
+
+    def _mobile_settings(self):
+        MobileDialog(self.mobile, self.controller.config, self).exec()
+
+    def _mobile_stopped(self):
+        if self._closing:
+            QTimer.singleShot(20, self.close)
 
     def _button(self, text, icon, callback):
         button = QPushButton(QIcon.fromTheme(icon), text)
@@ -373,6 +406,7 @@ class MainWindow(QMainWindow):
 
     def _set_config(self, config):
         self.controller.config = config
+        self.mobile.update_desktop(config, self.controller.state)
         blocked = self.update_method.blockSignals(True)
         self.update_method.setCurrentIndex(self.update_method.findData(config.update_method))
         self.update_method.blockSignals(blocked)
@@ -454,6 +488,7 @@ class MainWindow(QMainWindow):
             self.controller.stop()
 
     def _state_changed(self, state):
+        self.mobile.update_desktop(self.controller.config, state)
         labels = {"stopped": "Stopped", "starting": "Starting…", "running": "Process running", "stopping": "Stopping…", "updating": "Updating…"}
         self.status.setText("●  " + labels[state])
         color = {"stopped": "#8795a5", "running": "#48a878"}.get(state, "#d69c42")
@@ -501,6 +536,12 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         if self.controller.state == "stopped":
+            if self.mobile.running:
+                self._closing = True
+                self.mobile.stop()
+                QTimer.singleShot(30, self.close)
+                event.ignore()
+                return
             event.accept()
             return
         if not self._closing:
@@ -509,6 +550,7 @@ class MainWindow(QMainWindow):
                 event.ignore()
                 return
             self._closing = True
+            self.mobile.stop()
             self.controller.shutdown()
             self._state_changed(self.controller.state)
         event.ignore()

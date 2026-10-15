@@ -26,6 +26,9 @@ def main():
             files[path.relative_to(root).as_posix()] = path
     for path in (root / "comfyui_control/assets").glob("*.png"):
         files[path.relative_to(root).as_posix()] = path
+    for path in (root / "comfyui_control/mobile/web").glob("*"):
+        if path.is_file():
+            files[path.relative_to(root).as_posix()] = path
     args.outdir.mkdir(parents=True, exist_ok=True)
     archive = args.outdir / f"comfyui-control-{version}.zip"
     with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as output:
