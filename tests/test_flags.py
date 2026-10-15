@@ -66,3 +66,15 @@ def test_search_does_not_clear_selected_flags(app, tmp_path):
 def test_create_script_dialog_suggests_original_preset(app, tmp_path):
     dialog = LaunchScriptDialog(Config(comfy_dir=str(tmp_path)))
     assert shlex.split(dialog.options.argument_string()) == ["--disable-smart-memory", "--use-pytorch-cross-attention", "--reserve-vram", "1"]
+
+
+def test_new_script_prefills_existing_script_flags_and_app_additions(app, tmp_path):
+    script = tmp_path / "existing.sh"
+    script.write_text('python main.py --use-pytorch-cross-attention --reserve-vram 3 --listen "$@"\n')
+    config = Config(comfy_dir=str(tmp_path), mode="script", script=str(script), arguments="--port 8188")
+    dialog = LaunchScriptDialog(config)
+    assert dialog.options.checkboxes["--use-pytorch-cross-attention"].isChecked()
+    assert dialog.options.checkboxes["--use-pytorch-cross-attention"].isEnabled()
+    assert dialog.options.reserve_value.value() == 3
+    arguments = shlex.split(dialog.options.argument_string())
+    assert "--listen" in arguments and arguments[-2:] == ["--port", "8188"]

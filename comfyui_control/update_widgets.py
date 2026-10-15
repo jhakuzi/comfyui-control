@@ -31,15 +31,16 @@ class UpdateDialog(QDialog):
         self.method.setCurrentIndex(self.method.findData(config.update_method))
         form.addRow("Update using", self.method)
         self.python = QLineEdit(config.python)
-        self.python.setPlaceholderText(f"Auto: {config.interpreter()}")
+        self.python.setPlaceholderText("Environment folder or bin/python (blank: auto-detect)")
+        self.python.setToolTip(f"Detected Python: {config.interpreter()}")
         python_row = QWidget()
         row = QHBoxLayout(python_row)
         row.setContentsMargins(0, 0, 0, 0)
         row.addWidget(self.python, 1)
-        browse = QPushButton("Browse…")
+        browse = QPushButton("Choose environment…")
         browse.clicked.connect(self._browse_python)
         row.addWidget(browse)
-        form.addRow("ComfyUI Python", python_row)
+        form.addRow("Python / environment", python_row)
         self.requirements = QCheckBox("Git: also install requirements.txt")
         self.requirements.setChecked(config.install_requirements)
         form.addRow(self.requirements)
@@ -48,7 +49,7 @@ class UpdateDialog(QDialog):
         self.description.setWordWrap(True)
         layout.addWidget(self.description)
         lifecycle = QLabel(
-            "Local changes or untracked files will stop the update. "
+            "Changes to tracked files will stop the update. Untracked files can remain; Git checks for conflicts. "
             + ("The running server will stop first and restart only after success." if running else "The server will stay stopped after updating.")
         )
         lifecycle.setWordWrap(True)
@@ -64,7 +65,13 @@ class UpdateDialog(QDialog):
         self._method_changed()
 
     def _browse_python(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Choose ComfyUI environment's bin/python", str(expand(self.python.text() or self.original_config.interpreter())))
+        start = expand(self.python.text() or self.original_config.interpreter())
+        if start.is_file():
+            start = start.parent.parent if start.parent.name == "bin" else start.parent
+        path = QFileDialog.getExistingDirectory(
+            self, "Choose ComfyUI Python environment (for example comfy-env)", str(start),
+            options=QFileDialog.Option.ShowDirsOnly | QFileDialog.Option.DontResolveSymlinks,
+        )
         if path:
             self.python.setText(path)
 
@@ -74,7 +81,7 @@ class UpdateDialog(QDialog):
         self.python.parentWidget().setEnabled(cli or self.requirements.isChecked())
         self.description.setText(
             "Runs comfy update in the selected ComfyUI Python environment, including requirements. "
-            "Select that environment's bin/python above. Package changes may affect GPU dependencies."
+            "Choose the environment folder (for example comfy-env), or enter its bin/python. Package changes may affect GPU dependencies."
             if cli else
             "Pulls ComfyUI code with git pull --ff-only. "
             + ("Requirements will also be installed using the selected Python; this may change GPU dependencies." if self.requirements.isChecked() else "Your Python packages will be left unchanged.")

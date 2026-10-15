@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 from .config import Config, config_path, expand
 from .controller import Controller
 from .launch_script import create_launch_script
+from .script_flags import inspect_script
 from .flag_widgets import LaunchFlags, LaunchScriptDialog
 from .setup import InstallDialog, WelcomeDialog
 from .update_widgets import UpdateDialog
@@ -35,7 +36,7 @@ class SettingsDialog(QDialog):
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         self.folder = QLineEdit(config.comfy_dir)
         self.python = QLineEdit(config.python)
-        self.python.setPlaceholderText("Auto: comfy-env, .venv, venv, or python3")
+        self.python.setPlaceholderText("Environment folder, bin/python, or blank for auto-detection")
         self.script = QLineEdit(config.script)
         self.mode = QComboBox()
         self.mode.addItem("Python — launch main.py", "python")
@@ -62,6 +63,7 @@ class SettingsDialog(QDialog):
         flags_layout.setContentsMargins(0, 0, 0, 0)
         flags_layout.addWidget(self.launch_options)
         self.note = QLabel()
+        self.note.setTextFormat(Qt.TextFormat.PlainText)
         self.note.setWordWrap(True)
         flags_layout.addWidget(self.note)
         form.addRow(self.flags_contents)
@@ -83,7 +85,7 @@ class SettingsDialog(QDialog):
         self.requirements.setChecked(config.install_requirements)
         self.requirements.setToolTip("Runs pip in the ComfyUI Python selected above. May change installed packages, including GPU dependencies.")
         form.addRow(self.requirements)
-        update_note = QLabel("Comfy CLI always installs requirements using the selected ComfyUI environment. Choose that environment's bin/python above. Neither method updates custom nodes.")
+        update_note = QLabel("Comfy CLI installs requirements in the selected ComfyUI environment. Enter its folder or bin/python above. Neither method updates custom nodes.")
         update_note.setWordWrap(True)
         form.addRow(update_note)
         contents = QWidget()
@@ -103,6 +105,8 @@ class SettingsDialog(QDialog):
         self._update_mode_changed()
 
     def _toggle_flags(self, expanded):
+        if expanded:
+            self._mode_changed()  # Re-read a script that may have been edited externally.
         self.flags_contents.setVisible(expanded)
         self.flags_toggle.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
 
@@ -121,25 +125,40 @@ class SettingsDialog(QDialog):
         if directory:
             path = QFileDialog.getExistingDirectory(self, "Choose folder", start)
         else:
-            path, _ = QFileDialog.getOpenFileName(self, title or ("Choose launch script" if scripts else "Choose Python executable"), start, "Shell scripts (*.sh);;All files (*)" if scripts else "All files (*)")
+            path, _ = QFileDialog.getOpenFileName(self, title or ("Choose launch script" if scripts else "Choose Python executable"), start, "Shell scripts (*.sh);;All files (*)" if scripts else "All files (*)", options=QFileDialog.Option.DontResolveSymlinks)
         if path:
             field.setText(path)
+            if scripts:
+                self.flags_toggle.setChecked(True)
 
     def _mode_changed(self):
         script_mode = self.mode.currentData() == "script"
         self.script.parentWidget().setEnabled(script_mode)
         self.edit_script.setEnabled(script_mode)
         managed = script_mode and self.original_config.managed_script and self.script.text().strip() == self.original_config.script
-        self.flags_toggle.setText("Edit script flags" if managed else "Additional script arguments" if script_mode else "Edit launch flags")
+        self.flags_toggle.setText("Edit script flags" if managed else "Script flags and additional arguments" if script_mode else "Edit launch flags")
+        arguments = self.launch_options.argument_string(validate=False)
+        previous = self.launch_options
+        self.launch_options = LaunchFlags(expand(self.folder.text()), arguments)
+        self.flags_contents.layout().replaceWidget(previous, self.launch_options)
+        previous.hide()
+        previous.deleteLater()
+        self.arguments = self.launch_options.extra_arguments
+        inspection = None
+        if script_mode and not managed and self.script.text().strip():
+            inspection = inspect_script(expand(self.script.text()))
+            self.launch_options.show_script_arguments(inspection.arguments)
         self.note.setText(
             'Checkbox selections replace the default flags when the app starts this generated script. '
             'Uncheck a flag to remove it on the next start.'
             if managed else
-            'Arguments are appended to the script. The script must forward them using "$@". '
-            'Flags already written in the script must be changed with “Edit script file…”.'
+            'Checked, locked options are read from the script; change them with “Edit script file…”. '
+            'App-added arguments remain editable and require the script to forward "$@".'
             if script_mode else
             "Arguments are passed directly to main.py. They are saved here and take effect on the next start."
         )
+        if inspection and inspection.message:
+            self.note.setText(self.note.text() + "\n" + inspection.message)
 
     def _update_mode_changed(self):
         cli = self.update_method.currentData() == "cli"

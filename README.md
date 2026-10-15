@@ -65,11 +65,11 @@ Setup creates a companion Python environment beside ComfyUI and runs `pip instal
 
 ## Launch settings
 
-Open **Edit launch configuration…** while stopped. Flags are collapsed by default: expand **Edit script flags** (app-created scripts), **Additional script arguments** (custom scripts), or **Edit launch flags** (direct Python).
+Open **Edit launch configuration…** while stopped. Flags start collapsed: expand **Edit script flags**, **Script flags and additional arguments**, or **Edit launch flags**, depending on your launch method.
 
 | Setting | Use |
 | --- | --- |
-| **ComfyUI Python** | Auto-detect an environment or select its `bin/python`. |
+| **ComfyUI Python** | Enter an environment folder or its `bin/python`, or leave blank for auto-detection. |
 | **Launch method** | Run `main.py` directly or select an existing Bash script. |
 | **Launch flags** | Search checkboxes, set **Reserve VRAM**, or enter values such as `--port 8188` under **Other arguments**. |
 | **Output / Models folder** | Change the folder shortcuts if your files are stored elsewhere. |
@@ -77,6 +77,10 @@ Open **Edit launch configuration…** while stopped. Flags are collapsed by defa
 ![Launch settings with flags collapsed](settings-preview.png)
 
 **Create launch script…** saves a new executable `.sh` with your environment, selected flags, and HIP allocator setting. Existing scripts are never overwritten. App-created scripts follow your current checkbox selections; hardcoded flags in custom scripts need manual editing. Custom scripts should forward `"$@"` and use `exec` to launch Python.
+
+Selecting an existing script reads its literal flags and VRAM value into the controls. Locked options come from the file; app-added arguments remain editable and are saved separately. Scripts are never executed for inspection. Variables or complex shell logic may prevent reliable detection.
+
+[Detected options from an existing script](script-flags-preview.png)
 
 [Flag selection when creating a script](flags-preview.png)
 
@@ -95,9 +99,9 @@ Click **Update** to choose either method and review the ComfyUI Python environme
 | **Git** | `git pull --ff-only`; optional requirements installation, off by default. |
 | **Comfy CLI** | `comfy update` for the selected folder and environment, including requirements. Choose this if you already use Comfy CLI. |
 
-For CLI updates, select your ComfyUI virtual environment or Conda `bin/python`. The app detects `comfy` in that environment or on PATH; an explicit executable can be set in launch configuration.
+For CLI updates, use **Choose environment…** to select your `comfy-env` or Conda folder. You can also enter its `bin/python` path. The app detects `comfy` there or on PATH; an explicit executable can be set in launch configuration.
 
-Both methods require a clean Git checkout and restart a running server only after success. Installing requirements can change GPU packages. Custom nodes and this controller app are updated separately.
+Changes to tracked files stop updates. Untracked files such as `.env` and `gpucore.*` can remain; Git reports actual file conflicts. A running server restarts only after success. Installing requirements can change GPU packages. Custom nodes and this controller app are updated separately.
 
 ### This app
 
@@ -141,7 +145,7 @@ python3 -m venv .venv
 QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest
 ```
 
-70 tests pass, including update choices, collapsed flags, and header alignment. Real CPU installation, server controls, and update integration were verified on Fedora 44 with Python 3.14.8. CLI dependency isolation was checked with a disposable checkout and test package. GPU/ROCm, model inference, and KDE Wayland remain untested.
+86 tests pass, including untracked-file handling, environment selection, and existing-script inspection. Real CPU installation, server controls, and update integration were verified on Fedora 44 with Python 3.14.8. CLI dependency isolation was checked with a disposable checkout and test package. GPU/ROCm, model inference, and KDE Wayland remain untested.
 
 [Live ComfyUI server screenshot](live-test-preview.png)
 

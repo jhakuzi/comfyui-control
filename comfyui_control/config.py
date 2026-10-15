@@ -70,8 +70,11 @@ class Config:
     def interpreter(self) -> str:
         if self.python.strip():
             value = self.python.strip()
+            candidate = expand(value)
+            if candidate.is_dir():
+                return str(candidate / "bin" / "python")
             if "/" in value:
-                return str(expand(value))
+                return str(candidate)
             return shutil.which(value) or value
         for candidate in self.local_interpreters():
             if candidate.is_file():
@@ -99,19 +102,19 @@ class Config:
         """Resolve the CLI separately from the environment it must update."""
         python = shutil.which(self.interpreter())
         if not python:
-            raise ValueError("Select a working ComfyUI Python executable before using Comfy CLI updates.")
+            raise ValueError(f"Python is unavailable: {self.interpreter()}. Choose your ComfyUI environment folder (such as comfy-env), or its bin/python.")
         # Do not resolve the Python symlink: its enclosing environment matters.
         prefix = Path(python).absolute().parent.parent
         if not (prefix / "bin" / "python").is_file():
-            raise ValueError("Select your ComfyUI environment's bin/python in Edit launch configuration.")
+            raise ValueError(f"Cannot identify an environment for {python}. Use Choose environment… to select your ComfyUI environment folder, or enter its bin/python.")
         environment = {"PATH": str(prefix / "bin") + os.pathsep + os.environ.get("PATH", "")}
-        if (prefix / "pyvenv.cfg").is_file():
-            environment["VIRTUAL_ENV"] = str(prefix)
-        elif (prefix / "conda-meta").is_dir():
+        if (prefix / "conda-meta").is_dir():
             environment["CONDA_PREFIX"] = str(prefix)
             environment["CONDA_DEFAULT_ENV"] = str(prefix)
+        elif (prefix / "pyvenv.cfg").is_file() or (prefix / "bin" / "activate").is_file():
+            environment["VIRTUAL_ENV"] = str(prefix)
         else:
-            raise ValueError("For Comfy CLI updates, select your ComfyUI virtual environment's bin/python in Edit launch configuration.")
+            raise ValueError(f"The selected Python ({python}) does not identify a ComfyUI environment. Use Choose environment… to select the comfy-env folder, or enter that environment's bin/python without resolving its symlink.")
         if self.comfy_cli.strip():
             value = self.comfy_cli.strip()
             executable = shutil.which(str(expand(value)) if "/" in value else value)

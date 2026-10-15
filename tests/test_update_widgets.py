@@ -40,7 +40,7 @@ def test_invalid_cli_environment_keeps_dialog_open(app, tmp_path):
         dialog._accept()
     assert dialog.result_config is None
     assert dialog.result() != QDialog.DialogCode.Accepted
-    assert "environment's bin/python" in warning.call_args.args[2]
+    assert "Choose environment" in warning.call_args.args[2]
 
 
 def test_git_requirements_enable_python_but_do_not_require_comfy_cli(app, tmp_path):
@@ -52,3 +52,20 @@ def test_git_requirements_enable_python_but_do_not_require_comfy_cli(app, tmp_pa
         dialog._accept()
     cli.assert_not_called()
     assert dialog.result_config.install_requirements
+
+
+def test_picker_chooses_environment_directory_without_resolving_python_symlink(app, tmp_path):
+    (tmp_path / "main.py").touch()
+    prefix = tmp_path / "comfy-env"
+    (prefix / "bin").mkdir(parents=True)
+    (prefix / "bin/python").symlink_to(sys.executable)
+    (prefix / "pyvenv.cfg").touch()
+    cli = prefix / "bin/comfy"
+    cli.write_text("#!/bin/sh\nexit 0\n")
+    cli.chmod(0o700)
+    dialog = UpdateDialog(Config(comfy_dir=str(tmp_path), update_method="cli"))
+    with patch("comfyui_control.update_widgets.QFileDialog.getExistingDirectory", return_value=str(prefix)):
+        dialog._browse_python()
+    dialog._accept()
+    assert dialog.result() == QDialog.DialogCode.Accepted
+    assert dialog.result_config.interpreter() == str(prefix / "bin/python")

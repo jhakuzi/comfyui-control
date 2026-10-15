@@ -255,6 +255,48 @@ def test_flags_are_collapsed_until_explicit_edit_and_keep_selections(app, tmp_pa
 
 def test_custom_script_flags_are_labeled_as_extra_arguments(app, tmp_path):
     dialog = SettingsDialog(Config(comfy_dir=str(tmp_path), mode="script"))
-    assert dialog.flags_toggle.text() == "Additional script arguments"
+    assert dialog.flags_toggle.text() == "Script flags and additional arguments"
     assert "Edit script file" in dialog.note.text()
     assert not dialog.flags_toggle.isChecked()
+
+
+def test_existing_script_populates_flags_and_values_without_duplicating_them_on_save(app, tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "settings"))
+    (tmp_path / "main.py").touch()
+    script = tmp_path / "start-comfy.sh"
+    contents = "python main.py --use-pytorch-cross-attention --reserve-vram 3 --listen --enable-manager \"$@\"\n"
+    script.write_text(contents)
+    config = Config(comfy_dir=str(tmp_path), mode="script", script=str(script), arguments="--port 8188")
+    dialog = SettingsDialog(config)
+    options = dialog.launch_options
+    checkbox = options.checkboxes["--use-pytorch-cross-attention"]
+    assert checkbox.isChecked() and not checkbox.isEnabled()
+    assert options.reserve.isChecked() and options.reserve_value.value() == 3
+    assert not options.reserve.isEnabled()
+    assert "--listen" in options.script_extra.toPlainText()
+    assert "--enable-manager" in options.script_extra.toPlainText()
+    assert options.extra_arguments.toPlainText() == "--port 8188"
+    dialog._save()
+    assert Config.load().arguments == "--port 8188"
+    assert script.read_text() == contents
+
+
+def test_selecting_another_script_refreshes_checked_flags(app, tmp_path):
+    first, second = tmp_path / "first.sh", tmp_path / "second.sh"
+    first.write_text('python main.py --cpu "$@"\n')
+    second.write_text('python main.py --highvram "$@"\n')
+    dialog = SettingsDialog(Config(comfy_dir=str(tmp_path), mode="script", script=str(first), arguments="--port 8188"))
+    assert dialog.launch_options.checkboxes["--cpu"].isChecked()
+    dialog.script.setText(str(second))
+    assert not dialog.launch_options.checkboxes["--cpu"].isChecked()
+    assert dialog.launch_options.checkboxes["--highvram"].isChecked()
+    assert dialog.launch_options.argument_string() == "--port 8188"
+
+
+def test_managed_script_uses_current_app_flags_instead_of_its_standalone_defaults(app, tmp_path):
+    script = tmp_path / "generated.sh"
+    script.write_text('python main.py --highvram "$@"\n')
+    dialog = SettingsDialog(Config(comfy_dir=str(tmp_path), mode="script", script=str(script), managed_script=True, arguments="--cpu"))
+    assert dialog.launch_options.checkboxes["--cpu"].isChecked()
+    assert dialog.launch_options.checkboxes["--cpu"].isEnabled()
+    assert not dialog.launch_options.checkboxes["--highvram"].isChecked()

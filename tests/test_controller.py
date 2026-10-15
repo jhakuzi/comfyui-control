@@ -160,11 +160,10 @@ def test_update_fast_forwards_and_resumes(app, repositories):
         wait_for(lambda: c.state == "stopped")
 
 
-@pytest.mark.parametrize("untracked", [False, True])
-def test_update_preserves_changes_and_leaves_server_stopped(app, repositories, untracked):
+def test_update_preserves_changes_and_leaves_server_stopped(app, repositories):
     _, local = repositories
-    path = local / ("notes.txt" if untracked else "main.py")
-    original = "my local changes\n" if untracked else (local / "main.py").read_text() + "# my local changes\n"
+    path = local / "main.py"
+    original = (local / "main.py").read_text() + "# my local changes\n"
     path.write_text(original)
     c, _, errors = make_controller(app, local)
     c.start()
@@ -227,10 +226,11 @@ def cli_environment(tmp_path):
     cli = prefix / "bin" / "comfy"
     cli.write_text(
         f"#!{sys.executable}\n"
-        "import json, os, sys\n"
+        "import json, os, sys, subprocess\n"
         f"open({str(report)!r}, 'w').write(json.dumps(dict(argv=sys.argv[1:], cwd=os.getcwd(), "
         "venv=os.environ.get('VIRTUAL_ENV'), conda=os.environ.get('CONDA_PREFIX'), "
         "path=os.environ['PATH'], pythonhome=os.environ.get('PYTHONHOME'))))\n"
+        "subprocess.run(['git', 'pull', '--ff-only'], check=True)\n"
         "print('CLI update finished', flush=True)\n"
         "sys.exit(int(os.environ.get('TEST_CLI_EXIT', '0')))\n"
     )
@@ -312,3 +312,42 @@ def test_cli_preserves_local_changes_without_invoking_cli(app, repositories, cli
     assert "local changes" in errors[0]
     assert not report.exists()
     assert (local / "main.py").read_text() == original
+
+
+@pytest.mark.parametrize("method", ["git", "cli"])
+def test_untracked_config_and_gpu_dumps_do_not_block_update(app, repositories, cli_environment, method):
+    upstream, local = repositories
+    prefix, _, _ = cli_environment
+    files = {".env": "DUMMY_VALUE=preserve-me\n", "gpucore.23211": "test dump", "gpucore.3609": "another dump"}
+    for name, content in files.items():
+        (local / name).write_text(content)
+    (upstream / "revision.txt").write_text("updated")
+    git(upstream, "add", "revision.txt")
+    git(upstream, "commit", "-m", "Update")
+    git(upstream, "push")
+    c, logs, errors = make_controller(app, local)
+    c.config.python = str(prefix / "bin/python")
+    c.config.update_method = method
+    c.update()
+    wait_for(lambda: "Update complete" in "".join(logs) or bool(errors))
+    assert not errors
+    assert (local / "revision.txt").read_text() == "updated"
+    for name, content in files.items():
+        assert (local / name).read_text() == content
+
+
+@pytest.mark.parametrize("method", ["git", "cli"])
+def test_actual_untracked_collision_is_refused_by_git_without_losing_file(app, repositories, cli_environment, method):
+    upstream, local = repositories
+    prefix, _, _ = cli_environment
+    (local / "conflict.txt").write_text("my local data")
+    (upstream / "conflict.txt").write_text("upstream data")
+    git(upstream, "add", "conflict.txt")
+    git(upstream, "commit", "-m", "Conflicting addition")
+    git(upstream, "push")
+    c, _, errors = make_controller(app, local)
+    c.config.python = str(prefix / "bin/python")
+    c.config.update_method = method
+    c.update()
+    wait_for(lambda: c.state == "stopped" and bool(errors))
+    assert (local / "conflict.txt").read_text() == "my local data"

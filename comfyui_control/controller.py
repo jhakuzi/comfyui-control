@@ -76,6 +76,7 @@ class Controller(QObject):
                 env.remove(name)
             for name, value in self._cli_update[1].items():
                 env.insert(name, value)
+            self._message("Comfy CLI environment: " + self._cli_update[1].get("VIRTUAL_ENV", self._cli_update[1].get("CONDA_PREFIX", "")))
         process.setProcessEnvironment(env)
         params = QProcess.UnixProcessParameters()
         params.flags = QProcess.UnixProcessFlag.CreateNewSession
@@ -173,7 +174,7 @@ class Controller(QObject):
                 self._update_failed("The ComfyUI folder must be the root of its own Git checkout.")
                 return
         elif step == "Check local changes" and captured.strip():
-            self._update_failed("There are local changes or untracked files. Commit or move them before updating. Nothing was discarded.")
+            self._update_failed("There are local changes to tracked ComfyUI files. Commit or restore them before updating. Nothing was discarded.")
             return
         self._next_step()
 
@@ -213,7 +214,9 @@ class Controller(QObject):
     def _begin_update(self):
         self._steps = [
             ("Check repository", ["git", "rev-parse", "--show-toplevel"]),
-            ("Check local changes", ["git", "status", "--porcelain", "--untracked-files=normal"]),
+            # Local configuration and GPU crash dumps need not be committed.
+            # Git itself rejects a pull that would overwrite untracked files.
+            ("Check local changes", ["git", "status", "--porcelain", "--untracked-files=no"]),
         ]
         if self.config.update_method == "cli":
             self._steps.append(("Update with Comfy CLI", self._cli_update[0]))

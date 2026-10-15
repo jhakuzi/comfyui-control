@@ -97,5 +97,21 @@ def test_cli_resolves_global_tool_but_targets_selected_environment(tmp_path, mon
 
 def test_cli_rejects_system_python_instead_of_updating_gui_environment(tmp_path):
     config = Config(comfy_dir=str(tmp_path), python="/usr/bin/python3", update_method="cli")
-    with pytest.raises(ValueError, match="environment's bin/python"):
+    with pytest.raises(ValueError, match="environment"):
         config.cli_update()
+
+
+@pytest.mark.parametrize("marker", ["pyvenv.cfg", "bin/activate"])
+def test_environment_folder_preserves_python_symlink_and_supports_virtualenv_layouts(tmp_path, marker):
+    prefix = tmp_path / "comfy-env"
+    (prefix / "bin").mkdir(parents=True)
+    (prefix / "bin/python").symlink_to(sys.executable)
+    (prefix / marker).touch()
+    cli = prefix / "bin/comfy"
+    cli.write_text("#!/bin/sh\nexit 0\n")
+    cli.chmod(0o700)
+    config = Config(comfy_dir=str(tmp_path / "ComfyUI"), python=str(prefix), update_method="cli")
+    assert config.interpreter() == str(prefix / "bin/python")
+    command, environment = config.cli_update()
+    assert command[0] == str(cli)
+    assert environment["VIRTUAL_ENV"] == str(prefix)
