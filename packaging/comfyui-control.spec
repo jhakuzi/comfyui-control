@@ -1,6 +1,6 @@
 Name:           comfyui-control
 Version:        0.8.0
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
 License:        MIT
@@ -9,6 +9,7 @@ Source0:        %{name}-%{version}.tar.gz
 BuildArch:      noarch
 
 BuildRequires:  python3-devel
+BuildRequires:  python3-pip
 BuildRequires:  pyproject-rpm-macros
 BuildRequires:  python3-setuptools
 BuildRequires:  python3-wheel
@@ -54,6 +55,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/applications/%{name}.desktop
 
 %changelog
+* Thu Oct 15 2026 ComfyUI Control contributors - 0.8.0-3
+- Declare pip as a build dependency for clean Fedora and COPR builds.
+
 * Thu Oct 15 2026 ComfyUI Control contributors - 0.8.0-2
 - License the application under MIT and prepare automated COPR submissions.
 

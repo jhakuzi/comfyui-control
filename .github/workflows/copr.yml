@@ -24,7 +24,7 @@ jobs:
     timeout-minutes: 90
     steps:
       - name: Install packaging tools
-        run: dnf -y install git python3 rpm-build copr-cli
+        run: dnf -y install git python3 rpm-build copr-cli dnf5-plugins
 
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -50,6 +50,14 @@ jobs:
           python3 packaging/make_srpm.py --outdir dist
           python3 packaging/make_app_zip.py --outdir dist
 
+      - name: Install declared build dependencies
+        run: dnf -y builddep packaging/comfyui-control.spec
+
+      - name: Build and test the RPM
+        run: |
+          rpmbuild --define '_topdir /tmp/comfyui-control-rpmbuild' --rebuild dist/*.src.rpm
+          cp /tmp/comfyui-control-rpmbuild/RPMS/noarch/*.rpm dist/
+
       - name: Save downloads
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
@@ -57,6 +65,7 @@ jobs:
           path: |
             dist/*.src.rpm
             dist/comfyui-control.zip
+            dist/*.noarch.rpm
           if-no-files-found: error
           retention-days: 30
 
