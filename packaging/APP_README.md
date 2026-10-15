@@ -57,7 +57,7 @@ Close the app, download and extract the latest app ZIP, and rerun `bash install.
 Your settings and ComfyUI installation are kept. The app's **Update** button
 updates ComfyUI itself.
 
-[Full guide and screenshots](https://github.com/jhakuzi/comfyui-control#readme)
+[Full guide and screenshots](https://github.com/jhakuzi/comfyui-control/blob/main/docs/USAGE.md)
 
 ## Uninstall
 

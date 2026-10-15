@@ -32,7 +32,8 @@ The Comfy CLI setup flow still creates a separate environment for ComfyUI.
 On Fedora, install the build tools:
 
 ```bash
-sudo dnf install rpm-build python3-devel pyproject-rpm-macros python3-setuptools python3-wheel python3-pyside6 python3-pytest desktop-file-utils git-core
+sudo dnf install python3 rpm-build dnf5-plugins
+sudo dnf builddep packaging/comfyui-control.spec
 python3 packaging/make_srpm.py --outdir dist
 rpmbuild --rebuild dist/comfyui-control-0.8.1-1*.src.rpm
 ```
@@ -57,7 +58,7 @@ This RPM has not been validated on other Fedora releases or KDE Wayland.
 Version 0.6.0 adds the saved Git/Comfy CLI update selector. Its suite has 61
 tests, including CLI environment isolation, failure handling, and GUI selection.
 The actual Comfy CLI was also tested through the GUI against a disposable local
-checkout and requirement wheel, as described in the main README.
+checkout and requirement wheel; see the [verification notes](../docs/MAINTAINING.md#development-and-verification).
 
 Version 0.7.0 adds an update-method dialog, aligned header controls, collapsed
 launch flags, and a visible window version. All 70 tests pass, and both update
@@ -68,7 +69,7 @@ folders directly, and inspects existing script flags without running the script.
 All 86 tests pass, including native Git conflict protection and flag preservation.
 
 If you previously used `install.sh`, first remove its per-user app, wrapper, and
-desktop entry as described in the main README. Both installation methods share
+desktop entry as described in the [uninstall instructions](../docs/USAGE.md#uninstall). Both installation methods share
 the same settings. Remove the RPM with `sudo dnf remove comfyui-control`.
 
 ## COPR publishing
