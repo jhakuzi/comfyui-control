@@ -14,10 +14,10 @@ from comfyui_control.mobile_widgets import MobileDialog
 
 def test_mobile_dialog_url_qr_and_password_storage(app, tmp_path, monkeypatch):
     monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path))
+    MobileSettings(advertised='phone-vpn.example').save()
     runtime = MobileRuntime()
     dialog = MobileDialog(runtime, Config())
     dialog.bind.setText('0.0.0.0')
-    dialog.advertised.setText('phone-vpn.example')
     dialog.port.setValue(18301)
     dialog._preview()
     first = dialog.qr.pixmap().cacheKey()
@@ -32,6 +32,7 @@ def test_mobile_dialog_url_qr_and_password_storage(app, tmp_path, monkeypatch):
         configure.assert_called_once()
     saved = MobileSettings.load()
     assert check_password('a private test password', saved.password)
+    assert saved.advertised == 'phone-vpn.example'
     assert saved.password not in dialog.current_url
     assert 'a private test password' not in (tmp_path/'comfyui-control/mobile/settings.json').read_text()
     dialog.close()
@@ -47,6 +48,32 @@ def test_launch_settings_keep_mobile_preferences(app, tmp_path, monkeypatch):
     dialog._save()
     assert dialog.result() == QDialog.DialogCode.Accepted
     assert MobileSettings.load() == settings
+    dialog.close()
+
+
+def test_mobile_dialog_scrolls_only_when_content_needs_it(app,tmp_path,monkeypatch):
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QFont
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QScrollArea
+    monkeypatch.setenv('XDG_CONFIG_HOME',str(tmp_path))
+    dialog=MobileDialog(MobileRuntime(),Config())
+    dialog.setFont(QFont('Sans Serif',10))
+    dialog.show()
+    QTest.qWait(40)
+    area=dialog.findChild(QScrollArea)
+    scroll=area.verticalScrollBar()
+    assert scroll.maximum()==0
+    assert not dialog.workflow_status.isVisible()
+    bottom=dialog.catalog_button.mapTo(area.viewport(),QPoint(0,dialog.catalog_button.height()))
+    assert bottom.y()<=area.viewport().height()
+    dialog.resize(570,450)
+    dialog._workflow_message('Could not read the workflow. Please check the ComfyUI API URL.')
+    QTest.qWait(40)
+    assert scroll.maximum()>0 and dialog.workflow_status.isVisible()
+    scroll.setValue(scroll.maximum())
+    bottom=dialog.workflow_status.mapTo(area.viewport(),QPoint(0,dialog.workflow_status.height()))
+    assert 0<bottom.y()<=area.viewport().height()
     dialog.close()
 
 
@@ -91,9 +118,9 @@ def test_lan_detection_optional_password_and_default_workflow(app,tmp_path,monke
     assert dialog.current_url=='http://192.168.1.42:8189/'
     assert not dialog.auth.isChecked() and not dialog.password.isEnabled()
     dialog.bind.setText('127.0.0.1')
-    dialog.advertised.setText('old-vpn.example')
+    dialog.settings=replace(dialog.settings,advertised='old-vpn.example')
     dialog.detect.click()
-    assert dialog.bind.text()=='0.0.0.0' and dialog.advertised.text()==''
+    assert dialog.bind.text()=='0.0.0.0' and dialog.settings.advertised==''
     dialog._save_workflow('Saved on PC',{'custom-id':{'class_type':'CustomLoader','inputs':{'unet_name':'flux.gguf'}}},source='nested/Flux.json')
     chosen=dialog.default_preset.currentData()
     assert chosen and Presets(tmp_path/'comfyui-control/mobile/presets').get(chosen)['name']=='Saved on PC'

@@ -38,16 +38,17 @@ return to your stable RPM.
    particular interface IP, IPv6 address, or `127.0.0.1` for local-only access.
 3. Choose a port (default **8189**). Password protection is **optional** and off
    by default. Check **Use a password** if wanted, then enter at least 10 characters.
-4. Leave **Phone hostname / URL** blank for detection, or enter your VPN IP or
-   hostname. This is independent of the listening interface. Use an explicit
-   address when automatic detection chooses the wrong interface.
-5. Check **ComfyUI API URL**. It defaults to `http://127.0.0.1:8188`; change it
+4. Check **ComfyUI API URL**. It defaults to `http://127.0.0.1:8188`; change it
    if your launch flags use another port. ComfyUI itself can remain loopback-only.
-6. Click **Apply**, wait for **Listening**, and scan the QR with the iPhone camera.
+5. Click **Apply**, wait for **Listening**, and scan the QR with the iPhone camera.
    Sign in only if you enabled a password. The QR contains only the URL.
 
 **Open in browser** and **Copy URL** use the same address. The QR updates when
 the advertised address or port changes; apply changes before connecting.
+Existing advertised-address overrides are preserved. For a VPN hostname or
+reverse proxy, close the app and set `advertised` in
+`~/.config/comfyui-control/mobile/settings.json` (or under `$XDG_CONFIG_HOME`).
+**Use LAN / VPN** clears this override and restores automatic address detection.
 A full HTTP(S) origin can override the advertised URL for a reverse proxy,
 for example `https://comfy.your-vpn-domain.example`. Its external port is
 independent of the internal listener port. Path-prefix proxying is not supported.

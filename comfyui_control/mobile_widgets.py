@@ -104,9 +104,6 @@ class MobileDialog(QDialog):
         area.setWidgetResizable(True)
         area.setWidget(contents)
         outer.addWidget(area, 1)
-        intro = QLabel("Generate from your phone using saved workflows.")
-        intro.setWordWrap(True)
-        layout.addWidget(intro)
         form = QFormLayout()
         self.enabled = QCheckBox("Enable the integrated Mobile WebUI")
         self.enabled.setChecked(self.settings.enabled)
@@ -126,9 +123,6 @@ class MobileDialog(QDialog):
         self.port.setRange(1024, 65535)
         self.port.setValue(self.settings.port)
         form.addRow("Listen on port", self.port)
-        self.advertised = QLineEdit(self.settings.advertised)
-        self.advertised.setPlaceholderText("LAN/VPN hostname or IP; blank: detect. HTTPS proxy origin is also accepted.")
-        form.addRow("Phone hostname / URL", self.advertised)
         self.comfy_url = QLineEdit(self.settings.comfy_url)
         form.addRow("ComfyUI API URL", self.comfy_url)
         self.auth = QCheckBox("Use a password (optional)")
@@ -181,6 +175,7 @@ class MobileDialog(QDialog):
         self.workflow_status = QLabel()
         self.workflow_status.setWordWrap(True)
         self.workflow_status.setTextFormat(Qt.TextFormat.PlainText)
+        self.workflow_status.hide()
         layout.addWidget(self.workflow_status)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Apply | QDialogButtonBox.StandardButton.Close)
         self.apply_button = buttons.button(QDialogButtonBox.StandardButton.Apply)
@@ -191,8 +186,7 @@ class MobileDialog(QDialog):
         self.timer.setSingleShot(True)
         self.timer.setInterval(150)
         self.timer.timeout.connect(self._preview)
-        for field in (self.bind, self.advertised):
-            field.textChanged.connect(lambda: self.timer.start())
+        self.bind.textChanged.connect(lambda: self.timer.start())
         self.port.valueChanged.connect(lambda: self.timer.start())
         runtime.changed.connect(self._status)
         self._preview()
@@ -225,7 +219,7 @@ class MobileDialog(QDialog):
             self.local_files = names
             self._refresh_presets(self.default_preset.currentData())
         if error and not self.worker:
-            self.workflow_status.setText(error)
+            self._workflow_message(error)
 
     def _local_selected(self):
         value = self.default_preset.currentData() or ""
@@ -236,7 +230,7 @@ class MobileDialog(QDialog):
 
     def _detect(self):
         self.bind.setText("0.0.0.0")
-        self.advertised.clear()
+        self.settings = replace(self.settings, advertised="")
         self.detected.setText("Detected address: " + lan_address())
         self._preview()
 
@@ -275,7 +269,7 @@ class MobileDialog(QDialog):
                 preset["comfy_source"] = source
                 save_json(store.path(preset["id"]), preset)
         self._refresh_presets(preset["id"])
-        self.workflow_status.setText("Workflow ready. Click Apply to use it as the default.")
+        self._workflow_message("Workflow ready. Click Apply to use it as the default.")
 
     def _fetch_workflow(self, name, editor=None, catalog=False, saved=None, local=None, source=None):
         if self.worker:
@@ -283,7 +277,7 @@ class MobileDialog(QDialog):
         try:
             replace(self.settings, comfy_url=self.comfy_url.text().strip()).validate(require_password=False)
         except ValueError as exc:
-            self.workflow_status.setText(str(exc))
+            self._workflow_message(str(exc))
             return
         self.import_name = name
         self.import_source = saved or source
@@ -293,7 +287,7 @@ class MobileDialog(QDialog):
         self.catalog_button.setEnabled(False)
         self.default_preset.setEnabled(False)
         self.apply_button.setEnabled(False)
-        self.workflow_status.setText("Reading saved ComfyUI workflows…" if catalog else "Reading workflow from ComfyUI…")
+        self._workflow_message("Reading saved ComfyUI workflows…" if catalog else "Reading workflow from ComfyUI…")
         self.worker = WorkflowFetch(self.comfy_url.text().strip(), editor, catalog, saved, local)
         self.worker.signals.finished.connect(self._workflow_loaded)
         QThreadPool.globalInstance().start(self.worker)
@@ -308,12 +302,12 @@ class MobileDialog(QDialog):
         self.apply_button.setEnabled(True)
         if error:
             self.apply_after_import = False
-            self.workflow_status.setText(error)
+            self._workflow_message(error)
             return
         if self.loading_catalog:
             from PySide6.QtWidgets import QInputDialog
             if not graph:
-                self.workflow_status.setText("No saved JSON workflows found. Save one in ComfyUI's Workflows menu first.")
+                self._workflow_message("No saved JSON workflows found. Save one in ComfyUI's Workflows menu first.")
                 return
             name, accepted = QInputDialog.getItem(self, "Saved ComfyUI workflows", "Workflow", graph, 0, False)
             if accepted:
@@ -322,16 +316,20 @@ class MobileDialog(QDialog):
         try:
             self._save_workflow(self.import_name, graph, self.import_source)
         except (ValueError, OSError) as exc:
-            self.workflow_status.setText(str(exc))
+            self._workflow_message(str(exc))
             self.apply_after_import = False
             return
         if self.apply_after_import:
             self.apply_after_import = False
             self._apply()
 
+    def _workflow_message(self, text):
+        self.workflow_status.setText(text)
+        self.workflow_status.setVisible(bool(text))
+
     def _preview(self):
         try:
-            settings = replace(self.settings, bind=self.bind.text().strip(), port=self.port.value(), advertised=self.advertised.text().strip())
+            settings = replace(self.settings, bind=self.bind.text().strip(), port=self.port.value())
             self.current_url = settings.url()
             self.url.setText(self.current_url)
             renderer = QSvgRenderer(qr_svg(self.current_url))
@@ -363,7 +361,7 @@ class MobileDialog(QDialog):
         try:
             settings = MobileSettings(
                 enabled=self.enabled.isChecked(), bind=self.bind.text().strip(), port=self.port.value(),
-                advertised=self.advertised.text().strip(), comfy_url=self.comfy_url.text().strip(),
+                advertised=self.settings.advertised, comfy_url=self.comfy_url.text().strip(),
                 require_auth=self.auth.isChecked(),
                 password=password_hash(self.password.text()) if self.password.text() else self.settings.password,
                 default_preset=self.default_preset.currentData() or "",
