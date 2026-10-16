@@ -32,6 +32,9 @@ For an app release:
    The tag triggers COPR publishing. Do not move an existing tag.
 4. Check the [Actions run](https://github.com/jhakuzi/comfyui-control/actions/workflows/copr.yml)
    and [COPR build](https://copr.fedorainfracloud.org/coprs/jhakuzi/comfyui-control/).
+5. For GitHub release assets, create a release draft for the tag, then run
+   **Publish release downloads** from `main` with that tag and the successful
+   build run ID. It attaches the verified packages and publishes the draft.
 
 For documentation-only changes, update the guides and commit to `main` without
 creating a release tag. If `packaging/APP_README.md` changes, rebuild the app ZIP

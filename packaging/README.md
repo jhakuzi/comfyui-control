@@ -130,6 +130,14 @@ The existing `v0.8.0` tag predates this workflow: use the manual run for the fir
 build. For packaging-only changes, keep the app version, increment the spec's
 `Release`, and use a manual publishing run. Do not move existing release tags.
 
+### GitHub release downloads
+
+After a successful tag/COPR build, create a GitHub release draft for that tag.
+Run **Actions → Publish release downloads** from `main`, entering the tag and
+the successful build's Actions run ID. It verifies the tag/build relationship
+and ZIP contents, attaches the ZIP and RPMs, then publishes the draft.
+It uses GitHub Actions' repository token; no extra personal token is needed.
+
 ### Install after the first successful build
 
 ```bash
