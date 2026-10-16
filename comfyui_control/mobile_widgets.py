@@ -351,7 +351,7 @@ class MobileDialog(QDialog):
             self.copy.setEnabled(False)
 
     def _status(self, status, url):
-        self.status.setText("Server: " + status + (" · " + url if url else ""))
+        self.status.setText("Server: " + status)
         self._preview()
 
     def _apply(self):
