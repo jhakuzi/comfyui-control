@@ -57,7 +57,7 @@ jobs:
       - name: Attach packages and publish the release
         run: |
           python3 - <<'PY'
-          import base64, hashlib, json, os, subprocess
+          import base64, io, json, os, subprocess, zipfile
           from pathlib import Path
           repo, tag = os.environ['GH_REPO'], os.environ['RELEASE_TAG']
           files = sorted(Path('release-downloads').iterdir())
@@ -68,9 +68,17 @@ jobs:
               raise SystemExit('Expected only the matching app ZIP, source RPM and binary RPM.')
           tracked = json.loads(subprocess.check_output([
               'gh', 'api', f'repos/{repo}/contents/downloads/comfyui-control.zip?ref={tag}']))
-          if hashlib.sha256(base64.b64decode(tracked['content'])).digest() != hashlib.sha256(
-                  Path('release-downloads/comfyui-control.zip').read_bytes()).digest():
-              raise SystemExit('The build ZIP differs from the ZIP committed in the release tag.')
+          # Deflate output can vary across build environments. Verify the files
+          # and their permissions rather than requiring identical compression.
+          with zipfile.ZipFile(io.BytesIO(base64.b64decode(tracked['content']))) as expected, zipfile.ZipFile(
+                  'release-downloads/comfyui-control.zip') as actual:
+              if actual.namelist() != expected.namelist():
+                  raise SystemExit('The build ZIP file list differs from the release tag.')
+              for name in expected.namelist():
+                  if (actual.getinfo(name).external_attr != expected.getinfo(name).external_attr
+                          or actual.read(name) != expected.read(name)):
+                      raise SystemExit(f'The build ZIP differs from the release tag: {name}')
+          print('ZIP contents and permissions match the release tag.')
           subprocess.run(['gh', 'release', 'upload', tag, *map(str, files), '--clobber'], check=True)
           subprocess.run(['gh', 'release', 'edit', tag, '--draft=false', '--latest'], check=True)
           PY
