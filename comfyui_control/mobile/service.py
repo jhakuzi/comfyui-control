@@ -36,7 +36,8 @@ def json_safe(value):
 
 
 class MobileService:
-    def __init__(self, directory, settings, output_dir, desktop_state="stopped"):
+    def __init__(self, directory, settings, output_dir, desktop_state="stopped", observer=None):
+        self.observer = observer
         self.directory = Path(directory)
         self.settings = settings
         self.output_dir = Path(output_dir).resolve()
@@ -393,6 +394,8 @@ class MobileService:
                             try:
                                 event = json.loads(message.data)
                                 kind, data = event.get("type"), event.get("data", {})
+                                if self.observer and isinstance(data, dict):
+                                    self.observer(kind, data, time.monotonic())
                                 job = next((j for j in self.current_jobs() if j.get("prompt_id") == data.get("prompt_id")), None)
                                 if kind == "executing" and not data.get("prompt_id"):
                                     running = [j for j in self.current_jobs() if j["status"] == "running"]
@@ -445,6 +448,8 @@ class MobileService:
                 pass
             self.online = False
             self.connection = "ComfyUI is offline; reconnecting…"
+            if self.observer:
+                self.observer('disconnected', {}, time.monotonic())
             self.broadcast()
             await asyncio.sleep(delay)
             delay = min(delay * 2, 15)

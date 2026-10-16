@@ -25,6 +25,7 @@ from . import __version__
 from .mobile.runtime import MobileRuntime
 from .mobile.settings import MobileSettings
 from .mobile_widgets import MobileDialog
+from .monitor_widgets import MonitorPanel
 
 
 def application_icon():
@@ -96,6 +97,9 @@ class SettingsDialog(QDialog):
         update_note = QLabel("Comfy CLI installs requirements in the selected ComfyUI environment. Enter its folder or bin/python above. Neither method updates custom nodes.")
         update_note.setWordWrap(True)
         form.addRow(update_note)
+        self.monitoring = QCheckBox('Show system and generation monitoring')
+        self.monitoring.setChecked(config.monitoring_enabled)
+        form.addRow(self.monitoring)
         contents = QWidget()
         contents.setLayout(form)
         area = QScrollArea()
@@ -192,7 +196,7 @@ class SettingsDialog(QDialog):
         except ValueError as exc:
             QMessageBox.warning(self, "Check launch flags", str(exc))
             return
-        config = Config(
+        config = replace(self.original_config,
             comfy_dir=self.folder.text().strip(), python=self.python.text().strip(),
             mode=self.mode.currentData(), script=self.script.text().strip(),
             arguments=arguments,
@@ -202,6 +206,7 @@ class SettingsDialog(QDialog):
             managed_script=(self.original_config.managed_script and
                             self.mode.currentData() == "script" and
                             self.script.text().strip() == self.original_config.script),
+            monitoring_enabled=self.monitoring.isChecked(),
         )
         try:
             config.validate()
@@ -308,6 +313,11 @@ class MainWindow(QMainWindow):
         mobile_row.addWidget(self.mobile_button)
         mobile_row.addWidget(self.mobile_status, 1)
         layout.addLayout(mobile_row)
+        self.monitor = MonitorPanel(self.controller, config, self)
+        self.monitor.expanded_changed.connect(self._monitor_expanded)
+        self.monitor.observation_changed.connect(self._observe_generation)
+        self.mobile.execution.connect(self.monitor.execution)
+        layout.addWidget(self.monitor)
         self.mobile.changed.connect(lambda status, url: self.mobile_status.setText(status))
         self.log = LogView()
         layout.addWidget(self.log, 1)
@@ -365,6 +375,17 @@ class MainWindow(QMainWindow):
     def _mobile_settings(self):
         MobileDialog(self.mobile, self.controller.config, self).exec()
 
+    def _observe_generation(self, enabled):
+        self.mobile.configure(self.mobile.settings, self.controller.config, self.controller.state, observe=enabled)
+
+    def _monitor_expanded(self, expanded):
+        config = replace(self.controller.config, monitor_expanded=expanded)
+        try:
+            config.save()
+            self.controller.config = config
+        except OSError as exc:
+            self.log.append_output(f'\nCould not save monitoring preference: {exc}\n')
+
     def _mobile_stopped(self):
         if self._closing:
             QTimer.singleShot(20, self.close)
@@ -406,6 +427,7 @@ class MainWindow(QMainWindow):
 
     def _set_config(self, config):
         self.controller.config = config
+        self.monitor.configure(config)
         self.mobile.update_desktop(config, self.controller.state)
         blocked = self.update_method.blockSignals(True)
         self.update_method.setCurrentIndex(self.update_method.findData(config.update_method))
@@ -534,6 +556,11 @@ class MainWindow(QMainWindow):
         elif not QDesktopServices.openUrl(QUrl.fromLocalFile(str(path))):
             QMessageBox.warning(self, "Could not open folder", f"Could not open {path} in the file manager.")
 
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.WindowStateChange and hasattr(self, 'monitor'):
+            self.monitor._activity()
+
     def closeEvent(self, event):
         if self.controller.state == "stopped":
             if self.mobile.running:
@@ -543,6 +570,7 @@ class MainWindow(QMainWindow):
                 event.ignore()
                 return
             event.accept()
+            self.monitor.stop()
             return
         if not self._closing:
             question = "Stop ComfyUI and close the window?" if self.controller.state != "updating" else "Cancel the update and close? If packages are being installed, rerun the update before starting ComfyUI."
@@ -550,6 +578,7 @@ class MainWindow(QMainWindow):
                 event.ignore()
                 return
             self._closing = True
+            self.monitor.stop()
             self.mobile.stop()
             self.controller.shutdown()
             self._state_changed(self.controller.state)

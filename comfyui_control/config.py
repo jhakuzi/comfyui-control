@@ -29,6 +29,11 @@ class Config:
     managed_script: bool = False
     update_method: str = "git"
     comfy_cli: str = ""
+    monitoring_enabled: bool = True
+    monitor_expanded: bool = False
+    auto_restart: bool = False
+    restart_limit: int = 3
+    restart_backoff: int = 2
 
     @classmethod
     def load(cls, path: Path | None = None) -> "Config":
@@ -41,13 +46,15 @@ class Config:
         accepted = {f.name for f in fields(cls)}
         data = {k: v for k, v in data.items() if k in accepted}
         for key, value in data.items():
-            expected = bool if key in ("install_requirements", "managed_script") else str
-            if not isinstance(value, expected):
+            expected = bool if key in ("install_requirements", "managed_script", "monitoring_enabled", "monitor_expanded", "auto_restart") else int if key in ("restart_limit", "restart_backoff") else str
+            if type(value) is not expected:
                 raise ValueError(f"Invalid value for {key}.")
         if data.get("mode", "python") not in ("python", "script"):
             raise ValueError("Unknown launch mode.")
         if data.get("update_method", "git") not in ("git", "cli"):
             raise ValueError("Unknown update method.")
+        if not 1 <= data.get('restart_limit', 3) <= 20 or not 1 <= data.get('restart_backoff', 2) <= 60:
+            raise ValueError('Recovery requires 1–20 attempts and a 1–60 second initial delay.')
         return cls(**data)
 
     def save(self, path: Path | None = None) -> None:

@@ -3,6 +3,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 import threading
+import time
 
 from aiohttp import web
 from PySide6.QtCore import QObject, Signal, Slot
@@ -15,6 +16,7 @@ from .settings import MobileSettings, data_dir
 class MobileRuntime(QObject):
     changed = Signal(str, str)
     stopped = Signal()
+    execution = Signal(str, object, float)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -26,6 +28,7 @@ class MobileRuntime(QObject):
         self.status = "Disabled"
         self.url = ""
         self.pending = None
+        self.observing = False
         self.stop_requested = threading.Event()
         self.stopped.connect(self._finished)
 
@@ -33,20 +36,22 @@ class MobileRuntime(QObject):
     def running(self):
         return bool(self.thread and self.thread.is_alive())
 
-    def configure(self, settings, config, state="stopped"):
+    def configure(self, settings, config, state="stopped", observe=None):
+        if observe is not None:
+            self.observing = observe
         if self.running:
-            if self.settings == settings and not self.stop_requested.is_set():
+            if self.settings == settings and (settings.enabled or self.observing) and not self.stop_requested.is_set():
                 self.update_desktop(config, state)
                 return
             self.pending = (replace(settings), replace(config), state)
             self.stop()
             return
         self.settings = replace(settings)
-        if not settings.enabled:
+        if not settings.enabled and not self.observing:
             self._status("Disabled", "")
             return
         try:
-            settings.validate()
+            settings.validate(require_password=settings.enabled)
         except ValueError as exc:
             self._status("Not started: " + str(exc), "")
             return
@@ -78,21 +83,32 @@ class MobileRuntime(QObject):
         self.loop = asyncio.get_running_loop()
         self.loop.set_default_executor(ThreadPoolExecutor(max_workers=2, thread_name_prefix="comfy-mobile-io"))
         self.stop_event = asyncio.Event()
-        self.service = MobileService(data_dir(), settings, config.folder("output"), state)
-        runner = web.AppRunner(MobileHTTP(self.service).app(), access_log=None, shutdown_timeout=1)
-        await runner.setup()
+        self.service = MobileService(data_dir(), settings, config.folder("output"), state, self._execution)
+        runner = None
+        if settings.enabled:
+            runner = web.AppRunner(MobileHTTP(self.service).app(), access_log=None, shutdown_timeout=1)
+            await runner.setup()
         try:
-            site = web.TCPSite(runner, settings.bind, settings.port)
-            await site.start()
+            if runner:
+                site = web.TCPSite(runner, settings.bind, settings.port)
+                await site.start()
             await self.service.start()
-            self._status("Listening", settings.url())
+            self._status("Listening" if runner else "Disabled", settings.url() if runner else "")
             if self.stop_requested.is_set():
                 self.stop_event.set()
             await self.stop_event.wait()
         finally:
             await self.service.stop()
-            await runner.cleanup()
+            if runner:
+                await runner.cleanup()
         self._status("Disabled", "")
+
+    def _execution(self, kind, data, when):
+        if self.observing:
+            try:
+                self.execution.emit(kind, data, when)
+            except RuntimeError:
+                pass
 
     def update_desktop(self, config, state):
         def update():
