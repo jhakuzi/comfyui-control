@@ -1,0 +1,76 @@
+name: Publish release downloads
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Stable version tag with an existing GitHub release draft
+        required: true
+        type: string
+      build_run:
+        description: Successful tag-triggered Build and publish to COPR run ID
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: release-downloads-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ inputs.tag }}
+      BUILD_RUN_ID: ${{ inputs.build_run }}
+    steps:
+      - name: Verify successful stable build and matching tag
+        run: |
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          repo, tag, run_id = (os.environ[k] for k in ('GH_REPO', 'RELEASE_TAG', 'BUILD_RUN_ID'))
+          if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+', tag) or not run_id.isdecimal():
+              raise SystemExit('Choose a stable version tag and numeric build run ID.')
+          def api(path):
+              return json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/{path}']))
+          run = api(f'actions/runs/{run_id}')
+          if (run['conclusion'], run['event'], run['head_branch'], run['path']) != (
+                  'success', 'push', tag, '.github/workflows/copr.yml'):
+              raise SystemExit('The selected run must be a successful stable tag/COPR build.')
+          ref = api(f'git/ref/tags/{tag}')['object']
+          if ref['type'] == 'tag':
+              ref = api('git/tags/' + ref['sha'])['object']
+          if ref['type'] != 'commit' or ref['sha'] != run['head_sha']:
+              raise SystemExit('The build commit does not match this release tag.')
+          subprocess.run(['gh', 'release', 'view', tag], check=True)
+          PY
+
+      - name: Download verified build artifacts
+        run: gh run download "$BUILD_RUN_ID" --name comfyui-control-downloads --dir release-downloads
+
+      - name: Attach packages and publish the release
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, json, os, subprocess
+          from pathlib import Path
+          repo, tag = os.environ['GH_REPO'], os.environ['RELEASE_TAG']
+          files = sorted(Path('release-downloads').iterdir())
+          version = tag.removeprefix('v')
+          if len(files) != 3 or not all(p.is_file() and (
+                  p.name == 'comfyui-control.zip' or p.name.startswith(f'comfyui-control-{version}-')
+                  and p.name.endswith(('.src.rpm', '.noarch.rpm'))) for p in files):
+              raise SystemExit('Expected only the matching app ZIP, source RPM and binary RPM.')
+          tracked = json.loads(subprocess.check_output([
+              'gh', 'api', f'repos/{repo}/contents/downloads/comfyui-control.zip?ref={tag}']))
+          if hashlib.sha256(base64.b64decode(tracked['content'])).digest() != hashlib.sha256(
+                  Path('release-downloads/comfyui-control.zip').read_bytes()).digest():
+              raise SystemExit('The build ZIP differs from the ZIP committed in the release tag.')
+          subprocess.run(['gh', 'release', 'upload', tag, *map(str, files), '--clobber'], check=True)
+          subprocess.run(['gh', 'release', 'edit', tag, '--draft=false', '--latest'], check=True)
+          PY
