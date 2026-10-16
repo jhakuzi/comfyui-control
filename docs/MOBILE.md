@@ -193,6 +193,11 @@ Live queue status, sampling progress and a small preview stay anchored above
 immediate and the page does not jump. When generation finishes, **View result**
 opens the image directly; the full results and reuse controls remain in Create.
 
+In the testing build, an animated indicator shows **Preparing / loading models…**
+before sampling begins, including a cold server's first model load. It stays
+anchored above Generate. Step counts replace it when available; between sampling
+stages it returns to a processing indicator. Loading has no invented percentage.
+
 1. Start ComfyUI using the desktop app, then choose your mobile preset.
 2. Enter the prompt. Expand LoRAs or generation settings if you want to adjust them.
 3. Press **Generate**. Submissions use durable request IDs so a retry or lost
@@ -206,6 +211,14 @@ Use **Reuse last generation**, **Same seed**, or **New variation** to prepare
 the next form, then press **Generate**. Fixed 64-bit seeds retain their exact
 value. Randomization affects mapped seeds only. A preset without a seed mapping
 keeps its original behaviour.
+
+**Randomize seed for each generation** is on by default in the testing build.
+Older drafts adopt this default once without losing prompts or settings; your
+subsequent choice is remembered. **Same seed** explicitly switches to a fixed
+seed; **New variation** enables randomization. If a fixed seed and every other
+input stay unchanged, ComfyUI may return its cached image immediately and log
+`Prompt executed in 0.00 seconds`. Change the seed or enable randomization for
+a fresh variation; the app does not disable ComfyUI's cache or change your workflow.
 
 Queue cancellation removes only the selected prompt. Running-job cancellation
 uses ComfyUI's job-specific cancellation API. Older ComfyUI versions without

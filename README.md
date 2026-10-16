@@ -4,7 +4,7 @@ A small Qt app for ComfyUI on Linux, built with KDE Plasma in mind.
 Start/stop, restart, Git or Comfy CLI updates, launch flags, and folder shortcuts.
 Includes a [Mobile WebUI](docs/MOBILE.md) for generating images from your phone.
 
-**Testing branch · 0.10.0.dev1:** collapsible system/sampling monitoring, mobile
+**Testing branch · 0.10.0.dev2:** collapsible system/sampling monitoring, mobile
 image comparison, and optional crash recovery. [Try it and see the testing notes](docs/TESTING_FEATURES.md).
 COPR remains on the stable release.
 

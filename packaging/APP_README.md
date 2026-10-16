@@ -2,7 +2,7 @@
 
 A small Qt desktop app for starting, stopping, and updating ComfyUI on Linux.
 
-Version **0.10.0.dev1** is a preliminary testing build with system/sampling
+Version **0.10.0.dev2** is a preliminary testing build with system/sampling
 monitoring, mobile image comparison, and optional crash recovery.
 See the [testing guide](https://github.com/jhakuzi/comfyui-control/blob/testing/monitoring-comparison-recovery/docs/TESTING_FEATURES.md).
 Use **Mobile WebUI…** to enable the embedded listener, configure your LAN/VPN

@@ -1,6 +1,6 @@
 # Monitoring, comparison and recovery · testing build
 
-Version **0.10.0.dev1**, branch `testing/monitoring-comparison-recovery`.
+Version **0.10.0.dev2**, branch `testing/monitoring-comparison-recovery`.
 This is separate from stable `main`. No release tag or COPR build is submitted.
 
 ## Try it without replacing your RPM
@@ -23,6 +23,10 @@ Alternatively, [download the testing app ZIP](https://github.com/jhakuzi/comfyui
 extract it, and run `bash install.sh` as your normal user. This replaces your
 per-user app; reinstall the stable ZIP to return. Settings and ComfyUI stay put.
 The ZIP excludes tests and screenshots. There are no new Python dependencies.
+
+This update also shows preparation/loading activity before mobile sampling starts
+and randomizes mapped seeds by default. Existing drafts adopt that default once;
+uncheck it to keep a fixed seed. Explicit **Same seed** reuse remains fixed.
 
 ## System & generation
 
@@ -121,4 +125,5 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 .venv/bin/python tests/manual/mobile_workflows_browser.py
 .venv/bin/python tests/manual/mobile_workflows_browser.py --gguf
 .venv/bin/python tests/manual/mobile_comparison_browser.py
+.venv/bin/python tests/manual/mobile_preparation_browser.py
 ```
