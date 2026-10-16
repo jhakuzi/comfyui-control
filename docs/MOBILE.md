@@ -1,15 +1,14 @@
-# Mobile WebUI — preliminary testing
+# Mobile WebUI
 
-This feature is integrated into the desktop app on **`testing/mobile-webui`**
-(`0.9.0.dev6`). It is not in the stable COPR release. No separate service or
-mobile installation is required. Keep the desktop app open while using it.
+Available in **ComfyUI Control 0.9.0**. No separate service or mobile installation
+is required. Keep the desktop app open while using it.
 
-## Try it without replacing your stable installation
+## Run from source in an isolated environment
 
 Close any running ComfyUI Control window, then:
 
 ```bash
-git clone --single-branch --branch testing/mobile-webui https://github.com/jhakuzi/comfyui-control.git comfyui-control-mobile
+git clone --single-branch --branch main https://github.com/jhakuzi/comfyui-control.git comfyui-control-mobile
 cd comfyui-control-mobile
 python3 -m venv .venv-test
 .venv-test/bin/python -m pip install .
@@ -19,9 +18,9 @@ python3 -m venv .venv-test
 Use the usual distribution prerequisites in the [README](../README.md).
 This test environment does not replace your RPM or desktop launcher. It reads
 your existing launch settings; mobile preferences are stored separately.
-The stable app and testing app cannot run simultaneously for the same user.
+Only one copy of the app can run at a time for the same user.
 
-Alternatively, [download the testing app ZIP](https://github.com/jhakuzi/comfyui-control/raw/refs/heads/testing/mobile-webui/downloads/comfyui-control.zip)
+Alternatively, [download the app ZIP](https://github.com/jhakuzi/comfyui-control/raw/refs/heads/main/downloads/comfyui-control.zip)
 and use `bash install.sh` for the usual per-user installation. That changes the
 per-user launcher; use the isolated environment above if you want an easy
 return to your stable RPM.
@@ -188,6 +187,11 @@ Changing mappings changes the preset revision; stale generation forms and reuse
 requests are rejected until reloaded.
 
 ## Generate, view, and reuse
+
+Live queue status, sampling progress and a small preview stay anchored above
+**Generate** while you scroll through Create or Gallery. Submission feedback is
+immediate and the page does not jump. When generation finishes, **View result**
+opens the image directly; the full results and reuse controls remain in Create.
 
 1. Start ComfyUI using the desktop app, then choose your mobile preset.
 2. Enter the prompt. Expand LoRAs or generation settings if you want to adjust them.

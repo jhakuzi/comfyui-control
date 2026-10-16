@@ -87,6 +87,11 @@ the only new runtime dependencies; QR generation does not require Pillow.
 ## Verification performed
 
 - Existing desktop/config/controller tests and new mobile tests run together.
+- The fixed generation panel was checked during delayed submission, queueing,
+  sampling, previews, page scrolling, Gallery navigation, foreground recovery,
+  and completion. Chromium verified visible controls at 320–1200 pixel widths
+  and in 844×390 landscape, with no forced submission scroll or horizontal
+  overflow. The result shortcut opens the existing full-size viewer.
 - Real ComfyUI 0.40.0 with City96's ComfyUI-GGUF plugin
   (`6ea2651e7df66d7585f6ffee804b20e92fb38b8a`) served normal and Advanced loader
   metadata. Chromium selected between two placeholder filenames discovered in
@@ -164,8 +169,8 @@ The separate manual browser checks need Playwright/Chromium. SSE progress
 snapshots omit prompt/control values; full job details are fetched on new jobs
 and image changes rather than on every progress event. Packaging must
 include `mobile/web/*` in the wheel/app ZIP and `aiohttp`/`qrcode` in Fedora
-dependencies. The Python development version is `0.9.0.dev6`; RPM uses
-`0.9.0-0.6.dev6`, so a later stable `0.9.0-1` sorts above it.
+dependencies. The stable Python version is `0.9.0`; RPM uses `0.9.0-1`, which upgrades
+the earlier `0.9.0-0.x.dev*` testing packages.
 
 Optional, reproducible manual checks from the repository root:
 
@@ -192,8 +197,8 @@ folder path as well. The [example API graph](../examples/mobile-smoke-api.json)
 can also be imported from the interface; it tests image creation/upscaling and
 saving without a diffusion model, and has no prompt/model/LoRA controls.
 
-This branch is preliminary: push no release tag and publish nothing to the
-stable COPR project while testing.
+For future development builds, use a `.devN` Python version and RPM Release
+`0.x.devN`. Validate without publishing to COPR; see the [release guide](../packaging/README.md).
 
 Saved catalog/editor conversion smoke check against an already running ComfyUI:
 

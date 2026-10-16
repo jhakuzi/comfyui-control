@@ -15,6 +15,7 @@ let state = { jobs: [], online: false },
   selectedJob = null,
   events = null,
   busy = false;
+let submitting = false;
 let mappingDraft = new Map(),
   gallery = [],
   viewerItems = [],
@@ -157,7 +158,38 @@ function selectTab(name) {
   $("gallery-page").hidden = name !== "gallery";
   $("create-tab").classList.toggle("selected", name === "create");
   $("gallery-tab").classList.toggle("selected", name === "gallery");
+  syncGenerationDock();
   saveUI();
+}
+function currentJob() {
+  return selectedJob === "new"
+    ? null
+    : state.jobs.find((item) => item.id === selectedJob) || state.jobs.at(-1);
+}
+function syncGenerationDock() {
+  const job = currentJob(),
+    active = !!job && activeStatuses.has(job.status),
+    dock = $("generation-dock"),
+    card = $("job-card"),
+    destination = active ? dock : $("job-output");
+  if (card.parentElement !== destination) {
+    if (active) destination.prepend(card);
+    else destination.append(card);
+  }
+  $("dock-submitting").hidden = !submitting || active;
+  const images = !active && !submitting ? job?.images || [] : [];
+  $("dock-result").hidden = !images.length;
+  if (images.length) {
+    const src = images[0].thumbnail || images[0].url;
+    if ($("dock-result-image").getAttribute("src") !== src) {
+      $("dock-result-image").hidden = false;
+      $("dock-result-image").src = src;
+    }
+    $("dock-result").querySelector("span").textContent = images.length === 1
+      ? "Image ready · View result"
+      : `${images.length} images ready · View results`;
+  }
+  dock.hidden = !active && !submitting && !$("gallery-page").hidden;
 }
 function updateGenerate() {
   const job = state.jobs.find((item) => item.id === selectedJob);
@@ -174,6 +206,7 @@ function updateGenerate() {
     : pendingSubmission
       ? "Retry submission"
       : "✦ Generate";
+  syncGenerationDock();
 }
 async function loadPresets(selectId) {
   const items = await api("/api/presets");
@@ -617,6 +650,7 @@ async function generate(event) {
   event.preventDefault();
   if (busy || !preset || !connected || recovering) return;
   busy = true;
+  submitting = true;
   updateGenerate();
   const body = pendingSubmission || {
     request_id: requestId(),
@@ -639,7 +673,6 @@ async function generate(event) {
     writeStore("job", job.id);
     state = await api("/api/state");
     applyState(state);
-    $("job-card").scrollIntoView({ behavior: "smooth", block: "nearest" });
   } catch (error) {
     if ([400, 403, 404, 413, 415, 422].includes(error.status)) {
       pendingSubmission = null;
@@ -652,6 +685,7 @@ async function generate(event) {
       );
   } finally {
     busy = false;
+    submitting = false;
     updateGenerate();
   }
 }
@@ -712,10 +746,7 @@ function applyState(value) {
   $("connection").classList.toggle("online", value.online);
   if (!selectedJob && state.jobs.length)
     selectedJob = readStore("job", null) || state.jobs.at(-1).id;
-  const job =
-    selectedJob === "new"
-      ? null
-      : state.jobs.find((item) => item.id === selectedJob) || state.jobs.at(-1);
+  const job = currentJob();
   $("job-card").hidden = !job;
   if (job) {
     selectedJob = job.id;
@@ -738,7 +769,9 @@ function applyState(value) {
         ? `Queue position ${job.position || "—"} · ${job.preset_name}`
         : job.status === "unknown"
           ? "The submission response was lost. Reconnecting will check ComfyUI before another request is sent."
-          : job.preset_name);
+          : job.status === "running" && job.progress
+            ? `${job.progress.value} / ${job.progress.max} steps · ${job.preset_name}`
+            : job.preset_name);
     $("progress").hidden = !job.progress || job.status !== "running";
     if (job.progress) {
       $("progress").max = job.progress.max || 1;
@@ -755,6 +788,7 @@ function applyState(value) {
         ? state.preview
         : null;
     $("preview").hidden = !preview;
+    $("job-card").classList.toggle("has-preview", !!preview);
     if (preview && !$("preview").src.endsWith(preview))
       $("preview").src = preview;
     renderImages($("job-images"), job.images || []);
@@ -1020,6 +1054,17 @@ $("refresh-models").addEventListener(
   }),
 );
 $("generate-form").addEventListener("submit", generate);
+$("dock-result").addEventListener("click", () => {
+  const images = currentJob()?.images || [];
+  if (images.length) openImage(images, 0);
+});
+$("dock-result-image").addEventListener("error", () => {
+  $("dock-result-image").hidden = true;
+});
+new ResizeObserver(() => {
+  const height = $("generation-dock").getBoundingClientRect().height;
+  document.documentElement.style.setProperty("--generation-dock-height", `${height}px`);
+}).observe($("generation-dock"));
 $("mapping-search").addEventListener("input", renderMappings);
 $("save-mapping").addEventListener(
   "click",

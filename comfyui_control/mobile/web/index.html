@@ -173,41 +173,38 @@
                 Sign out
               </button>
             </details>
-            <div class="generate-bar">
-              <button class="primary" id="generate" type="submit" disabled>
-                <span aria-hidden="true">✦</span> Generate
-              </button>
-            </div>
           </form>
-          <section
-            class="card job-card"
-            id="job-card"
-            hidden
-            aria-live="polite"
-          >
-            <div class="heading">
-              <h2 id="job-title">In the queue</h2>
-              <button id="cancel" class="small" type="button" hidden>
-                Cancel
-              </button>
-            </div>
-            <p id="job-detail" class="hint"></p>
-            <progress id="progress" max="1" value="0" hidden></progress>
-            <img
-              id="preview"
-              class="preview"
-              alt="Current generation preview"
+          <div id="job-output">
+            <section
+              class="card job-card"
+              id="job-card"
               hidden
-            />
-            <div id="job-images" class="image-grid"></div>
-            <div class="actions">
-              <button id="same-seed" type="button" hidden>Same seed</button
-              ><button id="variation" type="button" hidden>New variation</button
-              ><button id="new-request" type="button" hidden>
-                Start a new request
-              </button>
-            </div>
-          </section>
+              aria-live="polite"
+            >
+              <div class="heading">
+                <h2 id="job-title">In the queue</h2>
+                <button id="cancel" class="small" type="button" hidden>
+                  Cancel
+                </button>
+              </div>
+              <p id="job-detail" class="hint"></p>
+              <progress id="progress" max="1" value="0" hidden></progress>
+              <img
+                id="preview"
+                class="preview"
+                alt="Current generation preview"
+                hidden
+              />
+              <div id="job-images" class="image-grid"></div>
+              <div class="actions">
+                <button id="same-seed" type="button" hidden>Same seed</button
+                ><button id="variation" type="button" hidden>New variation</button
+                ><button id="new-request" type="button" hidden>
+                  Start a new request
+                </button>
+              </div>
+            </section>
+          </div>
         </section>
         <section id="gallery-page" hidden>
           <div class="heading">
@@ -227,6 +224,19 @@
             No images yet. Your next idea starts in Create.
           </p>
         </section>
+        <div class="generate-bar" id="generation-dock">
+          <div class="card" id="dock-submitting" role="status" hidden>
+            <p>Sending your idea…</p>
+            <progress max="1"></progress>
+          </div>
+          <button id="dock-result" type="button" hidden>
+            <img id="dock-result-image" alt="" width="40" height="40" />
+            <span>View result</span>
+          </button>
+          <button class="primary" id="generate" type="submit" form="generate-form" disabled>
+            <span aria-hidden="true">✦</span> Generate
+          </button>
+        </div>
       </div>
       <p id="notice" role="alert" hidden></p>
     </main>

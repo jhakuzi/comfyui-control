@@ -73,8 +73,17 @@ async def main():
           assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth'),width
         await page.set_viewport_size({'width':390,'height':844})
         assert await page.evaluate('window.isSecureContext'), 'Browser treats loopback as a secure context'
+        async def delayed_submission(route):
+          await asyncio.sleep(.4)
+          await route.continue_()
+        await page.route('**/api/generate', delayed_submission)
+        scroll_before=await page.evaluate('window.scrollY')
         await page.locator('#generate').click()
+        await expect(page.locator('#dock-submitting')).to_be_visible()
+        await expect(page.locator('#generation-dock #job-card')).to_be_visible()
         await expect(page.locator('#job-title')).to_have_text('In the queue')
+        assert abs(await page.evaluate('window.scrollY')-scroll_before)<2
+        assert await page.locator('#generation-dock #job-card').count()==1
         assert len(stub.submissions)==1
         assert stub.submissions[0]['prompt']['sampler']['inputs']['seed']==18446744073709551600
         # Click cannot accidentally submit twice while the request is active.
@@ -86,6 +95,30 @@ async def main():
         png=(REPO/'comfyui_control/assets/comfyui-control.png').read_bytes()
         for ws in stub.sockets: await ws.send_bytes(struct.pack('>II',1,2)+png)
         await page.locator('#preview').wait_for(state='visible')
+        async def visible_dock():
+          await expect(page.locator('#generation-dock #job-card')).to_be_visible()
+          for target in ('#job-card','#generate'):
+            box=await page.locator(target).bounding_box()
+            height=await page.evaluate('window.innerHeight')
+            assert box and box['y']>=0 and box['y']+box['height']<=height+1,(target,box,height)
+          card=await page.locator('#job-card').bounding_box()
+          button=await page.locator('#generate').bounding_box()
+          assert 0 <= button['y']-(card['y']+card['height']) <= 16
+          assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        # The progress frame remains beside Generate at every scroll position,
+        # at narrow/landscape/desktop sizes, and when browsing Gallery.
+        await page.locator('#settings-card').evaluate('(el)=>el.open=true')
+        for width,height in ((320,568),(375,812),(390,844),(430,932),(844,390),(768,1024),(1200,900)):
+          await page.set_viewport_size({'width':width,'height':height})
+          for position in (0,500,10000):
+            await page.evaluate('(y)=>window.scrollTo(0,y)',position)
+            await page.wait_for_timeout(40)
+            await visible_dock()
+        await page.set_viewport_size({'width':390,'height':844})
+        await page.locator('#gallery-tab').click()
+        await visible_dock()
+        await page.locator('#create-tab').click()
+        await page.evaluate('window.scrollTo(0,0)')
         await page.screenshot(path=str(OUT/'mobile-progress.png'),full_page=True)
         # Simulate page suspension/BFCache and an interrupted VPN. The desktop
         # service keeps its ComfyUI socket open throughout; these are not iOS tests.
@@ -103,6 +136,7 @@ async def main():
         await asyncio.sleep(.1)
         await context.set_offline(False)
         await expect(page.locator('#progress')).to_have_js_property('value', 12)
+        await visible_dock()
         await page.reload()
         await expect(page.locator('#progress')).to_have_js_property('value', 12)
         await page.locator('textarea').first.wait_for()
@@ -130,6 +164,11 @@ async def main():
         await asyncio.sleep(.2)
         await context.set_offline(False)
         await page.locator('#job-images img').wait_for()
+        await expect(page.locator('#dock-result')).to_be_visible()
+        assert await page.locator('#job-output #job-card').count()==1
+        await page.locator('#dock-result').click()
+        await expect(page.locator('#image-dialog')).to_be_visible()
+        await page.locator('#close-image').click()
         assert len(stub.submissions)==1
         await page.reload()
         await page.locator('#job-images img').wait_for()
@@ -153,7 +192,7 @@ async def main():
         await page.locator('#job-images img').wait_for()
         assert len(stub.submissions)==1
         assert not errors,errors
-        print(json.dumps({'browser':'Chromium','viewport_widths':[320,375,390,430,768,1200],'connection':'loopback HTTP, not a physical LAN/VPN test','generation':'protocol test double','large_seed':'preserved exactly','queue_preview_completion_restore_gallery_download_reuse':'passed','background_VPN_resume_live_progress_draft_UI_and_client_isolation':'passed (simulated browser lifecycle/network)','javascript_errors':errors}))
+        print(json.dumps({'browser':'Chromium','viewport_widths':[320,375,390,430,768,1200],'connection':'loopback HTTP, not a physical LAN/VPN test','generation':'protocol test double','large_seed':'preserved exactly','queue_preview_completion_restore_gallery_download_reuse':'passed','anchored_progress':'immediate submit, scroll, landscape, Gallery, reconnect, and result shortcut passed','background_VPN_resume_live_progress_draft_UI_and_client_isolation':'passed (simulated browser lifecycle/network)','javascript_errors':errors}))
         await browser.close()
     finally:
       await service.stop(); await runner.cleanup(); await upstream.close()
