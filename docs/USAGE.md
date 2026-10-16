@@ -6,7 +6,9 @@ A small Python + Qt 6 desktop app for ComfyUI on Linux, built with KDE Plasma in
 
 **Start / Stop · Restart · Git or Comfy CLI updates · Launch flag checkboxes · Folder shortcuts**
 
-![ComfyUI Control 0.8.1 with the dark theme](screenshots/comfyui-control-0.8.1-dark.png)
+![ComfyUI Control 0.10.1 with the current monitoring panel](screenshots/desktop-0.10.1.png)
+
+*Fedora RPM with a dark Qt theme and a CPU ComfyUI server.*
 
 ## Install
 

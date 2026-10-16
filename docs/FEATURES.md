@@ -37,6 +37,10 @@ Closing or opening this panel never starts or restarts ComfyUI.
 
 ## Compare images on your phone
 
+<img src="screenshots/mobile-comparison-0.10.1.png" alt="Mobile image comparison with a reveal divider and highlighted parameter differences" width="360">
+
+*Current comparison UI using test images and example metadata.*
+
 In **Gallery → Select two images**, choose A and B, then **Compare**. Drag the
 divider, swap images, or center it. The slider also supports keyboard arrows,
 Home and End. Different aspect ratios are contained without stretching. Closing

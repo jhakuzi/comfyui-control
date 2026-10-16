@@ -27,9 +27,9 @@ return to your stable RPM.
 
 ## Connect your iPhone
 
-<img src="screenshots/mobile-create-testing.png" alt="Mobile creation screen with a test preset" width="360">
+<img src="screenshots/mobile-create-0.10.1.png" alt="Mobile creation screen with prompt and three model selectors" width="360">
 
-*Chromium capture at iPhone width using a protocol-test preset; model inference is not shown.*
+*Current UI at phone width using an example workflow; model inference is not shown.*
 
 1. Open **Mobile WebUI…** in the desktop window.
 2. Enable the feature. It listens on `0.0.0.0` for IPv4 LAN/VPN access and
@@ -188,6 +188,11 @@ requests are rejected until reloaded.
 
 ## Generate, view, and reuse
 
+<a href="screenshots/mobile-loading-0.10.1.png"><img src="screenshots/mobile-loading-0.10.1.png" alt="Mobile preparation and model-loading indicator above Generate" width="300"></a>
+<a href="screenshots/mobile-generation-0.10.1.png"><img src="screenshots/mobile-generation-0.10.1.png" alt="Generation controls and sampling progress above Generate" width="300"></a>
+
+*Example workflow with simulated preparation and sampling events.*
+
 Live queue status, sampling progress and a small preview stay anchored above
 **Generate** while you scroll through Create or Gallery. Submission feedback is
 immediate and the page does not jump. When generation finishes, **View result**
@@ -273,6 +278,10 @@ saved prompt/settings metadata for reuse. Other images may have no mobile
 metadata. Temporary previews and deleted files can become unavailable.
 
 ### Compare two images
+
+<img src="screenshots/mobile-comparison-0.10.1.png" alt="Touch comparison divider and highlighted differences in generation settings" width="360">
+
+*Comparison with test images and example generation metadata.*
 
 In **Gallery**, tap **Select two images**, select A and B, then **Compare**.
 Drag the divider or use the range slider; keyboard arrows, Home and End work

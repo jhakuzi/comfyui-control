@@ -14,7 +14,11 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest
 
 The suite covers desktop behaviour, hardware/timing fixtures, process recovery and mobile integration in version 0.10.1 (161 tests). See [mobile verification notes](MOBILE_ARCHITECTURE.md) and the [feature guide](FEATURES.md) for scope and limitations. Real CPU installation, server controls, and update integration were verified on Fedora 44 with Python 3.14.8. CLI dependency isolation was checked with a disposable checkout and test package. GPU/ROCm, model inference, and KDE Wayland remain untested.
 
-[Live ComfyUI server screenshot](../live-test-preview.png)
+[Current Fedora desktop screenshot](screenshots/desktop-0.10.1.png)
+
+Screenshots live in `docs/screenshots/`. Use a versioned filename when replacing
+one so GitHub refreshes the image. Keep example workflows and simulated progress
+labeled; screenshots stay out of the app ZIP and source RPM.
 
 ## Build and release
 

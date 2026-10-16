@@ -7,7 +7,9 @@ Includes a [Mobile WebUI](docs/MOBILE.md) for generating images from your phone.
 [System/sampling monitoring and optional crash recovery](docs/FEATURES.md) keep
 server activity visible without leaving the app.
 
-![ComfyUI Control 0.8.1 with the dark theme](docs/screenshots/comfyui-control-0.8.1-dark.png)
+![ComfyUI Control 0.10.1 with the current monitoring panel](docs/screenshots/desktop-0.10.1.png)
+
+*Fedora RPM, Qt Fusion dark theme, running a CPU ComfyUI server. Appearance follows your Qt/desktop theme.*
 
 ## Install
 
@@ -43,6 +45,11 @@ Use **Edit launch configuration…** for Python, scripts, and flags.
 ## Mobile UI
 
 Generate from your phone over your LAN or VPN using saved ComfyUI workflows.
+
+<a href="docs/screenshots/mobile-create-0.10.1.png"><img src="docs/screenshots/mobile-create-0.10.1.png" alt="Mobile prompt and diffusion, VAE, and text encoder selectors" width="300"></a>
+<a href="docs/screenshots/mobile-generation-0.10.1.png"><img src="docs/screenshots/mobile-generation-0.10.1.png" alt="Mobile generation settings with sampling progress anchored above Generate" width="300"></a>
+
+*Current Mobile WebUI with an example workflow and simulated sampling progress. Click to enlarge.*
 
 - Edit prompts, choose models (including GGUF), and adjust supported LoRAs and generation settings.
 - Follow live progress and previews above Generate while scrolling. Jobs and drafts recover after reconnecting.
