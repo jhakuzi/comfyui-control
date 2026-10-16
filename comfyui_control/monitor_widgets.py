@@ -1,6 +1,6 @@
 """Compact Qt monitoring, with at most one background hardware sample in flight."""
-from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Qt, Signal
-from PySide6.QtWidgets import QFormLayout, QLabel, QProgressBar, QToolButton, QVBoxLayout, QWidget
+from PySide6.QtCore import QEvent, QObject, QRunnable, QThreadPool, QTimer, Qt, Signal
+from PySide6.QtWidgets import QGridLayout, QLabel, QLayout, QProgressBar, QPushButton, QSizePolicy, QStyle, QVBoxLayout, QWidget
 
 from .hardware import HardwareReader
 from .performance import GenerationPerformance
@@ -52,17 +52,22 @@ class MonitorPanel(QWidget):
         self.last_observing = False
         self.metrics = dict(cpu=None, ram_used=None, ram_total=None, process_memory=None, gpus=[])
         layout = QVBoxLayout(self)
+        layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
-        self.toggle = QToolButton()
+        self.toggle = QPushButton()
         self.toggle.setCheckable(True)
         self.toggle.setChecked(config.monitor_expanded)
-        self.toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.toggle.setSizePolicy(self.sizePolicy())
+        self.toggle.setStyleSheet('text-align: left; padding: 4px 8px;')
+        self.toggle.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         layout.addWidget(self.toggle)
         self.details = QWidget()
-        form = QFormLayout(self.details)
+        self.details.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        form = QGridLayout(self.details)
         form.setContentsMargins(8, 2, 0, 0)
+        form.setColumnStretch(1, 1)
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(6)
         self.hardware = QLabel()
         self.hardware.setTextFormat(Qt.TextFormat.PlainText)
         self.hardware.setWordWrap(True)
@@ -73,9 +78,16 @@ class MonitorPanel(QWidget):
         self.timing = QLabel()
         self.timing.setTextFormat(Qt.TextFormat.PlainText)
         self.timing.setWordWrap(True)
-        form.addRow('Hardware', self.hardware)
-        form.addRow('', self.utilization)
-        form.addRow('Generation', self.timing)
+        for label in (self.hardware, self.timing):
+            label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+            label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+            label.installEventFilter(self)
+        alignment = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
+        form.addWidget(QLabel('Hardware'), 0, 0, alignment)
+        form.addWidget(self.hardware, 0, 1)
+        form.addWidget(self.utilization, 1, 1)
+        form.addWidget(QLabel('Generation'), 2, 0, alignment)
+        form.addWidget(self.timing, 2, 1)
         layout.addWidget(self.details)
         self.toggle.toggled.connect(self._expanded)
         self.timer = QTimer(self)
@@ -91,9 +103,15 @@ class MonitorPanel(QWidget):
         self.setVisible(self.enabled)
         self._activity()
 
+    def eventFilter(self, watched, event):
+        if event.type() in {QEvent.Type.Resize, QEvent.Type.FontChange, QEvent.Type.StyleChange}:
+            watched.setMinimumHeight(max(0, watched.heightForWidth(watched.width())))
+        return super().eventFilter(watched, event)
+
     def _expanded(self, expanded, save=True):
         self.details.setVisible(expanded)
-        self.toggle.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
+        arrow = QStyle.StandardPixmap.SP_ArrowDown if expanded else QStyle.StandardPixmap.SP_ArrowRight
+        self.toggle.setIcon(self.style().standardIcon(arrow))
         if save:
             self.expanded_changed.emit(expanded)
         self._activity()
@@ -152,7 +170,7 @@ class MonitorPanel(QWidget):
     def render(self):
         stats = self.performance.snapshot()
         gpus = self.metrics['gpus']
-        brief = ['System && generation']  # QToolButton treats a single & as a mnemonic.
+        brief = ['System && generation']  # Buttons treat a single & as a mnemonic.
         primary = max(gpus, key=lambda g: (g['utilization'] if g['utilization'] is not None else -1, g['vram_used'] or 0)) if gpus else None
         for gpu in [primary] if primary else []:
             brief.append(f"GPU {scalar(gpu['utilization'], '%', 0)} · VRAM {memory(gpu['vram_used'], gpu['vram_total'])}")
@@ -163,7 +181,7 @@ class MonitorPanel(QWidget):
         self.toggle.setToolTip('Hardware metrics are read without root. Sampling uses observed progress intervals, excluding model loading. Expand for details.')
         lines = []
         for gpu in gpus:
-            lines.append(f"{gpu['name']}: {scalar(gpu['utilization'], '%', 0)} · VRAM {memory(gpu['vram_used'], gpu['vram_total'])} · {scalar(gpu['temperature'], ' °C')} · {scalar(gpu['power'], ' W')}")
+            lines.append(f"{gpu['name']}: {scalar(gpu['utilization'], '%', 0)} · VRAM {memory(gpu['vram_used'], gpu['vram_total'])} · {scalar(gpu['temperature'], ' °C')}")
         lines.extend([f"CPU {scalar(self.metrics['cpu'], '%', 0)} · RAM {memory(self.metrics['ram_used'], self.metrics['ram_total'])}",
                       f"ComfyUI process-group RSS {memory(self.metrics['process_memory'])}"])
         self.hardware.setText('\n'.join(lines))
@@ -172,9 +190,9 @@ class MonitorPanel(QWidget):
         self.utilization.setVisible(bool(uses) and self.toggle.isChecked())
         if uses:
             self.utilization.setValue(round(max(uses)))
-        self.timing.setText(f"Current {scalar(stats['current'], ' s/it')} · Average {scalar(stats['average'], ' s/it')}\n"
-            f"Elapsed {scalar(stats['elapsed'], ' s')} · Iterations {scalar(stats['value'], digits=0)} / {scalar(stats['total'], digits=0)} · Stage {stats['stage'] or '--'}\n"
-            f"Sampling ETA {scalar(stats['remaining'], ' s')} · Last completed {scalar(stats['last_average'], ' s/it')}")
+        self.timing.setText(f"Current {scalar(stats['current'], ' s/it')} · Average {scalar(stats['average'], ' s/it')}")
+        for label in (self.hardware, self.timing):
+            label.setMinimumHeight(max(0, label.heightForWidth(label.width())))
 
     def stop(self):
         self.enabled = False

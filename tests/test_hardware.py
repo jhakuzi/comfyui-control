@@ -37,7 +37,7 @@ def test_amd_sysfs_units_and_missing_sensors(tmp_path, monkeypatch):
     reader = HardwareReader(tmp_path/'proc', tmp_path)
     gpu = reader.sample()['gpus'][0]
     assert gpu['utilization'] == 65 and gpu['temperature'] == 63
-    assert gpu['power'] == 140.5 and gpu['vram_total'] == 8*2**30
+    assert 'power' not in gpu and gpu['vram_total'] == 8*2**30
     (sensor/'temp1_input').unlink()
     assert reader.sample()['gpus'][0]['temperature'] is None
 
@@ -48,14 +48,15 @@ def test_nvidia_and_rocm_capability_fallbacks(tmp_path, monkeypatch):
     def run(args, **kwargs):
         calls.append((args, kwargs))
         if args[0].endswith('nvidia-smi'):
-            return SimpleNamespace(stdout='0, NVIDIA Test, 70, 1024, 8192, N/A, [Not Supported]\n')
+            return SimpleNamespace(stdout='0, NVIDIA Test, 70, 1024, 8192, N/A\n')
         return SimpleNamespace(stdout='{"card0":{"GPU use (%)":"42","VRAM Total Memory (B)":"8192","VRAM Total Used Memory (B)":"1024","Temperature (Sensor edge) (C)":"55","Average Graphics Package Power (W)":"120"}}')
     reader = HardwareReader(tmp_path, tmp_path, run)
     gpus = reader.sample()['gpus']
     assert len(gpus) == 2
-    assert gpus[0]['temperature'] is None and gpus[0]['power'] is None
+    assert gpus[0]['temperature'] is None and 'power' not in gpus[0]
     assert gpus[0]['vram_used'] == 1024**3
-    assert gpus[1]['utilization'] == 42 and gpus[1]['power'] == 120
+    assert gpus[1]['utilization'] == 42 and gpus[1]['temperature'] == 55
+    assert all('power' not in ' '.join(call[0]) for call in calls)
     assert all(call[1]['timeout'] < 1 for call in calls)
     def timeout(*args, **kwargs):
         raise subprocess.TimeoutExpired(args[0], .8)

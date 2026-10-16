@@ -92,16 +92,16 @@ class HardwareReader:
         executable = shutil.which('nvidia-smi')
         if not executable:
             return []
-        query = 'index,name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw'
+        query = 'index,name,utilization.gpu,memory.used,memory.total,temperature.gpu'
         output = self.command([executable, '--query-gpu='+query, '--format=csv,noheader,nounits'])
         result = []
         for row in csv.reader(io.StringIO(output)):
-            if len(row) != 7:
+            if len(row) != 6:
                 continue
-            index, name, use, used, total, temp, power = (v.strip() for v in row)
+            index, name, use, used, total, temp = (v.strip() for v in row)
             result.append(dict(id='nvidia-'+index, name=name, utilization=number(use),
                 vram_used=number(used, 1024**2), vram_total=number(total, 1024**2),
-                temperature=number(temp), power=number(power)))
+                temperature=number(temp)))
         return result
 
     def amd(self):
@@ -118,15 +118,10 @@ class HardwareReader:
             gpu = dict(id=card.name, name='AMD GPU · '+card.name,
                 utilization=read_number(device/'gpu_busy_percent'),
                 vram_used=read_number(device/'mem_info_vram_used'),
-                vram_total=read_number(device/'mem_info_vram_total'), temperature=None, power=None)
+                vram_total=read_number(device/'mem_info_vram_total'), temperature=None)
             for hwmon in sorted((device/'hwmon').glob('hwmon*')):
                 if gpu['temperature'] is None:
                     gpu['temperature'] = read_number(hwmon/'temp1_input', .001)
-                if gpu['power'] is None:
-                    for name in ('power1_average', 'power1_input'):
-                        gpu['power'] = read_number(hwmon/name, .000001)
-                        if gpu['power'] is not None:
-                            break
             result.append(gpu)
         return result
 
@@ -134,7 +129,7 @@ class HardwareReader:
         executable = shutil.which('rocm-smi')
         if not executable:
             return []
-        output = self.command([executable, '--showuse', '--showmeminfo', 'vram', '--showtemp', '--showpower', '--json'])
+        output = self.command([executable, '--showuse', '--showmeminfo', 'vram', '--showtemp', '--json'])
         try:
             data = json.loads(output)
         except (ValueError, TypeError):
@@ -148,14 +143,13 @@ class HardwareReader:
             result.append(dict(id=key, name='AMD GPU · '+key,
                 utilization=metric('GPU use (%)'), vram_used=metric('VRAM Total Used Memory (B)'),
                 vram_total=metric('VRAM Total Memory (B)'),
-                temperature=metric('Temperature (Sensor edge) (C)', 'Temperature (Sensor junction) (C)'),
-                power=metric('Average Graphics Package Power (W)', 'Current Socket Graphics Package Power (W)')))
+                temperature=metric('Temperature (Sensor edge) (C)', 'Temperature (Sensor junction) (C)')))
         return result
 
     def sample(self, pid=0):
         used, total = self.ram()
         amd = self.amd()
-        if not amd or all(all(gpu[k] is None for k in ('utilization', 'vram_used', 'temperature', 'power')) for gpu in amd):
+        if not amd or all(all(gpu[k] is None for k in ('utilization', 'vram_used', 'temperature')) for gpu in amd):
             amd = self.rocm() or amd
         return dict(cpu=self.cpu(), ram_used=used, ram_total=total,
                     process_memory=self.process_memory(pid), gpus=self.nvidia()+amd)

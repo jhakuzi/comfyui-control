@@ -7,7 +7,7 @@ installation and updates. These features add no Python dependencies.
 
 Click the arrow to expand the desktop panel. It remembers that choice. The
 collapsed row shows the busiest GPU's utilization/VRAM and current sampling
-speed. Expanded details include every detected GPU, temperature/power where
+speed. Expanded details include every detected GPU, temperature where
 available, CPU/RAM, and owned ComfyUI process-group RSS.
 
 - Linux `/proc` supplies CPU/RAM/RSS. AMD uses readable DRM/hwmon sysfs files,
@@ -22,9 +22,8 @@ available, CPU/RAM, and owned ComfyUI process-group RSS.
 
 Sampling statistics use actual monotonic progress-event intervals. New sampling
 stages reset the interval baseline, so model loading is excluded. The generation
-average weights measured iterations across stages; the ETA covers the current
-sampling stage only. It appears after at least two intervals. Total generation
-elapsed time is separate and includes loading when its start is known.
+average weights measured iterations across stages. The Generation row shows
+only **Current** and **Average**, in seconds per iteration.
 
 The existing ComfyUI WebSocket is reused. With Mobile WebUI disabled, monitoring
 can make an **outbound-only** ComfyUI connection; it never enables the HTTP
@@ -32,11 +31,9 @@ listener or changes authentication, interface, port or VPN settings. ComfyUI oft
 sends progress only to the submitting client. For other clients the owned server's
 iteration output is a fallback. Missing/custom progress formats, parallel samplers,
 late attachment, or connection gaps can leave metrics as `--`; timestamps are not
-invented. Terminal buffering can reduce precision. A completed terminal duration
-can supply total elapsed time, even when its start event was unavailable.
+invented. Terminal buffering can reduce precision.
 
-Cancelled/failed jobs do not replace the last completed sampling average. Closing
-or opening this panel never starts or restarts ComfyUI.
+Closing or opening this panel never starts or restarts ComfyUI.
 
 ## Compare images on your phone
 

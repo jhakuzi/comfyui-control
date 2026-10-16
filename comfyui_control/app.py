@@ -10,7 +10,7 @@ from PySide6.QtCore import QCoreApplication, QEvent, QLockFile, QProcess, QTimer
 from PySide6.QtGui import QDesktopServices, QFontDatabase, QIcon, QTextCursor
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
-    QFileDialog, QFormLayout, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMainWindow,
+    QFileDialog, QFormLayout, QGridLayout, QHBoxLayout, QLabel, QLayout, QLineEdit, QMainWindow,
     QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QToolButton, QVBoxLayout, QWidget,
 )
 
@@ -275,6 +275,7 @@ class MainWindow(QMainWindow):
         body = QWidget()
         self.setCentralWidget(body)
         layout = QVBoxLayout(body)
+        layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(12)
         header = QGridLayout()
@@ -591,6 +592,14 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Folder unavailable", f"Folder does not exist:\n{path}\n\nSet a custom folder in Edit launch configuration if needed.")
         elif not QDesktopServices.openUrl(QUrl.fromLocalFile(str(path))):
             QMessageBox.warning(self, "Could not open folder", f"Could not open {path} in the file manager.")
+
+    def event(self, event):
+        result = super().event(event)
+        if event.type() == QEvent.Type.LayoutRequest and self.centralWidget():
+            # Keep the expanded metrics and controls readable at larger font
+            # sizes instead of letting the log overlap their minimum heights.
+            self.setMinimumHeight(max(400, self.centralWidget().minimumSizeHint().height()))
+        return result
 
     def changeEvent(self, event):
         super().changeEvent(event)
