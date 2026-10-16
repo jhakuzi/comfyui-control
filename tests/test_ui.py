@@ -231,6 +231,8 @@ def test_header_columns_align_and_stay_put_when_status_changes(app, tmp_path):
             assert window.status.width() == window.change_folder.width()
             assert window.crash_log.x() == window.change_folder.x()
             assert window.crash_log.size() == window.change_folder.size()
+            assert window.crash_log.y() == window.setup_button.y()
+            assert window.status.y() > window.change_folder.geometry().bottom()
             assert window.setup_button.height() == window.create_script_button.height() == window.change_folder.height()
     window.close()
 
