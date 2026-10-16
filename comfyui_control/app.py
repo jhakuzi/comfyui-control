@@ -310,9 +310,8 @@ class MainWindow(QMainWindow):
         self.status.setFixedWidth(status_width)
         self.change_folder.setFixedWidth(status_width)
         header.setColumnMinimumWidth(2, status_width)
-        layout.addLayout(header)
         mobile_row = QHBoxLayout()
-        self._mobile_row = mobile_row
+        mobile_row.setSpacing(12)
         self.mobile_button = QPushButton(QIcon.fromTheme("smartphone"), "Mobile WebUI…")
         self.mobile_button.clicked.connect(self._mobile_settings)
         self.mobile_status = QLabel("Disabled")
@@ -320,7 +319,14 @@ class MainWindow(QMainWindow):
         self.mobile_status.setTextFormat(Qt.TextFormat.PlainText)
         mobile_row.addWidget(self.mobile_button)
         mobile_row.addWidget(self.mobile_status, 1)
-        layout.addLayout(mobile_row)
+        header.addLayout(mobile_row, 2, 0, 1, 2)
+        self.crash_log = QPushButton('View crash log…')
+        self.crash_log.setFixedWidth(status_width)
+        self.crash_log.setMinimumHeight(30)
+        self.crash_log.clicked.connect(lambda: CrashDialog(self.controller.history, self).exec())
+        self.crash_log.setVisible(bool(self.controller.history.entries))
+        header.addWidget(self.crash_log, 2, 2)
+        layout.addLayout(header)
         self.monitor = MonitorPanel(self.controller, config, self)
         self.monitor.expanded_changed.connect(self._monitor_expanded)
         self.monitor.observation_changed.connect(self._observe_generation)
@@ -333,15 +339,12 @@ class MainWindow(QMainWindow):
         self._crash_message = ''
         self.crash_summary.setWordWrap(True)
         self.crash_summary.setTextFormat(Qt.TextFormat.PlainText)
-        self.crash_log=QPushButton('View crash log…')
-        self.crash_log.clicked.connect(lambda: CrashDialog(self.controller.history,self).exec())
         self.cancel_recovery=QPushButton('Cancel recovery')
         self.cancel_recovery.clicked.connect(self.controller.stop)
         crash_row.addWidget(self.crash_summary,1)
         crash_row.addWidget(self.cancel_recovery)
         layout.addWidget(self.crash_notice)
         self.crash_notice.hide()
-        self._place_crash_log()
         self.cancel_recovery.hide()
         self.controller.crashed.connect(self._crashed)
         self.controller.recovery.connect(self._recovery)
@@ -406,23 +409,12 @@ class MainWindow(QMainWindow):
         self.mobile.configure(self.mobile.settings, self.controller.config, self.controller.state, observe=enabled)
 
     def _monitor_expanded(self, expanded):
-        self._place_crash_log()
         config = replace(self.controller.config, monitor_expanded=expanded)
         try:
             config.save()
             self.controller.config = config
         except OSError as exc:
             self.log.append_output(f'\nCould not save monitoring preference: {exc}\n')
-
-    def _place_crash_log(self):
-        # Keep diagnostics beside the hardware details, without reserving an
-        # empty row below them. They remain accessible with monitoring closed.
-        if self.monitor.enabled and self.monitor.toggle.isChecked():
-            self.monitor.details.layout().addWidget(
-                self.crash_log, 0, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
-        else:
-            self._mobile_row.addWidget(self.crash_log)
-        self.crash_log.setVisible(bool(self.controller.history.entries or self._crash_message))
 
     def _crashed(self, entry):
         self._crash_message = entry['summary']
@@ -480,7 +472,6 @@ class MainWindow(QMainWindow):
     def _set_config(self, config):
         self.controller.set_config(config)
         self.monitor.configure(config)
-        self._place_crash_log()
         self.mobile.update_desktop(config, self.controller.state)
         blocked = self.update_method.blockSignals(True)
         self.update_method.setCurrentIndex(self.update_method.findData(config.update_method))

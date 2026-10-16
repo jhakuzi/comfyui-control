@@ -84,23 +84,25 @@ def test_idle_crash_history_does_not_take_terminal_space(app,tmp_path,monkeypatc
     assert not window.crash_notice.isVisible()
     assert window.log.height()>=300
     assert window.crash_log.isVisible()
-    assert window.crash_log.parentWidget() is monitor.details
-    assert window.crash_log.y()==monitor.hardware.y()
-    assert window.crash_log.x()>monitor.hardware.geometry().right()
+    original=window.crash_log.geometry()
+    assert window.crash_log.x()==window.change_folder.x()
+    assert window.crash_log.size()==window.change_folder.size()
+    assert window.crash_log.y()>window.change_folder.geometry().bottom()
     assert window.log.y()-monitor.geometry().bottom()-1==window.centralWidget().layout().spacing()
     monitor.toggle.setChecked(False)
     QTest.qWait(40)
     assert window.crash_log.isVisible()
-    assert window.crash_log.parentWidget() is window.centralWidget()
+    assert window.crash_log.geometry()==original
     monitor.toggle.setChecked(True)
     window._set_config(replace(window.controller.config,monitoring_enabled=False))
     QTest.qWait(40)
     assert not monitor.isVisible() and window.crash_log.isVisible()
+    assert window.crash_log.geometry()==original
     assert not window.crash_notice.isVisible()
     window._set_config(replace(window.controller.config,monitoring_enabled=True))
     QTest.qWait(40)
     assert monitor.isVisible() and window.crash_log.isVisible()
-    assert window.crash_log.parentWidget() is monitor.details
+    assert window.crash_log.geometry()==original
     window.close()
 
 

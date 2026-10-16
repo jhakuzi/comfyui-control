@@ -216,6 +216,7 @@ def test_cancel_update_does_not_change_settings_or_stop_server(app, tmp_path):
 def test_header_columns_align_and_stay_put_when_status_changes(app, tmp_path):
     (tmp_path / "main.py").touch()
     window = MainWindow(Config(comfy_dir=str(tmp_path)))
+    window.crash_log.show()
     window.show()
     for width in (680, 800):
         window.resize(width, 570)
@@ -228,6 +229,8 @@ def test_header_columns_align_and_stay_put_when_status_changes(app, tmp_path):
             assert window.setup_button.width() == window.create_script_button.width()
             assert window.status.x() == window.change_folder.x()
             assert window.status.width() == window.change_folder.width()
+            assert window.crash_log.x() == window.change_folder.x()
+            assert window.crash_log.size() == window.change_folder.size()
             assert window.setup_button.height() == window.create_script_button.height() == window.change_folder.height()
     window.close()
 
