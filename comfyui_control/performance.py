@@ -100,6 +100,7 @@ class GenerationPerformance:
         self._buffer = (self._buffer + text)[-65536:]
         lines = re.split(r'[\r\n]', self._buffer)
         self._buffer = lines.pop()
+        pending = None
         for line in lines:
             if not re.search(r'(?:s/(?:it|steps)|(?:it|steps)/s)', line):
                 progress_line = ''
@@ -108,13 +109,25 @@ class GenerationPerformance:
             match = re.search(r'(?:Node ([\w.-]+):.*?)?\d+%.*?\|\s*(\d+)/(\d+)\s*\[', progress_line)
             if match:
                 self.source = 'process output'
-                self.progress(int(match[2]), int(match[3]), now, match[1])
+                sample = (int(match[2]), int(match[3]), match[1])
+                if pending and (sample[0] < pending[0] or sample[1:] != pending[1:]):
+                    self.progress(pending[0], pending[1], now, pending[2])
+                # Several terminal updates can arrive in one read. Only the
+                # latest count has an observation time; don't attribute the
+                # whole interval to the first iteration in that batch.
+                pending = sample
             elapsed = re.search(r'Prompt executed in ([\d.]+) seconds', line)
+            interrupted = re.search(r'Processing interrupted|Interrupting prompt', line, re.I)
+            if pending and (elapsed or interrupted):
+                self.progress(pending[0], pending[1], now, pending[2])
+                pending = None
             if elapsed:
                 self.elapsed_override = float(elapsed[1])
                 self.finish('complete', now)
-            if re.search(r'Processing interrupted|Interrupting prompt', line, re.I):
+            if interrupted:
                 self.finish('cancelled', now)
+        if pending:
+            self.progress(pending[0], pending[1], now, pending[2])
 
     def disconnect(self):
         # A socket gap cannot be treated as a measured sampling interval.

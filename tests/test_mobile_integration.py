@@ -244,6 +244,39 @@ def test_runtime_lifecycle_port_conflict_and_reconfigure_keep_qt_responsive(app,
     assert not runtime.running
 
 
+def test_monitoring_reuses_runtime_without_enabling_http_or_changing_auth(app,tmp_path,monkeypatch):
+    from PySide6.QtTest import QTest
+    monkeypatch.setenv('XDG_CONFIG_HOME',str(tmp_path))
+    runtime=MobileRuntime()
+    events=[]
+    runtime.execution.connect(lambda *args:events.append(args))
+    def wait(predicate):
+        end=time.monotonic()+5
+        while not predicate() and time.monotonic()<end: QTest.qWait(10)
+        assert predicate()
+    with socket.socket() as busy:
+        busy.bind(('127.0.0.1',0))
+        busy.listen()
+        settings=MobileSettings(enabled=False,bind='127.0.0.1',port=busy.getsockname()[1],require_auth=True)
+        try:
+            runtime.configure(settings,Config(),'running',observe=True)
+            wait(lambda: runtime.service is not None and runtime.status=='Disabled')
+            assert runtime.running and runtime.url=='' and not runtime.settings.enabled
+            assert runtime.settings.require_auth and runtime.settings.password==''
+            thread=runtime.thread
+            runtime.configure(settings,Config(),'running',observe=True)
+            assert runtime.thread is thread
+            runtime._execution('progress',{'value':1,'max':4},12.)
+            app.processEvents()
+            assert events[-1][0]=='progress'
+            runtime.configure(settings,Config(),'running',observe=False)
+            wait(lambda: not runtime.running)
+            assert not runtime.settings.enabled and runtime.url==''
+        finally:
+            runtime.stop()
+            wait(lambda: not runtime.running)
+
+
 def test_browser_ownership_resume_live_progress_completion_and_cookie_persistence(tmp_path, mobile_graph):
     async def scenario():
         from comfyui_control.mobile.settings import password_hash

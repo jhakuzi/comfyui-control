@@ -1,8 +1,6 @@
 """Compact Qt monitoring, with at most one background hardware sample in flight."""
-from dataclasses import replace
-
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Qt, Signal
-from PySide6.QtWidgets import QCheckBox, QFormLayout, QLabel, QProgressBar, QToolButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFormLayout, QLabel, QProgressBar, QToolButton, QVBoxLayout, QWidget
 
 from .hardware import HardwareReader
 from .performance import GenerationPerformance

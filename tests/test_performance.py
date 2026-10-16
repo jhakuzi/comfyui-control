@@ -73,3 +73,12 @@ def test_owned_output_fallback_ignores_downloads_and_preserves_chunk_boundaries(
     assert stats.snapshot()['elapsed'] is None
     stats.output('Prompt executed in 25.25 seconds\n')
     assert stats.snapshot()['elapsed'] == 25.25 and stats.snapshot()['last_average'] == 2
+
+
+def test_batched_output_uses_latest_observed_count_not_first_line():
+    clock=[0.]
+    stats=GenerationPerformance(lambda:clock[0])
+    stats.output('0%|x| 0/10 [00:00<?, ?it/s]\r')
+    clock[0]=6
+    stats.output('10%|x| 1/10 [00:02<00:18, 2s/it]\r20%|x| 2/10 [00:04<00:16, 2s/it]\r30%|x| 3/10 [00:06<00:14, 2s/it]\r')
+    assert stats.snapshot()['current']==2 and stats.snapshot()['average']==2
