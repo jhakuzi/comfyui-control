@@ -16,28 +16,60 @@ from PySide6.QtWidgets import (
 from .mobile.server import qr_svg
 from .mobile.settings import MobileSettings, password_hash, lan_address
 from .mobile.settings import data_dir, save_json
-from .mobile.workflows import Presets, suggested_mappings
+from .mobile.workflows import Presets, suggested_mappings, graph_from
 from .mobile.client import ComfyClient
-from .mobile.workflow_sources import queued_workflow, import_graph, saved_workflows, saved_workflow_graph
+from .mobile.workflow_sources import queued_workflow, import_graph, saved_workflows, saved_workflow_graph, local_workflow_files
 
 
 class WorkflowSignals(QObject):
     finished = Signal(object, str)
 
 
+class WorkflowCombo(QComboBox):
+    opened = Signal()
+
+    def showPopup(self):
+        self.opened.emit()
+        super().showPopup()
+
+
+class WorkflowScan(QRunnable):
+    def __init__(self, root):
+        super().__init__()
+        self.root = root
+        self.signals = WorkflowSignals()
+
+    def run(self):
+        try:
+            files = local_workflow_files(self.root)
+        except OSError:
+            self.signals.finished.emit([], "Could not read the local workflows folder.")
+        else:
+            self.signals.finished.emit(files, "")
+
+
 class WorkflowFetch(QRunnable):
-    def __init__(self, url, editor=None, catalog=False, saved=None):
+    def __init__(self, url, editor=None, catalog=False, saved=None, local=None):
         super().__init__()
         self.url, self.editor = url, editor
         self.catalog, self.saved = catalog, saved
+        self.local = local
         self.signals = WorkflowSignals()
 
     def run(self):
         async def fetch():
             import aiohttp
+            value = self.editor
+            if self.local:
+                path = Path(self.local)
+                if path.stat().st_size > 4 * 1024 * 1024:
+                    raise ValueError("Workflow import is limited to 4 MB.")
+                value = json.loads(path.read_text(encoding="utf-8"))
+                if not isinstance(value, dict) or not isinstance(value.get("nodes"), list):
+                    return graph_from(value)
             async with aiohttp.ClientSession() as session:
                 client = ComfyClient(session, self.url)
-                operation = saved_workflows(client) if self.catalog else saved_workflow_graph(client, self.saved) if self.saved else import_graph(client, self.editor) if self.editor is not None else queued_workflow(client)
+                operation = saved_workflows(client) if self.catalog else saved_workflow_graph(client, self.saved) if self.saved else import_graph(client, value) if value is not None else queued_workflow(client)
                 return await asyncio.wait_for(operation, 10)
         try:
             graph = asyncio.run(fetch())
@@ -55,6 +87,10 @@ class MobileDialog(QDialog):
         self.import_name = ""
         self.import_source = None
         self.loading_catalog = False
+        self.scan_worker = None
+        self.local_files = []
+        self.local_root = self.config.directory / "user" / "default" / "workflows"
+        self.apply_after_import = False
         self.setWindowTitle("Mobile WebUI")
         self.resize(570, 700)
         try:
@@ -68,7 +104,7 @@ class MobileDialog(QDialog):
         area.setWidgetResizable(True)
         area.setWidget(contents)
         outer.addWidget(area, 1)
-        intro = QLabel("Generate from your phone using saved API workflows. ComfyUI stays managed by this desktop app.")
+        intro = QLabel("Generate from your phone using saved workflows.")
         intro.setWordWrap(True)
         layout.addWidget(intro)
         form = QFormLayout()
@@ -104,10 +140,13 @@ class MobileDialog(QDialog):
         form.addRow("Mobile password", self.password)
         self.password.setEnabled(self.auth.isChecked())
         self.auth.toggled.connect(self.password.setEnabled)
-        self.default_preset = QComboBox()
+        self.default_preset = WorkflowCombo()
         self.default_preset.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self.default_preset.setMinimumContentsLength(14)
         self._refresh_presets(self.settings.default_preset)
+        self.default_preset.opened.connect(self._scan_workflows)
+        self.default_preset.activated.connect(self._local_selected)
+        self.default_preset.setToolTip(str(self.local_root))
         form.addRow("Default workflow", self.default_preset)
         layout.addLayout(form)
         self.status = QLabel()
@@ -130,12 +169,6 @@ class MobileDialog(QDialog):
         actions.addWidget(self.open)
         actions.addWidget(self.copy)
         layout.addLayout(actions)
-        note = QLabel("Use 0.0.0.0 or your VPN interface to reach this server from a phone. Set the phone hostname explicitly for VPN use. Allow the chosen port through your firewall if needed; no router or firewall rules are changed by this app. HTTPS is needed for service workers; ordinary web use works over HTTP on a trusted LAN/VPN.")
-        note.setWordWrap(True)
-        layout.addWidget(note)
-        workflow_note = QLabel("Choose a workflow on this PC and save it as the phone's default. Your previous phone selection and unsent edits are kept.")
-        workflow_note.setWordWrap(True)
-        layout.addWidget(workflow_note)
         self.import_button = QPushButton("Choose workflow file from this computer…")
         self.import_button.clicked.connect(self._import)
         layout.addWidget(self.import_button)
@@ -150,7 +183,8 @@ class MobileDialog(QDialog):
         self.workflow_status.setTextFormat(Qt.TextFormat.PlainText)
         layout.addWidget(self.workflow_status)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Apply | QDialogButtonBox.StandardButton.Close)
-        buttons.button(QDialogButtonBox.StandardButton.Apply).clicked.connect(self._apply)
+        self.apply_button = buttons.button(QDialogButtonBox.StandardButton.Apply)
+        self.apply_button.clicked.connect(self._apply)
         buttons.rejected.connect(self.reject)
         outer.addWidget(buttons)
         self.timer = QTimer(self)
@@ -163,14 +197,42 @@ class MobileDialog(QDialog):
         runtime.changed.connect(self._status)
         self._preview()
         self._status(runtime.status, runtime.url)
+        self._scan_workflows()
 
     def _refresh_presets(self, selected):
         self.default_preset.clear()
         self.default_preset.addItem("Choose a default…", "")
         for item in Presets(data_dir() / "presets").list():
             self.default_preset.addItem(item["name"], item["id"])
+        if self.local_files:
+            self.default_preset.insertSeparator(self.default_preset.count())
+            for name in self.local_files:
+                self.default_preset.addItem(name, "local:" + name)
         index = self.default_preset.findData(selected)
         self.default_preset.setCurrentIndex(max(index, 0))
+
+    def _scan_workflows(self):
+        if self.scan_worker:
+            return
+        self.scan_worker = WorkflowScan(self.local_root)
+        self.scan_worker.signals.finished.connect(self._scanned)
+        QThreadPool.globalInstance().start(self.scan_worker)
+
+    @Slot(object, str)
+    def _scanned(self, names, error):
+        self.scan_worker = None
+        if names != self.local_files:
+            self.local_files = names
+            self._refresh_presets(self.default_preset.currentData())
+        if error and not self.worker:
+            self.workflow_status.setText(error)
+
+    def _local_selected(self):
+        value = self.default_preset.currentData() or ""
+        if value.startswith("local:"):
+            name = value.removeprefix("local:")
+            if name in self.local_files:
+                self._fetch_workflow(Path(name).stem[:100], local=self.local_root / name, source=name)
 
     def _detect(self):
         self.bind.setText("0.0.0.0")
@@ -198,15 +260,24 @@ class MobileDialog(QDialog):
 
     def _save_workflow(self, name, graph, source=None):
         store = Presets(data_dir() / "presets")
-        preset = store.create(name, graph)
-        preset = store.map(preset["id"], suggested_mappings(preset["graph"]))
+        graph = graph_from(graph)
+        preset = None
         if source:
-            preset["comfy_source"] = source
-            save_json(store.path(preset["id"]), preset)
+            for item in store.list():
+                existing = store.get(item["id"])
+                if existing.get("comfy_source") == source and existing["graph"] == graph:
+                    preset = existing
+                    break
+        if preset is None:
+            preset = store.create(name, graph)
+            preset = store.map(preset["id"], suggested_mappings(preset["graph"]))
+            if source:
+                preset["comfy_source"] = source
+                save_json(store.path(preset["id"]), preset)
         self._refresh_presets(preset["id"])
-        self.workflow_status.setText("Workflow copied. Apply to save the default, then use Open in browser to map its controls once under Advanced & workflows. The phone will use the same saved mapping.")
+        self.workflow_status.setText("Workflow ready. Click Apply to use it as the default.")
 
-    def _fetch_workflow(self, name, editor=None, catalog=False, saved=None):
+    def _fetch_workflow(self, name, editor=None, catalog=False, saved=None, local=None, source=None):
         if self.worker:
             return
         try:
@@ -215,13 +286,15 @@ class MobileDialog(QDialog):
             self.workflow_status.setText(str(exc))
             return
         self.import_name = name
-        self.import_source = saved
+        self.import_source = saved or source
         self.loading_catalog = catalog
         self.import_button.setEnabled(False)
         self.queued_button.setEnabled(False)
         self.catalog_button.setEnabled(False)
+        self.default_preset.setEnabled(False)
+        self.apply_button.setEnabled(False)
         self.workflow_status.setText("Reading saved ComfyUI workflows…" if catalog else "Reading workflow from ComfyUI…")
-        self.worker = WorkflowFetch(self.comfy_url.text().strip(), editor, catalog, saved)
+        self.worker = WorkflowFetch(self.comfy_url.text().strip(), editor, catalog, saved, local)
         self.worker.signals.finished.connect(self._workflow_loaded)
         QThreadPool.globalInstance().start(self.worker)
 
@@ -231,7 +304,10 @@ class MobileDialog(QDialog):
         self.import_button.setEnabled(True)
         self.queued_button.setEnabled(True)
         self.catalog_button.setEnabled(True)
+        self.default_preset.setEnabled(True)
+        self.apply_button.setEnabled(True)
         if error:
+            self.apply_after_import = False
             self.workflow_status.setText(error)
             return
         if self.loading_catalog:
@@ -247,6 +323,11 @@ class MobileDialog(QDialog):
             self._save_workflow(self.import_name, graph, self.import_source)
         except (ValueError, OSError) as exc:
             self.workflow_status.setText(str(exc))
+            self.apply_after_import = False
+            return
+        if self.apply_after_import:
+            self.apply_after_import = False
+            self._apply()
 
     def _preview(self):
         try:
@@ -274,6 +355,11 @@ class MobileDialog(QDialog):
         self._preview()
 
     def _apply(self):
+        selected = self.default_preset.currentData() or ""
+        if selected.startswith("local:"):
+            self.apply_after_import = True
+            self._local_selected()
+            return
         try:
             settings = MobileSettings(
                 enabled=self.enabled.isChecked(), bind=self.bind.text().strip(), port=self.port.value(),

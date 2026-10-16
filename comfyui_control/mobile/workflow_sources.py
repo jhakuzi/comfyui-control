@@ -1,11 +1,30 @@
 """Read saved workflows; prefer exact API snapshots and validate metadata conversion."""
 import asyncio
 import json
+import os
 from copy import deepcopy
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from urllib.parse import quote
 
 from .workflows import graph_from
+
+
+def local_workflow_files(root):
+    """Discover local JSON files without reading their contents or following symlinks."""
+    root = Path(root)
+    result, count = [], 0
+    if not root.is_dir():
+        return result
+    for folder, directories, files in os.walk(root, followlinks=False):
+        directories[:] = sorted(d for d in directories if not (Path(folder) / d).is_symlink())
+        for name in sorted(files):
+            count += 1
+            path = Path(folder) / name
+            if path.suffix.lower() == ".json" and not path.is_symlink():
+                result.append(str(path.relative_to(root)))
+            if count >= 10000 or len(result) >= 500:
+                return sorted(result)
+    return sorted(result)
 
 
 def editor_signature(workflow):
@@ -54,7 +73,38 @@ def editor_to_api(editor, info):
         raise ValueError("This workflow needs ComfyUI's API export (subgraphs or unsupported editor data).")
     if any(not isinstance(n, dict) or type(n.get("id")) not in (str, int) for n in nodes) or len({str(n['id']) for n in nodes}) != len(nodes):
         raise ValueError("Saved workflow nodes need unique IDs.")
-    links = {link[0]: link for link in editor.get("links", []) if isinstance(link, list) and len(link) >= 6}
+    links = {}
+    for link in editor.get("links", []):
+        if isinstance(link, dict):
+            keys = ("id", "origin_id", "origin_slot", "target_id", "target_slot", "type")
+            if not all(key in link for key in keys):
+                raise ValueError("Saved workflow contains an incomplete link.")
+            link = [link[key] for key in keys]
+        if not isinstance(link, list) or len(link) < 6:
+            raise ValueError("Saved workflow contains an unsupported link.")
+        links[str(link[0])] = link
+    connections_by_node = {}
+    for node in nodes:
+        node_id, connections = str(node["id"]), {}
+        for slot, entry in enumerate(node.get("inputs", [])):
+            if entry.get("link") is None:
+                continue
+            link = links.get(str(entry["link"]))
+            if not link or str(link[3]) != node_id or link[4] != slot:
+                raise ValueError(f"Node {node_id}: invalid saved connection.")
+            connections[entry["name"]] = [str(link[1]), link[2]]
+        connections_by_node[node_id] = connections
+    roots = [str(node["id"]) for node in nodes if info.get(node.get("type"), {}).get("output_node") is True]
+    required_nodes, pending = set(), list(roots)
+    while pending:
+        current = pending.pop()
+        if current in required_nodes:
+            continue
+        required_nodes.add(current)
+        pending.extend(value[0] for value in connections_by_node.get(current, {}).values())
+    # Older/custom metadata may omit output flags; keep strict validation then.
+    if not roots:
+        required_nodes = set(connections_by_node)
     for node in nodes:
         name, node_id = node.get("type"), str(node.get("id"))
         if node.get("mode", 0) != 0 or name not in info:
@@ -64,14 +114,7 @@ def editor_to_api(editor, info):
         values = deepcopy(node.get("widgets_values", []))
         if not isinstance(values, (list, dict)):
             raise ValueError(f"Node {node_id}: unsupported widget serialization; export in API format.")
-        connections = {}
-        for slot, entry in enumerate(node.get("inputs", [])):
-            if entry.get("link") is None:
-                continue
-            link = links.get(entry["link"])
-            if not link or str(link[3]) != node_id or link[4] != slot:
-                raise ValueError(f"Node {node_id}: invalid saved connection.")
-            connections[entry["name"]] = [str(link[1]), link[2]]
+        connections = connections_by_node[node_id]
         inputs, index = {}, 0
         for key, definition in fields.items():
             if not isinstance(definition, (list, tuple)) or not definition:
@@ -103,8 +146,8 @@ def editor_to_api(editor, info):
                 inputs[key] = value
             if key in connections:
                 inputs[key] = connections[key]
-            elif key in schema.get("required", {}) and key not in inputs:
-                raise ValueError(f"Node {node_id}: missing required input {key}.")
+            elif node_id in required_nodes and key in schema.get("required", {}) and key not in inputs:
+                raise ValueError(f"Node {node_id} ({name}): required input '{key}' is not connected in this saved workflow. Connect it in ComfyUI and save again, or use an API-format export.")
         if (isinstance(values, list) and index != len(values)) or (isinstance(values, dict) and values) or set(connections) - set(fields):
             raise ValueError(f"Node {node_id}: custom widgets need ComfyUI's API export or an exact queued snapshot.")
         graph[node_id] = {"class_type": name, "inputs": inputs, "_meta": {"title": node.get("title", name)}}

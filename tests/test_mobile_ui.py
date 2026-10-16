@@ -149,7 +149,56 @@ def test_desktop_queued_workflow_fetch_keeps_qt_responsive(app,tmp_path,monkeypa
         app.processEvents()
         assert dialog.worker is None and ticks>1
         assert dialog.default_preset.currentData()
-        assert 'Workflow copied' in dialog.workflow_status.text()
+        assert 'Workflow ready' in dialog.workflow_status.text()
         dialog.close()
         await server.close()
     asyncio.run(scenario())
+
+
+def test_default_picker_scans_local_workflows_and_imports_without_comfy(app,tmp_path,monkeypatch):
+    import json
+    from PySide6.QtWidgets import QLabel
+    from comfyui_control.mobile.workflows import Presets
+    monkeypatch.setenv('XDG_CONFIG_HOME',str(tmp_path/'config'))
+    install=tmp_path/'ComfyUI'
+    root=install/'user/default/workflows'
+    (root/'portraits').mkdir(parents=True)
+    graph={'custom-id':{'class_type':'ModelLoader','inputs':{'unet_name':'flux.gguf'}}}
+    source=root/'portraits/Flux.json'
+    source.write_text(json.dumps(graph))
+    (root/'readme.txt').write_text('not a workflow')
+    dialog=MobileDialog(MobileRuntime(),Config(comfy_dir=str(install)))
+    def drain(predicate):
+        end=time.monotonic()+5
+        while predicate() and time.monotonic()<end:
+            app.processEvents()
+            time.sleep(.01)
+        app.processEvents()
+        assert not predicate()
+    drain(lambda: dialog.scan_worker is not None)
+    index=dialog.default_preset.findData('local:portraits/Flux.json')
+    assert index>0
+    assert all('HTTPS is needed for service workers' not in label.text() for label in dialog.findChildren(QLabel))
+    dialog.default_preset.setCurrentIndex(index)
+    dialog.default_preset.activated.emit(index)
+    assert not dialog.apply_button.isEnabled()
+    drain(lambda: dialog.worker is not None)
+    selected=dialog.default_preset.currentData()
+    assert selected and not selected.startswith('local:')
+    store=Presets(tmp_path/'config/comfyui-control/mobile/presets')
+    assert store.get(selected)['graph']==graph and json.loads(source.read_text())==graph
+    with patch.object(dialog.runtime,'configure'):
+        dialog._apply()
+    assert MobileSettings.load().default_preset==selected
+    # Repeat selection preserves the preset and any input mappings, rather than duplicating it.
+    index=dialog.default_preset.findData('local:portraits/Flux.json')
+    dialog.default_preset.setCurrentIndex(index)
+    dialog.default_preset.activated.emit(index)
+    drain(lambda: dialog.worker is not None)
+    assert dialog.default_preset.currentData()==selected and len(store.list())==1
+    (root/'New.json').write_text(json.dumps(graph))
+    dialog._scan_workflows()
+    drain(lambda: dialog.scan_worker is not None)
+    assert dialog.default_preset.findData('local:New.json')>0
+    assert dialog.default_preset.currentData()==selected
+    dialog.close()

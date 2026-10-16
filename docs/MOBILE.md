@@ -1,7 +1,7 @@
 # Mobile WebUI — preliminary testing
 
 This feature is integrated into the desktop app on **`testing/mobile-webui`**
-(`0.9.0.dev3`). It is not in the stable COPR release. No separate service or
+(`0.9.0.dev4`). It is not in the stable COPR release. No separate service or
 mobile installation is required. Keep the desktop app open while using it.
 
 ## Try it without replacing your stable installation
@@ -64,8 +64,14 @@ intentional localhost-only choice stays unchanged.
 
 ## Choose a workflow on the PC or from ComfyUI
 
-In the desktop **Mobile WebUI…** dialog, choose **Default workflow**, then Apply.
-Use any of these buttons to add one:
+In the desktop **Mobile WebUI…** dialog, **Default workflow** automatically lists
+JSON files in your selected installation's `user/default/workflows/`, including
+subfolders. Reopening the picker refreshes the list. Select a file, wait for it
+to import, then click **Apply**. Existing mobile presets are listed too.
+
+Discovery works with ComfyUI offline. Importing node-editor files needs a running
+ComfyUI for its node metadata; API-format files can be imported offline.
+Alternatively, use these buttons:
 
 - **Browse workflows saved in ComfyUI…** reads the same server-side files used
   by ComfyUI's Workflows menu. ComfyUI must be running.
@@ -95,6 +101,12 @@ API export. An ambiguous import is refused with instructions rather than guessin
 For those workflows, queue the saved version once in ComfyUI and reselect it,
 or export API format. Uploading raw API JSON in **Advanced & workflows → Import
 workflow** remains supported.
+
+Required connections are checked on branches leading to output nodes, matching
+ComfyUI. Unused decoder nodes with empty inputs are preserved without blocking
+valid branches. If an active node is missing `samples` or another required input,
+connect it in ComfyUI and save again, or import an API-format export. The importer
+does not invent connections or overwrite the original file.
 
 ### Models and generation controls
 

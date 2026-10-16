@@ -1,6 +1,6 @@
 Name:           comfyui-control
 Version:        0.9.0
-Release:        0.3.dev3%{?dist}
+Release:        0.4.dev4%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
 License:        MIT
@@ -62,6 +62,10 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Fri Oct 16 2026 ComfyUI Control contributors - 0.9.0-0.4.dev4
+- Discover local saved workflows in the default picker and simplify the mobile dialog.
+- Preserve unused nodes without requiring inputs outside executable output branches.
+
 * Fri Oct 16 2026 ComfyUI Control contributors - 0.9.0-0.3.dev3
 - Auto LAN addressing, optional authentication, saved/default workflows and model/sampler/resolution controls.
 

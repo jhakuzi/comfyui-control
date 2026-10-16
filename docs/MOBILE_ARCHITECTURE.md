@@ -87,6 +87,13 @@ the only new runtime dependencies; QR generation does not require Pillow.
 ## Verification performed
 
 - Existing desktop/config/controller tests and new mobile tests run together.
+- The desktop picker discovers nested local workflow files without a running
+  ComfyUI, imports API JSON offline, refreshes newly saved files, and reuses an
+  unchanged preset. Tests reject symlink escapes and check that source JSON is
+  untouched. Required-input checks retain valid saved links, accept unused
+  decoders, and reject missing connections on active branches with a clear error.
+- Real ComfyUI also generated two model-free images from a saved workflow with
+  an unused, unconnected VAEDecode node 43 retained in the imported graph.
 - Tests cover automatic LAN defaults and migration, optional LAN authentication,
   PC default-workflow selection, background desktop imports, saved catalog path
   confinement, three model selectors, sampler/CFG/steps sliders, and calculator
@@ -138,8 +145,8 @@ The separate manual browser checks need Playwright/Chromium. SSE progress
 snapshots omit prompt/control values; full job details are fetched on new jobs
 and image changes rather than on every progress event. Packaging must
 include `mobile/web/*` in the wheel/app ZIP and `aiohttp`/`qrcode` in Fedora
-dependencies. The Python development version is `0.9.0.dev3`; RPM uses
-`0.9.0-0.3.dev3`, so a later stable `0.9.0-1` sorts above it.
+dependencies. The Python development version is `0.9.0.dev4`; RPM uses
+`0.9.0-0.4.dev4`, so a later stable `0.9.0-1` sorts above it.
 
 Optional, reproducible manual checks from the repository root:
 
@@ -178,3 +185,11 @@ Saved catalog/editor conversion smoke check against an already running ComfyUI:
 This creates then removes one uniquely named temporary saved workflow and leaves
 its two small generated images in output. The optional browser control check is
 `tests/manual/mobile_workflows_browser.py` (requires pytest and Playwright).
+Add `--unused-decoder` to verify that an unused VAEDecode node with unconnected
+inputs survives conversion and does not block the real ComfyUI output branch.
+
+The desktop default picker scans `user/default/workflows/` in its Qt thread pool;
+it reads only the selected JSON file, importing an API graph offline or using the
+existing metadata converter for editor JSON. No filesystem endpoint is added.
+Conversion validates required connections upstream of metadata-declared output
+nodes; if output metadata is absent, it keeps strict validation of all nodes.

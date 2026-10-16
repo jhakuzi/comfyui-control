@@ -133,3 +133,58 @@ def test_saved_catalog_is_confined_and_import_reuses_mappings(tmp_path,flux_save
         finally:
             await client.close()
     asyncio.run(scenario())
+
+
+def test_unused_decoder_does_not_block_a_valid_output_branch():
+    editor={'nodes':[
+        {'id':1,'type':'Canvas','widgets_values':[]},
+        {'id':2,'type':'Saver','inputs':[{'name':'images','link':1}],'widgets_values':[]},
+        {'id':43,'type':'Decoder','inputs':[{'name':'samples','link':None},{'name':'vae','link':None}],'widgets_values':[]},
+    ],'links':[[1,1,0,2,0,'IMAGE']]}
+    info={
+        'Canvas':{'input':{'required':{}},'output_node':False},
+        'Saver':{'input':{'required':{'images':['IMAGE']}},'output_node':True},
+        'Decoder':{'input':{'required':{'samples':['LATENT'],'vae':['VAE']}},'output_node':False},
+    }
+    original=deepcopy(editor)
+    graph=editor_to_api(editor,info)
+    assert graph['43']['inputs']=={} and graph['2']['inputs']['images']==['1',0]
+    assert editor==original
+
+
+def test_connected_decoder_input_is_preserved_and_missing_active_input_is_clear():
+    editor={'nodes':[
+        {'id':1,'type':'Latent','widgets_values':[]},
+        {'id':43,'type':'Decoder','inputs':[{'name':'samples','link':'2'}],'widgets_values':[]},
+        {'id':9,'type':'Save','inputs':[{'name':'images','link':'3'}],'widgets_values':[]},
+    ],'links':[
+        {'id':2,'origin_id':1,'origin_slot':0,'target_id':43,'target_slot':0,'type':'LATENT'},
+        {'id':3,'origin_id':43,'origin_slot':0,'target_id':9,'target_slot':0,'type':'IMAGE'},
+    ]}
+    info={
+        'Latent':{'input':{'required':{}},'output_node':False},
+        'Decoder':{'input':{'required':{'samples':['LATENT']}},'output_node':False},
+        'Save':{'input':{'required':{'images':['IMAGE']}},'output_node':True},
+    }
+    graph=editor_to_api(editor,info)
+    assert graph['43']['inputs']['samples']==['1',0]
+    assert graph['9']['inputs']['images']==['43',0]
+    editor['nodes'][1]['inputs'][0]['link']=None
+    with pytest.raises(ValueError,match="Node 43 .*required input 'samples' is not connected"):
+        editor_to_api(editor,info)
+
+
+def test_local_scan_ignores_non_json_and_symlink_escapes(tmp_path):
+    from comfyui_control.mobile.workflow_sources import local_workflow_files
+    root=tmp_path/'workflows'
+    (root/'nested').mkdir(parents=True)
+    (root/'A.json').write_text('{}')
+    (root/'nested/B.JSON').write_text('{}')
+    (root/'ignore.txt').write_text('text')
+    (root/'outside.json').symlink_to(tmp_path/'private.json')
+    external=tmp_path/'external'
+    external.mkdir()
+    (external/'secret.json').write_text('{}')
+    (root/'escape').symlink_to(external,target_is_directory=True)
+    assert local_workflow_files(root)==['A.json','nested/B.JSON']
+    assert local_workflow_files(tmp_path/'missing')==[]

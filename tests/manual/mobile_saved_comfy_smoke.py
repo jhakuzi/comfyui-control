@@ -15,7 +15,7 @@ from PySide6.QtGui import QImage
 from comfyui_control.mobile.settings import MobileSettings
 from comfyui_control.mobile.service import MobileService
 
-async def check(url):
+async def check(url, unused_decoder=False):
     name='mobile-editor-smoke-'+uuid.uuid4().hex+'.json'
     api=json.loads((REPO/'examples/mobile-smoke-api.json').read_text())
     api['save']['inputs']['filename_prefix'] += '-editor-'+uuid.uuid4().hex[:8]
@@ -24,6 +24,10 @@ async def check(url):
         {'id':'upscale','type':'ImageScale','inputs':[{'name':'image','link':1}], 'widgets_values':['lanczos',128,128,'disabled']},
         {'id':'save','type':'SaveImage','inputs':[{'name':'images','link':2}], 'widgets_values':[api['save']['inputs']['filename_prefix']]},
         ],'links':[[1,'canvas',0,'upscale',0,'IMAGE'],[2,'upscale',0,'save',0,'IMAGE']]}
+    if unused_decoder:
+        editor['nodes'].append({'id':43,'type':'VAEDecode','inputs':[
+            {'name':'samples','link':None},{'name':'vae','link':None}],'widgets_values':[]})
+        api['43']={'class_type':'VAEDecode','inputs':{}}
     endpoint=url.rstrip('/')+'/userdata/'+quote('workflows/'+name,safe='')
     async with aiohttp.ClientSession() as session:
         async with session.post(endpoint,params={'overwrite':'false'},json=editor) as response:
@@ -56,6 +60,8 @@ async def check(url):
                     async with session.get(endpoint) as response:
                         assert await response.json(content_type=None)==editor
                     print('PASS: real ComfyUI saved-workflow catalog, metadata conversion, preserved links/source, auto-mapped controls, and 2 generated/upscaled images.')
+                    if unused_decoder:
+                        print('PASS: unconnected VAEDecode node 43 is preserved without blocking the valid output branch.')
                     print('No diffusion/LoRA inference; only the temporary workflow is removed. Smoke images remain in ComfyUI output.')
                 finally:
                     await service.stop()
@@ -66,4 +72,6 @@ async def check(url):
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--comfy-url',default='http://127.0.0.1:8188')
-    asyncio.run(check(parser.parse_args().comfy_url))
+    parser.add_argument('--unused-decoder',action='store_true',help='Include unused node 43 with unconnected samples/vae inputs.')
+    args=parser.parse_args()
+    asyncio.run(check(args.comfy_url,args.unused_decoder))
