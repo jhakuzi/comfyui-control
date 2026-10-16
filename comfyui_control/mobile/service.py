@@ -492,6 +492,23 @@ class MobileService:
         return [{**item, "job": item.get("job") if owner is None or self.jobs.get(item.get("job"), {}).get("owner") == owner else None}
                 for item in ordered[:200]]
 
+    async def image_parameters(self, identifier, owner=None):
+        from .image_metadata import parameters, png_parameters
+        item = self.images.get(identifier)
+        if not item:
+            raise ValueError('Image is no longer available. Refresh the gallery.')
+        job = self.jobs.get(item.get('job'))
+        if job:
+            # Gallery files are shared, but another browser's job metadata isn't.
+            if owner is not None and job.get('owner') != owner:
+                return []
+            return parameters(job.get('controls',[]),job.get('values',{}))
+        path = self.local_image(item)
+        try:
+            return await asyncio.to_thread(png_parameters,path,self.info)
+        except OSError:
+            return []
+
     def local_image(self, item):
         if item.get("type") != "output":
             return None

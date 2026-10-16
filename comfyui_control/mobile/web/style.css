@@ -465,6 +465,106 @@ details details {
   font-size: 0.8rem;
   color: var(--muted);
 }
+.comparison-actions {
+  margin-bottom: 16px;
+  position: sticky;
+  top: 8px;
+  z-index: 1;
+  background: var(--bg);
+  padding: 8px 0;
+}
+.image-grid button.comparison-selected {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+}
+.comparison-selected::after {
+  content: attr(data-comparison-label);
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: var(--accent);
+  color: var(--accent-text);
+  border-radius: 8px;
+  padding: 4px 12px;
+  font-weight: 700;
+}
+.compare-viewport {
+  --split: 50%;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  max-height: 55dvh;
+  background: #101116;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  touch-action: none;
+}
+.compare-viewport img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+#compare-a {
+  clip-path: inset(0 calc(100% - var(--split)) 0 0);
+  background: #101116;
+}
+.compare-label {
+  position: absolute;
+  top: 8px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: #101116dc;
+}
+.compare-label-a { left: 8px; }
+.compare-label-b { right: 8px; }
+.compare-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--split);
+  width: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.compare-divider span {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  text-align: center;
+  line-height: 42px;
+  background: #1b1d24e8;
+}
+.compare-parameters {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+.compare-parameters caption {
+  text-align: left;
+  margin: 18px 0 8px;
+  font-weight: 600;
+}
+.compare-parameters th,
+.compare-parameters td {
+  text-align: left;
+  padding: 9px 6px;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.parameter-difference td {
+  background: #e7f67b12;
+  color: var(--accent);
+}
 .preview {
   width: 100%;
   max-height: 480px;

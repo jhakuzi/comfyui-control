@@ -22,7 +22,7 @@ from .settings import check_password, lan_address
 ASSETS = Path(__file__).with_name("web")
 ICON = Path(__file__).parents[1] / "assets" / "comfyui-control.png"
 OWNER = web.RequestKey("mobile_owner", str) if hasattr(web, "RequestKey") else "mobile_owner"
-PUBLIC = {"/", "/app.js", "/style.css", "/manifest.webmanifest", "/sw.js", "/icon.png", "/icon-192.png", "/icon-512.png", "/api/login", "/api/session"}
+PUBLIC = {"/", "/app.js", "/comparison.js", "/style.css", "/manifest.webmanifest", "/sw.js", "/icon.png", "/icon-192.png", "/icon-512.png", "/api/login", "/api/session"}
 
 
 def json_response(value, **kwargs):
@@ -213,6 +213,9 @@ class MobileHTTP:
     async def gallery(self, request):
         return json_response(await self.service.gallery(owner=request[OWNER]))
 
+    async def image_parameters(self, request):
+        return json_response(await self.service.image_parameters(request.match_info['id'],request[OWNER]))
+
     async def image(self, request):
         item = self.service.images.get(request.match_info["id"])
         if not item:
@@ -336,6 +339,7 @@ class MobileHTTP:
             web.post('/api/presets/{id}/models', self.refresh_models),
             web.post('/api/generate', self.generate), web.post('/api/jobs/{id}/cancel', self.cancel),
             web.get('/api/gallery', self.gallery), web.get('/api/images/{id}', self.image), web.get('/api/preview', self.preview),
+            web.get('/api/images/{id}/parameters', self.image_parameters),
         ])
         for path in PUBLIC - {"/api/login", "/api/session"}:
             app.router.add_get(path, self.asset)

@@ -3,6 +3,7 @@ const CACHE = "comfy-control-mobile-0.9.0";
 const SHELL = [
   "/",
   "/app.js",
+  "/comparison.js",
   "/style.css",
   "/icon.png",
   "/manifest.webmanifest",

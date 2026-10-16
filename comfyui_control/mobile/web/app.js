@@ -805,6 +805,7 @@ function renderImages(container, items) {
   items.forEach((item, index) => {
     const button = node("button");
     button.type = "button";
+    button.dataset.imageId = item.id;
     button.setAttribute("aria-label", "View " + item.filename);
     const image = node("img");
     image.src = item.thumbnail || item.url;
@@ -821,7 +822,10 @@ function renderImages(container, items) {
       container.dataset.signature = "";
     });
     button.append(image);
-    button.addEventListener("click", () => openImage(items, index));
+    button.addEventListener("click", () => {
+      if (container.id === "gallery-grid" && comparison.choose(item)) return;
+      openImage(items, index);
+    });
     container.append(button);
   });
 }
@@ -830,6 +834,7 @@ async function loadGallery() {
   try {
     gallery = await api("/api/gallery");
     renderImages($("gallery-grid"), gallery);
+    comparison.gallery(gallery);
     $("gallery-empty").hidden = !!gallery.length;
   } catch (error) {
     notice(error.message);
@@ -1230,6 +1235,9 @@ $("logout").addEventListener(
   "click",
   guarded(async () => {
     await api("/api/logout", { method: "POST", body: "{}" });
+    comparison.selected = [];
+    comparison.selecting = false;
+    comparison.update();
     pauseConnection();
     try {
       for (const key of Object.keys(localStorage))
@@ -1288,5 +1296,6 @@ function connectionFailure(error) {
   updateGenerate();
   scheduleRecovery();
 }
+const comparison = new ImageComparison({ api, notice, read: readStore, write: writeStore });
 $("reconnect").addEventListener("click", foreground);
 bootstrap().catch(connectionFailure);

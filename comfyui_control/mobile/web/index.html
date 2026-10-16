@@ -21,6 +21,7 @@
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <link rel="icon" href="/icon.png" />
     <link rel="stylesheet" href="/style.css" />
+    <script src="/comparison.js" defer></script>
     <script src="/app.js" defer></script>
     <title>comfyui-control Mobile</title>
   </head>
@@ -219,6 +220,10 @@
           <p class="hint">
             Recent images from ComfyUI output. Tap an image to view or save it.
           </p>
+          <div class="actions comparison-actions">
+            <button id="select-compare" type="button" aria-pressed="false">Select two images</button>
+            <button id="compare-images" type="button" disabled>Compare · 0/2</button>
+          </div>
           <div id="gallery-grid" class="image-grid"></div>
           <p id="gallery-empty" class="hint" hidden>
             No images yet. Your next idea starts in Create.
@@ -240,6 +245,34 @@
       </div>
       <p id="notice" role="alert" hidden></p>
     </main>
+    <dialog id="compare-dialog" aria-labelledby="compare-title">
+      <div class="viewer">
+        <div class="heading">
+          <h2 id="compare-title">Compare images</h2>
+          <button id="close-compare" class="small" type="button">Close comparison</button>
+        </div>
+        <div id="compare-viewport" class="compare-viewport">
+          <img id="compare-b" alt="Image B" />
+          <img id="compare-a" alt="Image A" />
+          <span class="compare-label compare-label-a">A</span>
+          <span class="compare-label compare-label-b">B</span>
+          <div class="compare-divider" aria-hidden="true"><span>↔</span></div>
+        </div>
+        <p id="compare-error" class="hint" role="status" hidden></p>
+        <label for="compare-slider">Reveal image A</label>
+        <input id="compare-slider" type="range" min="0" max="100" step="1" value="50" aria-label="Image comparison divider" />
+        <div class="actions">
+          <button id="swap-compare" type="button">Swap A / B</button>
+          <button id="reset-compare" type="button">Center divider</button>
+        </div>
+        <p class="hint">Images keep their proportions in a shared, centered view. Different parameters are highlighted.</p>
+        <table class="compare-parameters">
+          <caption>Generation parameters</caption>
+          <thead><tr><th scope="col">Parameter</th><th scope="col">A</th><th scope="col">B</th></tr></thead>
+          <tbody id="compare-parameters"></tbody>
+        </table>
+      </div>
+    </dialog>
     <dialog id="image-dialog">
       <div class="viewer">
         <div class="heading">
