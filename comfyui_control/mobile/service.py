@@ -127,7 +127,7 @@ class MobileService:
         if include_details:
             public = [self.public_job(job) for job in jobs]
         else:
-            keys = {"id", "status", "progress", "prompt_id", "position", "preset_name", "error"}
+            keys = {"id", "status", "phase", "progress", "prompt_id", "position", "preset_name", "error"}
             public = [{**{k: v for k, v in job.items() if k in keys}, "image_count": len(job.get("images", []))} for job in jobs]
         preview_allowed = owner is None or any(j["id"] == self.preview_job for j in jobs)
         return json_safe({"instance": self.instance_id, "version": self.state_version,
@@ -217,7 +217,7 @@ class MobileService:
             # Journal before the network request. A lost response never retries a prompt blindly.
             job = {"id": request_id, "owner": owner, "scope": self.output_scope, "preset": preset["id"], "preset_name": preset["name"], "revision": revision(preset),
                    "values": actual, "disabled_loras": body.get("disabled_loras", []), "created": time.time(),
-                   "status": "submitting", "progress": None, "images": [], "prompt_id": None}
+                   "status": "submitting", "phase": "preparing", "progress": None, "images": [], "prompt_id": None}
             job["controls"] = [{k: field[k] for k in ("key", "label", "role", "kind")} for field in fields_for(preset, info)]
             self.jobs[request_id] = job
             self.persist()
@@ -403,15 +403,20 @@ class MobileService:
                                 if job:
                                     if kind in {"execution_start", "executing"}:
                                         job["status"] = "running"
+                                    if kind == "execution_start":
+                                        job.update(phase="preparing", sampled=False, progress=None)
                                     if kind == "executing":
                                         if job.get("node") != data.get("node"):
                                             job["progress"] = None
+                                        job["phase"] = "processing" if job.get("sampled") or data.get("node") is None else "preparing"
                                         job["node"] = data.get("node")
                                     if kind == "progress":
+                                        job.update(status="running", phase="sampling", sampled=True)
                                         job["progress"] = {"value": data.get("value", 0), "max": data.get("max", 1)}
                                     if kind == "progress_state":
                                         active = [n for n in data.get("nodes", {}).values() if n.get("state") == "running" and n.get("max", 0) > 0]
                                         if active:
+                                            job.update(status="running", phase="sampling", sampled=True)
                                             job["progress"] = {"value": active[-1].get("value", 0), "max": active[-1]["max"]}
                                     if kind in {"execution_error", "execution_interrupted"}:
                                         job.update(status="failed", error=str(data.get("exception_message", "Generation interrupted."))[:2500])

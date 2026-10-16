@@ -10,7 +10,7 @@ const activeStatuses = new Set([
 let preset = null,
   draft = {},
   disabledLoras = new Set(),
-  randomSeed = false;
+  randomSeed = true;
 let state = { jobs: [], online: false },
   selectedJob = null,
   events = null,
@@ -119,6 +119,7 @@ function saveDraft() {
       fields: preset.fields.map(({ key, node, input, role, kind }) => ({ key, node, input, role, kind })),
       values: draft,
       randomSeed,
+      seedPreferenceVersion: 1,
       disabledLoras: [...disabledLoras],
       mappings: [...mappingDraft.values()],
     });
@@ -312,7 +313,10 @@ async function choosePreset(id, reuse) {
         : field.default,
     ]),
   );
-  randomSeed = compatible ? !!stored.randomSeed : false;
+  // Older drafts saved the old fixed-seed default without recording a choice.
+  // Adopt randomization once; keep subsequent choices and explicit Same seed reuse.
+  randomSeed = compatible && (reuse || stored.seedPreferenceVersion === 1) && typeof stored.randomSeed === "boolean"
+    ? stored.randomSeed : true;
   disabledLoras = new Set(compatible ? stored.disabledLoras || [] : []);
   mappingDraft = new Map(
     (same && Array.isArray(stored.mappings)
@@ -506,18 +510,21 @@ function renderFields() {
         "check-label wide",
       ),
       toggle = node("input");
+    const hint = node("p", "With a fixed seed, unchanged settings may reuse the previous image.", "hint wide");
+    hint.hidden = randomSeed;
     toggle.type = "checkbox";
     toggle.id = "random-seed";
     toggle.checked = randomSeed;
     toggle.addEventListener("change", () => {
       randomSeed = toggle.checked;
+      hint.hidden = randomSeed;
       document.querySelectorAll('[data-role="seed"]').forEach((input) => {
         input.disabled = randomSeed;
       });
       saveDraft();
     });
     label.prepend(toggle);
-    $("basic-controls").append(label);
+    $("basic-controls").append(label, hint);
   }
   $("settings-card").hidden = !basics.length;
   const resolution = preset.fields.filter((field) =>
@@ -755,7 +762,9 @@ function applyState(value) {
     const titles = {
       submitting: "Sending your idea…",
       queued: "In the queue",
-      running: "Creating your image",
+      running: job.progress ? "Creating your image"
+        : job.phase === "processing" ? "Processing workflow…"
+        : "Preparing / loading models…",
       complete: "Your image is ready",
       failed: "Generation stopped",
       cancelled: "Generation cancelled",
@@ -771,11 +780,18 @@ function applyState(value) {
           ? "The submission response was lost. Reconnecting will check ComfyUI before another request is sent."
           : job.status === "running" && job.progress
             ? `${job.progress.value} / ${job.progress.max} steps · ${job.preset_name}`
-            : job.preset_name);
-    $("progress").hidden = !job.progress || job.status !== "running";
-    if (job.progress) {
+            : job.status === "running"
+              ? job.phase === "processing"
+                ? `Preparing another stage or saving results · ${job.preset_name}`
+                : `Preparing the workflow; models may take a while to load · ${job.preset_name}`
+              : job.preset_name);
+    $("progress").hidden = !["submitting", "queued", "running", "cancelling"].includes(job.status);
+    $("progress").setAttribute("aria-label", $("job-title").textContent);
+    if (job.status === "running" && job.progress) {
       $("progress").max = job.progress.max || 1;
       $("progress").value = job.progress.value || 0;
+    } else {
+      $("progress").removeAttribute("value"); // Indeterminate: never invent a loading percentage.
     }
     $("cancel").hidden = !["queued", "running"].includes(job.status);
     $("new-request").hidden = job.status !== "unknown";

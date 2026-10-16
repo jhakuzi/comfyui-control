@@ -67,6 +67,12 @@ async def main():
         await page.locator('#preset').select_option(preset['id'])
         await page.locator('textarea').first.wait_for()
         await page.locator('textarea').first.fill('A luminous library in the mountains')
+        await expect(page.locator('#random-seed')).to_be_checked()
+        # Fixed seeds remain an explicit choice, including exact 64-bit values.
+        await page.locator('#settings-card').evaluate('(el)=>el.open=true')
+        await page.locator('#random-seed').uncheck()
+        await page.locator('#settings-card').evaluate('(el)=>el.open=false')
+        await page.evaluate('window.scrollTo(0,0)')
         await page.screenshot(path=str(OUT/'mobile-create.png'),full_page=True)
         for width in (320,375,390,430,768,1200):
           await page.set_viewport_size({'width':width,'height':900})
@@ -91,6 +97,10 @@ async def main():
         stub.running,stub.pending=stub.pending,[]
         job=list(service.jobs.values())[-1]
         await stub.emit('execution_start',{'prompt_id':job['prompt_id']})
+        await stub.emit('executing',{'prompt_id':job['prompt_id'],'node':'model'})
+        await expect(page.locator('#job-title')).to_have_text('Preparing / loading models…')
+        await expect(page.locator('#generation-dock #progress')).to_be_visible()
+        assert await page.locator('#progress').evaluate('(el)=>el.matches(":indeterminate")')
         await stub.emit('progress',{'prompt_id':job['prompt_id'],'value':4,'max':20})
         png=(REPO/'comfyui_control/assets/comfyui-control.png').read_bytes()
         for ws in stub.sockets: await ws.send_bytes(struct.pack('>II',1,2)+png)
@@ -143,6 +153,7 @@ async def main():
         assert await page.locator('textarea').first.input_value()=='Unsent draft stays on this phone'
         assert await page.locator('#settings-card').evaluate('(el)=>el.open')
         assert await page.locator('#lora-card').evaluate('(el)=>el.open')
+        await expect(page.locator('#random-seed')).not_to_be_checked()
         # A separate browser profile has a distinct durable identity and draft.
         second=await browser.new_context(viewport={'width':375,'height':812},is_mobile=True,has_touch=True)
         other=await second.new_page()

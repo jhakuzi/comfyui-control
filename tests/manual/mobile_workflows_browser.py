@@ -99,6 +99,8 @@ async def main(gguf=False):
         await page.locator('[data-role="text_encoder"]').select_option('other-text.gguf')
         await page.screenshot(path=str(root/'mobile-three-models.png'),full_page=True)
         await page.locator('#settings-card').evaluate('(el)=>el.open=true')
+        await expect(page.locator('#random-seed')).to_be_checked()
+        await page.locator('#random-seed').uncheck()  # Verify explicit fixed 64-bit seeds too.
         await page.locator('[data-role="sampler"]').select_option('dpmpp_2m')
         await page.locator('[data-role="scheduler"]').select_option('karras')
         await page.locator('[data-role="steps"]').fill('32')

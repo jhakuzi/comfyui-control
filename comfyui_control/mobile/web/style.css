@@ -591,6 +591,20 @@ progress::-webkit-progress-bar {
 progress::-webkit-progress-value {
   background: var(--accent);
 }
+progress:indeterminate {
+  background: linear-gradient(100deg, #303440 20%, var(--accent) 50%, #303440 80%);
+  background-size: 200% 100%;
+  animation: preparing-progress 1.6s linear infinite;
+}
+progress:indeterminate::-webkit-progress-bar {
+  background: transparent;
+}
+@keyframes preparing-progress {
+  to { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  progress:indeterminate { animation: none; }
+}
 #notice {
   position: fixed;
   bottom: calc(12px + var(--generation-dock-height) + env(safe-area-inset-bottom));
