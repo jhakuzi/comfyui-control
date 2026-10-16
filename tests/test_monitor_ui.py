@@ -47,3 +47,39 @@ def test_launch_settings_preserve_monitor_and_recovery_preferences(app,tmp_path,
     assert dialog.result_config.monitor_expanded and dialog.result_config.auto_restart
     assert dialog.result_config.restart_limit==7
     dialog.close()
+
+
+def test_crash_summary_keeps_exit_code_and_cancels_pending_recovery(app,tmp_path,monkeypatch):
+    from PySide6.QtWidgets import QFileDialog
+    monkeypatch.setenv('XDG_CONFIG_HOME',str(tmp_path/'settings'))
+    (tmp_path/'main.py').touch()
+    config=Config(comfy_dir=str(tmp_path),monitor_expanded=True,auto_restart=True,restart_limit=7)
+    window=MainWindow(config)
+    window.show()
+    window._crashed(dict(summary='ComfyUI crashed (exit 7).'))
+    window.controller._state('restarting')
+    window._recovery('Restart attempt 1/7 in 2s')
+    assert 'exit 7' in window.crash_summary.text() and '1/7' in window.crash_summary.text()
+    assert window.cancel_recovery.isVisible()
+    window.cancel_recovery.click()
+    assert window.controller.state=='stopped'
+    monkeypatch.setattr(QFileDialog,'getExistingDirectory',lambda *a:str(tmp_path))
+    assert window._choose_folder()
+    assert window.controller.config.monitor_expanded and window.controller.config.auto_restart
+    assert window.controller.config.restart_limit==7
+    window.close()
+
+
+def test_minimized_monitor_stops_polling_and_observation(app,tmp_path,monkeypatch):
+    monkeypatch.setenv('XDG_CONFIG_HOME',str(tmp_path))
+    window=MainWindow(Config(monitor_expanded=True))
+    window.show()
+    assert window.monitor.timer.isActive()
+    window.showMinimized()
+    QTest.qWait(30)
+    assert not window.monitor.timer.isActive()
+    assert not window.monitor.last_observing
+    window.showNormal()
+    QTest.qWait(30)
+    assert window.monitor.timer.isActive()
+    window.close()

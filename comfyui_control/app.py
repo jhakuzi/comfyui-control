@@ -26,6 +26,7 @@ from .mobile.runtime import MobileRuntime
 from .mobile.settings import MobileSettings
 from .mobile_widgets import MobileDialog
 from .monitor_widgets import MonitorPanel
+from .recovery_widgets import RecoverySettings, CrashDialog
 
 
 def application_icon():
@@ -100,6 +101,8 @@ class SettingsDialog(QDialog):
         self.monitoring = QCheckBox('Show system and generation monitoring')
         self.monitoring.setChecked(config.monitoring_enabled)
         form.addRow(self.monitoring)
+        self.recovery_settings = RecoverySettings(config)
+        form.addRow('Crash recovery', self.recovery_settings)
         contents = QWidget()
         contents.setLayout(form)
         area = QScrollArea()
@@ -207,6 +210,9 @@ class SettingsDialog(QDialog):
                             self.mode.currentData() == "script" and
                             self.script.text().strip() == self.original_config.script),
             monitoring_enabled=self.monitoring.isChecked(),
+            auto_restart=self.recovery_settings.enabled.isChecked(),
+            restart_limit=self.recovery_settings.limit.value(),
+            restart_backoff=self.recovery_settings.backoff.value(),
         )
         try:
             config.validate()
@@ -318,6 +324,23 @@ class MainWindow(QMainWindow):
         self.monitor.observation_changed.connect(self._observe_generation)
         self.mobile.execution.connect(self.monitor.execution)
         layout.addWidget(self.monitor)
+        crash_row=QHBoxLayout()
+        self.crash_summary=QLabel()
+        self._crash_message = ''
+        self.crash_summary.setWordWrap(True)
+        self.crash_summary.setTextFormat(Qt.TextFormat.PlainText)
+        self.crash_log=QPushButton('View crash log…')
+        self.crash_log.clicked.connect(lambda: CrashDialog(self.controller.history,self).exec())
+        self.cancel_recovery=QPushButton('Cancel recovery')
+        self.cancel_recovery.clicked.connect(self.controller.stop)
+        crash_row.addWidget(self.crash_summary,1)
+        crash_row.addWidget(self.crash_log)
+        crash_row.addWidget(self.cancel_recovery)
+        layout.addLayout(crash_row)
+        self.crash_log.setVisible(bool(self.controller.history.entries))
+        self.cancel_recovery.hide()
+        self.controller.crashed.connect(self._crashed)
+        self.controller.recovery.connect(self._recovery)
         self.mobile.changed.connect(lambda status, url: self.mobile_status.setText(status))
         self.log = LogView()
         layout.addWidget(self.log, 1)
@@ -386,6 +409,15 @@ class MainWindow(QMainWindow):
         except OSError as exc:
             self.log.append_output(f'\nCould not save monitoring preference: {exc}\n')
 
+    def _crashed(self, entry):
+        self._crash_message = entry['summary']
+        self.crash_summary.setText(self._crash_message)
+        self.crash_log.setVisible(True)
+
+    def _recovery(self, text):
+        self.crash_summary.setText('\n'.join(filter(None, [self._crash_message, text])))
+        self.cancel_recovery.setVisible(self.controller.state == 'restarting')
+
     def _mobile_stopped(self):
         if self._closing:
             QTimer.singleShot(20, self.close)
@@ -414,7 +446,10 @@ class MainWindow(QMainWindow):
         if not path:
             return False
         # A new installation should get its own interpreter, script, and folders.
-        config = Config(comfy_dir=path)
+        previous = self.controller.config
+        config = Config(comfy_dir=path, monitoring_enabled=previous.monitoring_enabled,
+                        monitor_expanded=previous.monitor_expanded, auto_restart=previous.auto_restart,
+                        restart_limit=previous.restart_limit, restart_backoff=previous.restart_backoff)
         try:
             config.validate()
             config.save()
@@ -426,7 +461,7 @@ class MainWindow(QMainWindow):
         return True
 
     def _set_config(self, config):
-        self.controller.config = config
+        self.controller.set_config(config)
         self.monitor.configure(config)
         self.mobile.update_desktop(config, self.controller.state)
         blocked = self.update_method.blockSignals(True)
@@ -504,19 +539,19 @@ class MainWindow(QMainWindow):
             self._set_config(dialog.result_config)
 
     def _start_stop(self):
-        if self.controller.state == "stopped":
+        if self.controller.state in {'stopped','crashed'}:
             self.controller.start()
         else:
             self.controller.stop()
 
     def _state_changed(self, state):
         self.mobile.update_desktop(self.controller.config, state)
-        labels = {"stopped": "Stopped", "starting": "Starting…", "running": "Process running", "stopping": "Stopping…", "updating": "Updating…"}
+        labels = {"stopped": "Stopped", "starting": "Starting…", "running": "Process running", "stopping": "Stopping…", "updating": "Updating…", 'crashed':'Crashed', 'restarting':'Restarting…'}
         self.status.setText("●  " + labels[state])
-        color = {"stopped": "#8795a5", "running": "#48a878"}.get(state, "#d69c42")
+        color = {"stopped": "#8795a5", "running": "#48a878", 'crashed':'#d36c6c'}.get(state, "#d69c42")
         self.status.setStyleSheet(f"color: {color};")
         active = state in ("starting", "running")
-        idle = state == "stopped"
+        idle = state in {'stopped','crashed'}
         configured = bool(self.controller.config.comfy_dir.strip()) and (self.controller.config.directory / "main.py").is_file()
         self.start_stop.setText("Stop" if active else "Start")
         self.start_stop.setIcon(QIcon.fromTheme("media-playback-stop" if active else "media-playback-start"))
@@ -530,11 +565,12 @@ class MainWindow(QMainWindow):
         self.setup_button.setEnabled(idle and not self._closing)
         self.output_button.setEnabled(configured and not self._closing)
         self.models_button.setEnabled(configured and not self._closing)
+        self.cancel_recovery.setVisible(state == 'restarting')
         if self._closing and idle:
             QTimer.singleShot(0, self.close)
 
     def _problem(self, message):
-        if not self._closing:
+        if not self._closing and self.controller.state not in {'crashed','restarting'}:
             QMessageBox.warning(self, "ComfyUI Control", message)
 
     def _update(self):
@@ -562,7 +598,10 @@ class MainWindow(QMainWindow):
             self.monitor._activity()
 
     def closeEvent(self, event):
-        if self.controller.state == "stopped":
+        if self.controller.state in {'stopped','crashed','restarting'} and self.controller.process is None:
+            self._closing = True
+            self.controller.shutdown()
+            self.monitor.stop()
             if self.mobile.running:
                 self._closing = True
                 self.mobile.stop()
