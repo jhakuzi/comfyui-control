@@ -152,7 +152,7 @@ class MonitorPanel(QWidget):
     def render(self):
         stats = self.performance.snapshot()
         gpus = self.metrics['gpus']
-        brief = ['System & generation']
+        brief = ['System && generation']  # QToolButton treats a single & as a mnemonic.
         primary = max(gpus, key=lambda g: (g['utilization'] if g['utilization'] is not None else -1, g['vram_used'] or 0)) if gpus else None
         for gpu in [primary] if primary else []:
             brief.append(f"GPU {scalar(gpu['utilization'], '%', 0)} · VRAM {memory(gpu['vram_used'], gpu['vram_total'])}")

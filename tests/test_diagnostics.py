@@ -1,5 +1,4 @@
 import json
-import os
 
 from PySide6.QtWidgets import QApplication, QFileDialog, QPushButton
 
@@ -34,6 +33,16 @@ def test_corrupt_and_oversize_history_ignored(tmp_path):
     assert not CrashHistory(path).entries
     path.write_text(json.dumps([{},None,{'diagnostic':'okay'}]))
     assert len(CrashHistory(path).entries)==1
+
+
+def test_unicode_and_control_character_logs_stay_byte_bounded(tmp_path):
+    history=CrashHistory(tmp_path/'history.json')
+    history.append('🙂'*32768)
+    assert len(history.recent.encode('utf-8'))<=32768
+    history.append('\x00'*32768)
+    for i in range(6): history.record(i,'NormalExit','python main.py',tmp_path)
+    assert history.path.stat().st_size<=256000
+    assert CrashHistory(history.path).entries[-1]['exit_code']==5
 
 
 def test_diagnostics_copy_export_and_recovery_safe_defaults(app,tmp_path,monkeypatch):

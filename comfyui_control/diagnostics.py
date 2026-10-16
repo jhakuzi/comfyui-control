@@ -30,7 +30,7 @@ class CrashHistory:
     def append(self, text):
         # Keep a small raw tail only in memory so patterns spanning QProcess
         # chunks can be redacted together before anything is written/exported.
-        self.recent = (self.recent + text)[-32768:]
+        self.recent = (self.recent + text).encode('utf-8',errors='replace')[-32768:].decode('utf-8',errors='ignore')
 
     def record(self, code, status, command, directory, detail=''):
         timestamp = datetime.now(timezone.utc).isoformat(timespec='seconds')
@@ -43,10 +43,14 @@ class CrashHistory:
 
     def save(self):
         self.path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+        data = json.dumps(self.entries,ensure_ascii=False)
+        while len(data.encode('utf-8')) > 256000 and len(self.entries) > 1:
+            self.entries.pop(0)
+            data = json.dumps(self.entries,ensure_ascii=False)
         fd, temporary = tempfile.mkstemp(dir=self.path.parent,prefix='.crash-')
         try:
             with os.fdopen(fd,'w',encoding='utf-8') as output:
-                json.dump(self.entries,output,ensure_ascii=False)
+                output.write(data)
             os.replace(temporary,self.path)
         finally:
             if os.path.exists(temporary): os.unlink(temporary)
