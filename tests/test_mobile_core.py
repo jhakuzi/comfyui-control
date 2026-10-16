@@ -137,12 +137,47 @@ def test_custom_diffusion_name_uses_model_output_metadata_without_mapping_connec
     graph={
         'quantized':{'class_type':'CustomLoader','inputs':{'model_name':'flux.gguf'}},
         'encoder':{'class_type':'CustomEncoder','inputs':{'model_name':'text.gguf'}},
+        'gguf-encoder':{'class_type':'CustomEncoder','inputs':{'gguf_name':'text.gguf'}},
         'alias':{'class_type':'OtherLoader','inputs':{'diffusion_model_name':'flux.safetensors'}},
         'linked':{'class_type':'OtherLoader','inputs':{'diffusion_model_name':['quantized',0]}},
     }
     info={'CustomLoader':{'output':['MODEL']},'CustomEncoder':{'output':['CLIP']}}
     targets={(m['node'],m['input']):m['role'] for m in suggested_mappings(graph,info)}
     assert targets=={('quantized','model_name'):'diffusion_model',('alias','diffusion_model_name'):'diffusion_model'}
+
+
+@pytest.mark.parametrize('loader,input_name',[
+    ('UnetLoaderGGUF','unet_name'),('UnetLoaderGGUFAdvanced','unet_name'),
+    ('LoaderGGUF','gguf_name'),('LoaderGGUFAdvanced','gguf_name'),
+    ('CustomGGUFLoader','custom_file'),
+])
+def test_gguf_diffusion_controls_use_loader_choices_and_keep_advanced_mapping(tmp_path,loader,input_name):
+    from comfyui_control.mobile.workflows import suggested_mappings, with_model_controls
+    graph={
+        'gguf':{'class_type':loader,'inputs':{input_name:'portraits/flux-Q4.gguf'}},
+        'sampler':{'class_type':'Sampler','inputs':{'model':['gguf',0]}},
+        'clip':{'class_type':'CLIPLoaderGGUF','inputs':{'clip_name':'text.gguf'}},
+    }
+    info={
+        loader:{'output':['MODEL'],'input':{'required':{input_name:[['portraits/flux-Q4.gguf','flux-Q8.gguf']]}}},
+        'CLIPLoaderGGUF':{'output':['CLIP'],'input':{'required':{'clip_name':[['text.gguf','other-text.gguf']]}}},
+    }
+    store=Presets(tmp_path)
+    preset=store.create('GGUF workflow',graph)
+    # Existing versions can have the filename mapped as an Advanced control.
+    preset=store.map(preset['id'],[{'node':'gguf','input':input_name,'role':'advanced','key':'keep-this-key'}])
+    fields=fields_for(preset,info)
+    assert fields[0]['model_role']=='diffusion_model' and fields[0]['key']=='keep-this-key'
+    assert fields[0]['options']==['portraits/flux-Q4.gguf','flux-Q8.gguf']
+    changed,_=render(preset,{'keep-this-key':'flux-Q8.gguf'},info=info)
+    assert changed['gguf']['inputs'][input_name]=='flux-Q8.gguf'
+    assert changed['sampler']['inputs']['model']==['gguf',0] and graph==store.get(preset['id'])['graph']
+    assert next(m for m in suggested_mappings(graph,info) if m['node']=='gguf')['role']=='diffusion_model'
+    upgraded=with_model_controls(preset,info)
+    assert upgraded['mappings'][0]==preset['mappings'][0]
+    assert sum(m['node']=='gguf' for m in upgraded['mappings'])==1
+    with pytest.raises(ValueError,match='not available'):
+        render(preset,{'keep-this-key':'unlisted.gguf'},info=info)
 
 
 def test_optional_network_password_keeps_secrets_out_of_url(tmp_path):

@@ -87,6 +87,19 @@ the only new runtime dependencies; QR generation does not require Pillow.
 ## Verification performed
 
 - Existing desktop/config/controller tests and new mobile tests run together.
+- Real ComfyUI 0.40.0 with City96's ComfyUI-GGUF plugin
+  (`6ea2651e7df66d7585f6ffee804b20e92fb38b8a`) served normal and Advanced loader
+  metadata. Chromium selected between two placeholder filenames discovered in
+  `models/diffusion_models`, retained the choice across reload, and verified
+  the rendered API value. This exercised real plugin discovery, not GGUF
+  inference: the files were empty fixtures and no prompt was queued.
+- GGUF regression tests cover the standard/Advanced schemas, custom filename
+  input names, an existing Advanced mapping displayed in the main model group,
+  valid choice enforcement, original graph preservation, and submitted values.
+- The `gguf-pack` implementation titled **GGUF Loader** was inspected at
+  `e1b3982333503f7a7c7b040b573f9620d791cb10`: its `LoaderGGUF` and Advanced
+  variant use `gguf_name`, rather than City96's `unet_name`. Both contracts are
+  covered by tests; the complete gguf-pack runtime was not installed or executed.
 - Regression coverage verifies older presets acquire missing model controls
   without changing existing mappings or graph connections, and that explicit
   mapping edits remain respected. Model refresh bypasses cached node metadata.
@@ -151,8 +164,8 @@ The separate manual browser checks need Playwright/Chromium. SSE progress
 snapshots omit prompt/control values; full job details are fetched on new jobs
 and image changes rather than on every progress event. Packaging must
 include `mobile/web/*` in the wheel/app ZIP and `aiohttp`/`qrcode` in Fedora
-dependencies. The Python development version is `0.9.0.dev5`; RPM uses
-`0.9.0-0.5.dev5`, so a later stable `0.9.0-1` sorts above it.
+dependencies. The Python development version is `0.9.0.dev6`; RPM uses
+`0.9.0-0.6.dev6`, so a later stable `0.9.0-1` sorts above it.
 
 Optional, reproducible manual checks from the repository root:
 
@@ -199,3 +212,16 @@ it reads only the selected JSON file, importing an API graph offline or using th
 existing metadata converter for editor JSON. No filesystem endpoint is added.
 Conversion validates required connections upstream of metadata-declared output
 nodes; if output metadata is absent, it keeps strict validation of all nodes.
+
+Run `tests/manual/mobile_workflows_browser.py --gguf` for the protocol browser
+check with an existing Advanced mapping. Against an already running server with
+ComfyUI-GGUF and at least two registered model filenames, run:
+
+```bash
+.venv-test/bin/python tests/manual/mobile_gguf_metadata_smoke.py --comfy-url http://127.0.0.1:8188
+.venv-test/bin/python tests/manual/mobile_gguf_metadata_smoke.py --comfy-url http://127.0.0.1:8188 --loader UnetLoaderGGUFAdvanced
+```
+
+This check requires Playwright/Chromium and only reads metadata, edits a temporary
+mobile preset, and inspects the rendered graph. It never queues a prompt, loads a
+GGUF file, or writes into your ComfyUI installation.

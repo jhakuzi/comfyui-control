@@ -14,6 +14,26 @@ ROLES = {"positive", "negative", "model", "lora_model", "lora_strength", "lora_e
          "diffusion_model", "vae", "text_encoder", "sampler", "scheduler",
          "resolution_mp", "aspect_ratio", "alignment", "custom_ratio", "custom_aspect_ratio",
          "width", "height", "steps", "cfg", "seed", "batch", "advanced"}
+MODEL_CONTROLS_VERSION = 2
+
+
+def diffusion_inputs(graph, info):
+    """Find literal diffusion filenames using input names or MODEL/combo metadata."""
+    found = set()
+    for field in candidates(graph, info):
+        if field["kind"] != "text":
+            continue
+        metadata = info.get(graph[field["node"]]["class_type"], {})
+        outputs = metadata.get("output", [])
+        options = field["options"]
+        named = field["input"] in {"unet_name", "diffusion_model", "diffusion_model_name"}
+        named = named or field["input"] == "gguf_name" and "MODEL" in outputs
+        model_file = field["input"] in {"model_name", "model_path", "model_file"} and outputs == ["MODEL"]
+        gguf_combo = "MODEL" in outputs and isinstance(options, list) and bool(options) and all(
+            isinstance(option, str) and option.lower().endswith(".gguf") for option in options)
+        if named or model_file or gguf_combo:
+            found.add((field["node"], field["input"]))
+    return found
 
 
 def graph_from(value):
@@ -127,11 +147,11 @@ def suggested_mappings(graph, info=None):
                 prompt_nodes[role] |= trace(value[0], set())
     text_nodes = [key for key, node in graph.items() if isinstance(node["inputs"].get("text"), str)]
     result = []
+    diffusion = diffusion_inputs(graph, info or {})
     for field in candidates(graph, {}):
         inputs = graph[field["node"]]["inputs"]
         found = names.get(field["input"])
-        metadata = (info or {}).get(graph[field["node"]]["class_type"], {})
-        if field["input"] in {"model_name", "model_path", "model_file"} and metadata.get("output") == ["MODEL"]:
+        if (field["node"], field["input"]) in diffusion:
             found = ("diffusion_model", "Diffusion model")
         if "aspect_ratio" in inputs and "divisible_by" in inputs:
             found = resolution.get(field["input"], found)
@@ -176,13 +196,18 @@ def with_model_controls(preset, info):
         item["mappings"].append(mapping)
         keys.add(mapping["key"])
     item["mappings"] = validate_mappings(item["graph"], item["mappings"])
-    item["model_controls_version"] = 1
+    item["model_controls_version"] = MODEL_CONTROLS_VERSION
     return item
 
 
 def fields_for(preset, info):
     available = {(c["node"], c["input"]): c for c in candidates(preset["graph"], info)}
-    return [{**available[(m["node"], m["input"])], **m} for m in preset["mappings"]]
+    diffusion = diffusion_inputs(preset["graph"], info)
+    fields = [{**available[(m["node"], m["input"])], **m} for m in preset["mappings"]]
+    for field in fields:
+        if field["role"] == "advanced" and (field["node"], field["input"]) in diffusion:
+            field["model_role"] = "diffusion_model"
+    return fields
 
 
 def render(preset, values, random_seed=False, disabled_loras=None, info=None):
@@ -268,6 +293,6 @@ class Presets:
         item = self.get(identifier)
         item["mappings"] = validate_mappings(item["graph"], mappings)
         if not automatic:
-            item["model_controls_version"] = 1
+            item["model_controls_version"] = MODEL_CONTROLS_VERSION
         save_json(self.path(identifier), item)
         return item

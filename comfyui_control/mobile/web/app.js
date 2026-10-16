@@ -417,10 +417,17 @@ function renderFields() {
     for (const field of roles("negative")) control(field, details);
     $("prompt-controls").append(details);
   }
-  for (const field of preset.fields.filter((field) =>
-    ["model", "diffusion_model", "vae", "text_encoder"].includes(field.role),
-  ))
-    control(field, $("model-controls"));
+  // Keep the three loaders together even when an older mapping placed the
+  // diffusion filename under Advanced. The stored mapping/key stays unchanged.
+  for (const role of ["diffusion_model", "model", "vae", "text_encoder"]) {
+    const fields = preset.fields.filter((field) => (field.model_role || field.role) === role);
+    for (const field of fields) {
+      const label = role === "diffusion_model"
+        ? "Diffusion model" + (fields.length > 1 ? " · " + field.label : "")
+        : field.label;
+      control({ ...field, role, label }, $("model-controls"));
+    }
+  }
   const loras = preset.fields.filter((field) => field.role.startsWith("lora_"));
   const groups = [...new Set(loras.map((field) => field.group))];
   for (const group of groups) {
@@ -493,7 +500,7 @@ function renderFields() {
   );
   for (const field of resolution) control(field, $("resolution-controls"));
   $("resolution-card").hidden = !resolution.length;
-  for (const field of roles("advanced")) control(field, $("advanced-controls"));
+  for (const field of roles("advanced").filter((field) => !field.model_role)) control(field, $("advanced-controls"));
   $("reuse-last").hidden = !state.jobs.some((job) => job.preset === preset.id);
 }
 const roleNames = {

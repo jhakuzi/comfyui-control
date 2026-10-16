@@ -1,6 +1,6 @@
 Name:           comfyui-control
 Version:        0.9.0
-Release:        0.5.dev5%{?dist}
+Release:        0.6.dev6%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
 License:        MIT
@@ -62,6 +62,10 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Fri Oct 16 2026 ComfyUI Control contributors - 0.9.0-0.6.dev6
+- Show GGUF diffusion choices beside VAE and text encoder, including Advanced mappings.
+- Discover GGUF filename combos from loader metadata without guessing node classes.
+
 * Fri Oct 16 2026 ComfyUI Control contributors - 0.9.0-0.5.dev5
 - Restore missing diffusion model controls in older mobile presets and custom loaders.
 - Refresh model choices without losing prompt edits or changing saved workflow graphs.

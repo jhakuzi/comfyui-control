@@ -2,7 +2,7 @@
 
 A small Qt desktop app for starting, stopping, and updating ComfyUI on Linux.
 
-This ZIP is the preliminary **Mobile WebUI testing build, 0.9.0.dev5**.
+This ZIP is the preliminary **Mobile WebUI testing build, 0.9.0.dev6**.
 Use **Mobile WebUI…** to enable the embedded listener, configure your LAN/VPN
 address and password, and scan the QR. It is disabled by default.
 See the [mobile setup and workflow-mapping guide](https://github.com/jhakuzi/comfyui-control/blob/testing/mobile-webui/docs/MOBILE.md).

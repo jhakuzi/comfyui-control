@@ -14,7 +14,7 @@ import aiohttp
 
 from .client import ComfyClient, ComfyError
 from .settings import save_json
-from .workflows import Presets, candidates, fields_for, render, suggested_mappings, with_model_controls
+from .workflows import Presets, candidates, fields_for, render, suggested_mappings, with_model_controls, MODEL_CONTROLS_VERSION
 from .workflow_sources import saved_workflows, saved_workflow_graph
 
 
@@ -155,7 +155,7 @@ class MobileService:
             missing = sorted({n["class_type"] for n in preset["graph"].values()} - set(info))
         except ComfyError:
             info, missing = {}, []
-        if info and preset.get("model_controls_version") != 1:
+        if info and preset.get("model_controls_version") != MODEL_CONTROLS_VERSION:
             previous = preset
             preset = with_model_controls(preset, info)
             if preset["mappings"] != previous["mappings"]:

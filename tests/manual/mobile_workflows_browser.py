@@ -1,5 +1,6 @@
 """Manual Chromium coverage of ComfyUI catalog, Flux controls and optional login (test double)."""
 import asyncio
+import argparse
 from copy import deepcopy
 from pathlib import Path
 import sys
@@ -20,11 +21,18 @@ from comfyui_control.mobile.settings import MobileSettings
 from comfyui_control.mobile.service import MobileService, revision, json_safe
 from comfyui_control.mobile.server import MobileHTTP
 
-async def main():
+async def main(gguf=False):
     root=Path(tempfile.mkdtemp(prefix='comfy-mobile-controls-'))
     editor,info=flux_saved.__wrapped__()
-    info['ArbitraryDiffusion']['input']['required']['model_name']=info['ArbitraryDiffusion']['input']['required'].pop('unet_name')
-    info['ArbitraryDiffusion']['output']=['MODEL']
+    loader='LoaderGGUF' if gguf else 'ArbitraryDiffusion'
+    model_input='gguf_name' if gguf else 'model_name'
+    if gguf:
+        editor['nodes'][0]['title']='GGUF Loader'
+    definition=info.pop('ArbitraryDiffusion')
+    definition['input']['required']={model_input:definition['input']['required']['unet_name']}
+    definition['output']=['MODEL']
+    info[loader]=definition
+    editor['nodes'][0]['type']=loader
     original=deepcopy(editor)
     graph=editor_to_api(editor,info)
     stub=ComfyStub(graph)
@@ -39,6 +47,9 @@ async def main():
     preset=service.presets.create('Desktop default',graph)
     # Simulate an older preset: no diffusion mapping and a custom prompt key/label.
     mappings=suggested_mappings(graph)
+    if gguf:
+        mappings=suggested_mappings(graph,info)
+        next(m for m in mappings if m['node']=='diff')['role']='advanced'
     prompt_mapping=next(m for m in mappings if m['role']=='positive')
     prompt_mapping.update(key='my-prompt',label='My prompt')
     preset=service.presets.map(preset['id'],mappings,automatic=True)
@@ -69,12 +80,16 @@ async def main():
         await expect(page.locator('[data-role="positive"]')).to_have_value('Unsent before upgrading')
         await page.locator('[data-role="diffusion_model"]').select_option('another.gguf')
         await page.locator('[data-role="positive"]').fill('Keep my new draft')
-        info['ArbitraryDiffusion']['input']['required']['model_name'][0].append('newly-installed.gguf')
+        info[loader]['input']['required'][model_input][0].append('newly-installed.gguf')
         await page.locator('#refresh-models').click()
         await expect(page.locator('[data-role="diffusion_model"] option[value="newly-installed.gguf"]')).to_have_count(1)
         await expect(page.locator('[data-role="diffusion_model"]')).to_have_value('another.gguf')
         await expect(page.locator('[data-role="positive"]')).to_have_value('Keep my new draft')
         assert service.presets.get(preset['id'])['mappings'][0]['role']!='diffusion_model'
+        assert await page.locator('#advanced-controls [data-role="diffusion_model"]').count()==0
+        if gguf:
+            assert service.presets.get(preset['id'])['mappings'][0]['role']=='advanced'
+            await expect(page.locator('#model-controls select').first).to_have_attribute('data-role','diffusion_model')
         await page.locator('#preset').select_option('saved:nested/Flux Portrait.json')
         await expect(page.locator('#preset')).not_to_have_value('saved:nested/Flux Portrait.json')
         selected=await page.locator('#preset').input_value()
@@ -105,7 +120,7 @@ async def main():
         await page.locator('#generate').click()
         await expect(page.locator('#job-title')).to_have_text('In the queue')
         sent=stub.submissions[0]['prompt']
-        assert sent['diff']['inputs']['model_name']=='another.gguf'
+        assert sent['diff']['inputs'][model_input]=='another.gguf'
         assert sent['vae']['inputs']['vae_name']=='other-vae.safetensors'
         assert sent['encoder']['inputs']['clip_name']=='other-text.gguf'
         assert sent['sampler']['inputs']['steps']==32 and sent['sampler']['inputs']['cfg']==4.5
@@ -121,7 +136,8 @@ async def main():
         assert not errors,errors
         print(json.dumps({'login':'optional; fresh browser opens without a password','default':'selected from desktop preferences with multiple presets',
             'saved_workflow':'selected from ComfyUI catalog and imported','controls':'three model selectors, sampler/scheduler, steps/CFG sliders, calculator fields',
-            'legacy_preset_and_unsent_draft_upgrade':'passed','custom_diffusion_model_name':'selectable; submitted value verified',
+            'legacy_preset_and_unsent_draft_upgrade':'passed','diffusion_loader':loader,'diffusion_model_selection':'selectable; submitted value verified',
+            'advanced_gguf_mapping_presented_in_main_model_section':gguf,
             'fresh_model_choices':'newly installed model appears without losing prompt/model edits',
             'connection_and_source_preservation':True,'fixed_64_bit_seed':'exact','mobile_widths':[320,375,390,430,768,1200],'unsupported_custom_widget':'clear error, previous form retained','javascript_errors':errors}))
         await browser.close()
@@ -131,4 +147,7 @@ async def main():
         await upstream.close()
     print('Screenshots:',root)
 
-asyncio.run(main())
+if __name__=='__main__':
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--gguf',action='store_true',help='Use the GGUF schema with an existing Advanced mapping.')
+    asyncio.run(main(parser.parse_args().gguf))

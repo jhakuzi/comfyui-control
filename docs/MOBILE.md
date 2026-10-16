@@ -1,7 +1,7 @@
 # Mobile WebUI — preliminary testing
 
 This feature is integrated into the desktop app on **`testing/mobile-webui`**
-(`0.9.0.dev5`). It is not in the stable COPR release. No separate service or
+(`0.9.0.dev6`). It is not in the stable COPR release. No separate service or
 mobile installation is required. Keep the desktop app open while using it.
 
 ## Try it without replacing your stable installation
@@ -115,6 +115,14 @@ Recognized literal inputs get controls automatically. The page shows separate
 exist. Workflows using checkpoints or multiple text encoders keep their own
 loaders. Choices come from ComfyUI, including custom/quantized loaders.
 
+For **GGUF Loader**, **Unet Loader (GGUF)** and their Advanced versions, **Diffusion model** appears
+above VAE and text encoder. Its dropdown uses the loader's registered GGUF
+filenames, including files in `models/diffusion_models` and any configured model
+paths. An existing Advanced mapping for that filename is shown here too, keeping
+its saved key and role. Custom GGUF combos are recognized from `MODEL` output
+metadata and `.gguf` choices; dtype and patch options stay separate.
+Both `gguf_name` (gguf-pack) and `unet_name` (City96) are supported.
+
 Older presets gain missing model controls when opened with ComfyUI online;
 existing mapping keys, labels and roles are preserved. Custom loaders using
 `model_name`, `model_path` or `model_file` are recognized when their metadata
@@ -125,6 +133,9 @@ saved graph or replacing your current prompt/model edits. Choices remain specifi
 to the selected loader; the app does not swap node types or quantization formats.
 Controls explicitly hidden in the mapping editor stay hidden on ordinary loads;
 the refresh button can restore recognized model controls when wanted.
+If a loader's filename comes from a connection rather than a literal value,
+use the mapping editor to map the upstream filename input; connections are
+never replaced with a guessed model name.
 
 **Generation settings** contains sampler/scheduler, CFG (or guidance), steps,
 seed and batch where present. Steps/CFG have sliders plus numeric inputs.
