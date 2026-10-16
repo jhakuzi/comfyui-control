@@ -193,7 +193,7 @@ Live queue status, sampling progress and a small preview stay anchored above
 immediate and the page does not jump. When generation finishes, **View result**
 opens the image directly; the full results and reuse controls remain in Create.
 
-In the testing build, an animated indicator shows **Preparing / loading models…**
+An animated indicator shows **Preparing / loading models…**
 before sampling begins, including a cold server's first model load. It stays
 anchored above Generate. Step counts replace it when available; between sampling
 stages it returns to a processing indicator. Loading has no invented percentage.
@@ -212,7 +212,7 @@ the next form, then press **Generate**. Fixed 64-bit seeds retain their exact
 value. Randomization affects mapped seeds only. A preset without a seed mapping
 keeps its original behaviour.
 
-**Randomize seed for each generation** is on by default in the testing build.
+**Randomize seed for each generation** is on by default.
 Older drafts adopt this default once without losing prompts or settings; your
 subsequent choice is remembered. **Same seed** explicitly switches to a fixed
 seed; **New variation** enables randomization. If a fixed seed and every other
@@ -272,7 +272,7 @@ of the selected output folder populate the gallery. Mobile-created images have
 saved prompt/settings metadata for reuse. Other images may have no mobile
 metadata. Temporary previews and deleted files can become unavailable.
 
-### Compare two images (testing build)
+### Compare two images
 
 In **Gallery**, tap **Select two images**, select A and B, then **Compare**.
 Drag the divider or use the range slider; keyboard arrows, Home and End work

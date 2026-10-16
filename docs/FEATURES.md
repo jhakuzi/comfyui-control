@@ -1,32 +1,7 @@
-# Monitoring, comparison and recovery · testing build
+# Monitoring, comparison and recovery
 
-Version **0.10.0.dev2**, branch `testing/monitoring-comparison-recovery`.
-This is separate from stable `main`. No release tag or COPR build is submitted.
-
-## Try it without replacing your RPM
-
-Close the app, then run:
-
-```bash
-git clone --single-branch --branch testing/monitoring-comparison-recovery https://github.com/jhakuzi/comfyui-control.git comfyui-control-testing
-cd comfyui-control-testing
-python3 -m venv .venv-test
-.venv-test/bin/python -m pip install .
-.venv-test/bin/comfyui-control
-```
-
-Use the distribution prerequisites in the [README](../README.md). This reads
-your existing settings and does not replace your system launcher. Close it to
-return to your stable installation. Only one copy can run per user.
-
-Alternatively, [download the testing app ZIP](https://github.com/jhakuzi/comfyui-control/raw/refs/heads/testing/monitoring-comparison-recovery/downloads/comfyui-control.zip),
-extract it, and run `bash install.sh` as your normal user. This replaces your
-per-user app; reinstall the stable ZIP to return. Settings and ComfyUI stay put.
-The ZIP excludes tests and screenshots. There are no new Python dependencies.
-
-This update also shows preparation/loading activity before mobile sampling starts
-and randomizes mapped seeds by default. Existing drafts adopt that default once;
-uncheck it to keep a fixed seed. Explicit **Same seed** reuse remains fixed.
+Available in **ComfyUI Control 0.10.0**. See the [README](../README.md) for
+installation and updates. These features add no Python dependencies.
 
 ## System & generation
 

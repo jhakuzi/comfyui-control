@@ -1,6 +1,6 @@
 Name:           comfyui-control
 Version:        0.10.0
-Release:        0.2.dev2%{?dist}
+Release:        1%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
 License:        MIT
@@ -62,6 +62,10 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Fri Oct 16 2026 ComfyUI Control contributors - 0.10.0-1
+- Release hardware/sampling monitoring, mobile image comparison and optional crash recovery.
+- Show mobile preparation activity and default to randomized generation seeds.
+
 * Fri Oct 16 2026 ComfyUI Control contributors - 0.10.0-0.2.dev2
 - Show indeterminate preparation/loading progress before sampling and between stages.
 - Default mobile generations to randomized seeds; preserve explicit fixed-seed reuse.

@@ -122,9 +122,9 @@ bash install.sh
 
 ## Troubleshooting
 
-The preliminary testing branch adds a **System & generation** panel and optional
+The app includes a **System & generation** panel and optional
 crash recovery in **Edit launch configuration…**. See [monitoring, recovery and
-image comparison](TESTING_FEATURES.md) for controls and measurement limits.
+image comparison](FEATURES.md) for controls and measurement limits.
 
 | Problem | Check |
 | --- | --- |

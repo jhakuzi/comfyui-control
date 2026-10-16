@@ -12,7 +12,7 @@ python3 -m venv .venv
 QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest
 ```
 
-The suite covers desktop behaviour plus the mobile integration in version 0.9.0. See [mobile verification notes](MOBILE_ARCHITECTURE.md) for its scope and limitations. Real CPU installation, server controls, and update integration were verified on Fedora 44 with Python 3.14.8. CLI dependency isolation was checked with a disposable checkout and test package. GPU/ROCm, model inference, and KDE Wayland remain untested.
+The suite covers desktop behaviour, hardware/timing fixtures, process recovery and mobile integration in version 0.10.0 (160 tests). See [mobile verification notes](MOBILE_ARCHITECTURE.md) and the [feature guide](FEATURES.md) for scope and limitations. Real CPU installation, server controls, and update integration were verified on Fedora 44 with Python 3.14.8. CLI dependency isolation was checked with a disposable checkout and test package. GPU/ROCm, model inference, and KDE Wayland remain untested.
 
 [Live ComfyUI server screenshot](../live-test-preview.png)
 
