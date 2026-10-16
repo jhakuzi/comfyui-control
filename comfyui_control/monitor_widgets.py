@@ -85,9 +85,9 @@ class MonitorPanel(QWidget):
         alignment = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
         form.addWidget(QLabel('Hardware'), 0, 0, alignment)
         form.addWidget(self.hardware, 0, 1)
-        form.addWidget(self.utilization, 1, 1)
+        form.addWidget(self.utilization, 1, 1, 1, 2)
         form.addWidget(QLabel('Generation'), 2, 0, alignment)
-        form.addWidget(self.timing, 2, 1)
+        form.addWidget(self.timing, 2, 1, 1, 2)
         layout.addWidget(self.details)
         self.toggle.toggled.connect(self._expanded)
         self.timer = QTimer(self)

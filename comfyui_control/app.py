@@ -266,7 +266,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle(f"ComfyUI Control {__version__}")
         self.setWindowIcon(application_icon())
-        self.resize(800, 570)
+        self.resize(920, 740)
         self.setMinimumSize(580, 400)
         self._closing = False
         self.controller = Controller(config, self)
@@ -312,6 +312,7 @@ class MainWindow(QMainWindow):
         header.setColumnMinimumWidth(2, status_width)
         layout.addLayout(header)
         mobile_row = QHBoxLayout()
+        self._mobile_row = mobile_row
         self.mobile_button = QPushButton(QIcon.fromTheme("smartphone"), "Mobile WebUI…")
         self.mobile_button.clicked.connect(self._mobile_settings)
         self.mobile_status = QLabel("Disabled")
@@ -325,7 +326,9 @@ class MainWindow(QMainWindow):
         self.monitor.observation_changed.connect(self._observe_generation)
         self.mobile.execution.connect(self.monitor.execution)
         layout.addWidget(self.monitor)
-        crash_row=QHBoxLayout()
+        self.crash_notice = QWidget()
+        crash_row=QHBoxLayout(self.crash_notice)
+        crash_row.setContentsMargins(0, 0, 0, 0)
         self.crash_summary=QLabel()
         self._crash_message = ''
         self.crash_summary.setWordWrap(True)
@@ -335,10 +338,10 @@ class MainWindow(QMainWindow):
         self.cancel_recovery=QPushButton('Cancel recovery')
         self.cancel_recovery.clicked.connect(self.controller.stop)
         crash_row.addWidget(self.crash_summary,1)
-        crash_row.addWidget(self.crash_log)
         crash_row.addWidget(self.cancel_recovery)
-        layout.addLayout(crash_row)
-        self.crash_log.setVisible(bool(self.controller.history.entries))
+        layout.addWidget(self.crash_notice)
+        self.crash_notice.hide()
+        self._place_crash_log()
         self.cancel_recovery.hide()
         self.controller.crashed.connect(self._crashed)
         self.controller.recovery.connect(self._recovery)
@@ -403,6 +406,7 @@ class MainWindow(QMainWindow):
         self.mobile.configure(self.mobile.settings, self.controller.config, self.controller.state, observe=enabled)
 
     def _monitor_expanded(self, expanded):
+        self._place_crash_log()
         config = replace(self.controller.config, monitor_expanded=expanded)
         try:
             config.save()
@@ -410,14 +414,26 @@ class MainWindow(QMainWindow):
         except OSError as exc:
             self.log.append_output(f'\nCould not save monitoring preference: {exc}\n')
 
+    def _place_crash_log(self):
+        # Keep diagnostics beside the hardware details, without reserving an
+        # empty row below them. They remain accessible with monitoring closed.
+        if self.monitor.enabled and self.monitor.toggle.isChecked():
+            self.monitor.details.layout().addWidget(
+                self.crash_log, 0, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
+        else:
+            self._mobile_row.addWidget(self.crash_log)
+        self.crash_log.setVisible(bool(self.controller.history.entries or self._crash_message))
+
     def _crashed(self, entry):
         self._crash_message = entry['summary']
         self.crash_summary.setText(self._crash_message)
+        self.crash_notice.show()
         self.crash_log.setVisible(True)
 
     def _recovery(self, text):
         self.crash_summary.setText('\n'.join(filter(None, [self._crash_message, text])))
         self.cancel_recovery.setVisible(self.controller.state == 'restarting')
+        self.crash_notice.setVisible(bool(self.crash_summary.text()) or self.controller.state == 'restarting')
 
     def _mobile_stopped(self):
         if self._closing:
@@ -464,6 +480,7 @@ class MainWindow(QMainWindow):
     def _set_config(self, config):
         self.controller.set_config(config)
         self.monitor.configure(config)
+        self._place_crash_log()
         self.mobile.update_desktop(config, self.controller.state)
         blocked = self.update_method.blockSignals(True)
         self.update_method.setCurrentIndex(self.update_method.findData(config.update_method))
@@ -567,6 +584,7 @@ class MainWindow(QMainWindow):
         self.output_button.setEnabled(configured and not self._closing)
         self.models_button.setEnabled(configured and not self._closing)
         self.cancel_recovery.setVisible(state == 'restarting')
+        self.crash_notice.setVisible(bool(self.crash_summary.text()) or state == 'restarting')
         if self._closing and idle:
             QTimer.singleShot(0, self.close)
 

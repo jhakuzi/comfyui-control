@@ -1,4 +1,5 @@
 import time
+import pytest
 from PySide6.QtWidgets import QDialog
 from PySide6.QtTest import QTest
 from comfyui_control.app import MainWindow, SettingsDialog
@@ -60,6 +61,7 @@ def test_crash_summary_keeps_exit_code_and_cancels_pending_recovery(app,tmp_path
     window.controller._state('restarting')
     window._recovery('Restart attempt 1/7 in 2s')
     assert 'exit 7' in window.crash_summary.text() and '1/7' in window.crash_summary.text()
+    assert window.crash_notice.isVisible()
     assert window.cancel_recovery.isVisible()
     window.cancel_recovery.click()
     assert window.controller.state=='stopped'
@@ -67,6 +69,38 @@ def test_crash_summary_keeps_exit_code_and_cancels_pending_recovery(app,tmp_path
     assert window._choose_folder()
     assert window.controller.config.monitor_expanded and window.controller.config.auto_restart
     assert window.controller.config.restart_limit==7
+    window.close()
+
+
+def test_idle_crash_history_does_not_take_terminal_space(app,tmp_path,monkeypatch):
+    from dataclasses import replace
+    from comfyui_control.diagnostics import CrashHistory
+    monkeypatch.setenv('XDG_CONFIG_HOME',str(tmp_path))
+    CrashHistory().record(7,'normal','python main.py',tmp_path)
+    window=MainWindow(Config(monitor_expanded=True))
+    window.show()
+    QTest.qWait(40)
+    monitor=window.monitor
+    assert not window.crash_notice.isVisible()
+    assert window.log.height()>=300
+    assert window.crash_log.isVisible()
+    assert window.crash_log.parentWidget() is monitor.details
+    assert window.crash_log.y()==monitor.hardware.y()
+    assert window.crash_log.x()>monitor.hardware.geometry().right()
+    assert window.log.y()-monitor.geometry().bottom()-1==window.centralWidget().layout().spacing()
+    monitor.toggle.setChecked(False)
+    QTest.qWait(40)
+    assert window.crash_log.isVisible()
+    assert window.crash_log.parentWidget() is window.centralWidget()
+    monitor.toggle.setChecked(True)
+    window._set_config(replace(window.controller.config,monitoring_enabled=False))
+    QTest.qWait(40)
+    assert not monitor.isVisible() and window.crash_log.isVisible()
+    assert not window.crash_notice.isVisible()
+    window._set_config(replace(window.controller.config,monitoring_enabled=True))
+    QTest.qWait(40)
+    assert monitor.isVisible() and window.crash_log.isVisible()
+    assert window.crash_log.parentWidget() is monitor.details
     window.close()
 
 
@@ -85,10 +119,14 @@ def test_minimized_monitor_stops_polling_and_observation(app,tmp_path,monkeypatc
     window.close()
 
 
-def test_monitor_text_remains_visible_when_wrapped_or_font_scaled(app,tmp_path,monkeypatch):
+@pytest.mark.parametrize('crash_history',[False,True])
+def test_monitor_text_remains_visible_when_wrapped_or_font_scaled(app,tmp_path,monkeypatch,crash_history):
     from PySide6.QtCore import QPoint
     from PySide6.QtGui import QFont
     monkeypatch.setenv('XDG_CONFIG_HOME',str(tmp_path))
+    if crash_history:
+        from comfyui_control.diagnostics import CrashHistory
+        CrashHistory().record(7,'normal','python main.py',tmp_path)
     metrics=dict(cpu=3,ram_used=8*1024**3,ram_total=32*1024**3,process_memory=2*1024**3,
         gpus=[dict(name='NVIDIA GPU with a long device name requiring more room at larger font sizes',
             utilization=80,vram_used=1024**3,vram_total=16*1024**3,temperature=55)])
