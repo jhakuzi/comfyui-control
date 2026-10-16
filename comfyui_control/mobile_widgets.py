@@ -101,6 +101,8 @@ class MobileDialog(QDialog):
         contents = QWidget()
         layout = QVBoxLayout(contents)
         area = QScrollArea()
+        self._scroll_area = area
+        self._initial_size_set = False
         area.setWidgetResizable(True)
         area.setWidget(contents)
         outer.addWidget(area, 1)
@@ -192,6 +194,18 @@ class MobileDialog(QDialog):
         self._preview()
         self._status(runtime.status, runtime.url)
         self._scan_workflows()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self._initial_size_set:
+            self._initial_size_set = True
+            QTimer.singleShot(0, self._fit_initial_size)
+
+    def _fit_initial_size(self):
+        area = self._scroll_area
+        required = area.widget().minimumSizeHint().height() + self.height() - area.viewport().height()
+        available = self.screen().availableGeometry().height() - (self.frameGeometry().height() - self.height())
+        self.resize(self.width(), min(max(self.height(), required), available))
 
     def _refresh_presets(self, selected):
         self.default_preset.clear()

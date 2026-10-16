@@ -274,6 +274,7 @@ class MainWindow(QMainWindow):
         self.mobile.stopped.connect(self._mobile_stopped)
         body = QWidget()
         self.setCentralWidget(body)
+        body.installEventFilter(self)
         layout = QVBoxLayout(body)
         layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         layout.setContentsMargins(16, 14, 16, 14)
@@ -605,10 +606,19 @@ class MainWindow(QMainWindow):
     def event(self, event):
         result = super().event(event)
         if event.type() == QEvent.Type.LayoutRequest and self.centralWidget():
-            # Keep the expanded metrics and controls readable at larger font
-            # sizes instead of letting the log overlap their minimum heights.
-            self.setMinimumHeight(max(400, self.centralWidget().minimumSizeHint().height()))
+            self._fit_contents()
         return result
+
+    def eventFilter(self, watched, event):
+        if watched is self.centralWidget() and event.type() == QEvent.Type.LayoutRequest:
+            QTimer.singleShot(0, self._fit_contents)
+        return super().eventFilter(watched, event)
+
+    def _fit_contents(self):
+        # Wrapped labels can change their minimum after the inner layout runs.
+        # Recheck the central layout too, including its current-width height.
+        body = self.centralWidget()
+        self.setMinimumHeight(max(400, body.minimumSizeHint().height(), body.heightForWidth(body.width())))
 
     def changeEvent(self, event):
         super().changeEvent(event)

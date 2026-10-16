@@ -7,7 +7,7 @@ Includes a [Mobile WebUI](docs/MOBILE.md) for generating images from your phone.
 [System/sampling monitoring and optional crash recovery](docs/FEATURES.md) keep
 server activity visible without leaving the app.
 
-![ComfyUI Control 0.10.1 with the current monitoring panel](docs/screenshots/desktop-0.10.1.png)
+![ComfyUI Control 0.10.2 with aligned header controls and a larger output panel](docs/screenshots/desktop-0.10.2.png)
 
 *Fedora RPM, Qt Fusion dark theme, running a CPU ComfyUI server. Appearance follows your Qt/desktop theme.*
 

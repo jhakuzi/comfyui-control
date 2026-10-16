@@ -1,6 +1,6 @@
 Name:           comfyui-control
-Version:        0.10.1
-Release:        2%{?dist}
+Version:        0.10.2
+Release:        1%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
 License:        MIT
@@ -62,6 +62,10 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Fri Oct 16 2026 ComfyUI Control contributors - 0.10.2-1
+- Enlarge the main window and keep crash diagnostics aligned in the header.
+- Compact mobile settings and show a shutdown completion message.
+
 * Fri Oct 16 2026 ComfyUI Control contributors - 0.10.1-2
 - Make the telemetry delivery check independent of concurrent disconnect events.
 
