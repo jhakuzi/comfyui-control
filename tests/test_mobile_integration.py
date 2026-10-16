@@ -266,9 +266,12 @@ def test_monitoring_reuses_runtime_without_enabling_http_or_changing_auth(app,tm
             thread=runtime.thread
             runtime.configure(settings,Config(),'running',observe=True)
             assert runtime.thread is thread
-            runtime._execution('progress',{'value':1,'max':4},12.)
-            app.processEvents()
-            assert events[-1][0]=='progress'
+            expected=('progress',{'value':1,'max':4},12.)
+            runtime._execution(*expected)
+            # An offline ComfyUI can legitimately report a disconnect after
+            # progress. Verify delivery without assuming cross-thread ordering.
+            runtime._execution('disconnected',{},13.)
+            wait(lambda: expected in events)
             runtime.configure(settings,Config(),'running',observe=False)
             wait(lambda: not runtime.running)
             assert not runtime.settings.enabled and runtime.url==''

@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       build_run:
-        description: Successful tag-triggered Build and publish to COPR run ID
+        description: Successful tag or main packaging build/COPR run ID
         required: true
         type: string
 
@@ -40,14 +40,25 @@ jobs:
           def api(path):
               return json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/{path}']))
           run = api(f'actions/runs/{run_id}')
-          if (run['conclusion'], run['event'], run['head_branch'], run['path']) != (
-                  'success', 'push', tag, '.github/workflows/copr.yml'):
-              raise SystemExit('The selected run must be a successful stable tag/COPR build.')
+          if run['conclusion'] != 'success' or run['path'] != '.github/workflows/copr.yml':
+              raise SystemExit('Choose a successful Build and publish to COPR run.')
+          tagged = run['event'] == 'push' and run['head_branch'] == tag
+          packaging = run['event'] == 'workflow_dispatch' and run['head_branch'] == 'main'
+          if not (tagged or packaging):
+              raise SystemExit('Choose a stable tag build or a packaging build from main.')
+          jobs = api(f'actions/runs/{run_id}/jobs')['jobs']
+          if not any(step['name'] == 'Submit to COPR and wait for build results'
+                     and step['conclusion'] == 'success' for job in jobs for step in job['steps']):
+              raise SystemExit('The selected run must include successful COPR publication.')
           ref = api(f'git/ref/tags/{tag}')['object']
           if ref['type'] == 'tag':
               ref = api('git/tags/' + ref['sha'])['object']
-          if ref['type'] != 'commit' or ref['sha'] != run['head_sha']:
+          if ref['type'] != 'commit':
+              raise SystemExit('The release tag must resolve to a commit.')
+          if tagged and ref['sha'] != run['head_sha']:
               raise SystemExit('The build commit does not match this release tag.')
+          if packaging and api(f"compare/{ref['sha']}...{run['head_sha']}")['status'] not in ('ahead', 'identical'):
+              raise SystemExit('The packaging build must descend from the release tag.')
           subprocess.run(['gh', 'release', 'view', tag], check=True)
           PY
 

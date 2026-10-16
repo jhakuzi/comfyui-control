@@ -1,6 +1,6 @@
 Name:           comfyui-control
 Version:        0.10.1
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
 License:        MIT
@@ -62,6 +62,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Fri Oct 16 2026 ComfyUI Control contributors - 0.10.1-2
+- Make the telemetry delivery check independent of concurrent disconnect events.
+
 * Fri Oct 16 2026 ComfyUI Control contributors - 0.10.1-1
 - Left-align monitoring and prevent wrapped/scaled metrics from overlapping the log.
 - Remove GPU power readings and show only Current/Average generation speed.
