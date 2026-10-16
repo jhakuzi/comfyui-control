@@ -38,11 +38,15 @@ def test_start_output_restart_stop(server):
     wait_for(lambda: "server ready ✓" in "".join(logs))
     first_pid = c._pid
     assert c.state == "running"
+    assert 'successfully stopped' not in ''.join(logs)
     c.restart()
     wait_for(lambda: c.state == "running" and c._pid != first_pid)
+    assert ''.join(logs).index('Process and its children successfully stopped.') < ''.join(logs).rindex('[ComfyUI Control] $ ')
     c.stop()
+    assert ''.join(logs).count('Process and its children successfully stopped.') == 1
     wait_for(lambda: c.state == "stopped")
     assert c.process is None
+    assert ''.join(logs).count('Process and its children successfully stopped.') == 2
     assert not errors
 
 
@@ -66,6 +70,7 @@ def test_process_group_stops_children(server):
         return not stat.exists() or stat.read_text().split()[2] == "Z"
 
     wait_for(no_live_child)
+    assert '[ComfyUI Control] Process and its children successfully stopped.' in ''.join(logs)
 
 
 def test_unresponsive_process_is_killed(server):
@@ -80,6 +85,7 @@ def test_unresponsive_process_is_killed(server):
     c._kill_timer.start(80)
     wait_for(lambda: c.state == "stopped")
     assert "forcing shutdown" in "".join(logs)
+    assert 'Process and its children successfully stopped.' in ''.join(logs)
 
 
 def test_script_launch_forwards_quoted_flags(server):

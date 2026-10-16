@@ -203,6 +203,7 @@ class Controller(QObject):
         # Drain may have supplied trailing metadata.
         captured = self._captured
         if stopping:
+            self._message("Process and its children successfully stopped.")
             after, self._after_stop = self._after_stop, None
             self._state("stopped")
             if not self._closing:
