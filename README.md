@@ -37,6 +37,20 @@ Open **ComfyUI Control** from the application menu. Select your existing ComfyUI
 folder containing `main.py`, or choose **Install with Comfy CLI…**, then press **Start**.
 Use **Edit launch configuration…** for Python, scripts, and flags.
 
+## Mobile UI
+
+Generate from your phone over your LAN or VPN using saved ComfyUI workflows.
+
+- Edit prompts, choose models (including GGUF), and adjust supported LoRAs and generation settings.
+- Follow live progress and previews above Generate while scrolling. Jobs and drafts recover after reconnecting.
+- Browse your gallery, save images, and reuse settings or create variations.
+
+Open **Mobile WebUI…** in the desktop app, enable it, choose a default workflow,
+click **Apply**, and scan the QR code. Keep the desktop app and ComfyUI running.
+Password protection is optional.
+
+[Setup, workflow compatibility & troubleshooting](docs/MOBILE.md)
+
 ## Update
 
 - **RPM:** `sudo dnf upgrade --refresh comfyui-control`
