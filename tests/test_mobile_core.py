@@ -79,6 +79,72 @@ def test_metadata_drives_model_choices_and_limits(tmp_path, mobile_graph):
     assert render(preset, {"model": "other.gguf"}, info=info)[0]['quantized']['inputs']['file'] == 'other.gguf'
 
 
+def test_legacy_model_controls_upgrade_preserves_mappings_and_refreshes_choices(tmp_path):
+    import time
+    graph={
+        'loader':{'class_type':'CustomQuantizedLoader','inputs':{'unet_name':'flux.gguf'}},
+        'text':{'class_type':'Text','inputs':{'text':'saved prompt'}},
+        'sampler':{'class_type':'Sampler','inputs':{'model':['loader',0]}},
+    }
+    info={'CustomQuantizedLoader':{'output':['MODEL'],'input':{'required':{'unet_name':[['flux.gguf','other.gguf']]}}},
+          'Text':{'input':{'required':{'text':['STRING']}}},'Sampler':{'input':{}}}
+    async def scenario():
+        service=MobileService(tmp_path,MobileSettings(require_auth=False),tmp_path/'out')
+        preset=service.presets.create('Old preset',graph)
+        preset=service.presets.map(preset['id'],[{'node':'text','input':'text','role':'positive','key':'model-1','label':'My prompt'}],automatic=True)
+        old_revision=revision(preset)
+        old_mappings=deepcopy(preset['mappings'])
+        service.info,service.info_time=deepcopy(info),time.monotonic()
+        description=await service.describe(preset)
+        diffusion=next(f for f in description['fields'] if f['role']=='diffusion_model')
+        assert diffusion['options']==['flux.gguf','other.gguf']
+        upgraded=service.presets.get(preset['id'])
+        assert upgraded['mappings'][0]==old_mappings[0] and upgraded['graph']==graph
+        assert description['model_upgrade_revision']==old_revision
+        assert len({m['key'] for m in upgraded['mappings']})==2
+        changed,_=render(upgraded,{diffusion['key']:'other.gguf'},info=info)
+        assert changed['loader']['inputs']['unet_name']=='other.gguf'
+        assert changed['sampler']['inputs']['model']==['loader',0]
+        # Explicitly hiding a control stays respected on subsequent loads.
+        hidden=service.presets.map(preset['id'],old_mappings)
+        assert not any(f['role']=='diffusion_model' for f in (await service.describe(hidden))['fields'])
+        calls=[]
+        class Client:
+            async def request(self,method,path):
+                calls.append((method,path))
+                fresh=deepcopy(info)
+                fresh['CustomQuantizedLoader']['input']['required']['unet_name'][0].append('new.gguf')
+                return fresh
+        service.client=Client()
+        client=TestClient(TestServer(MobileHTTP(service).app()))
+        await client.start_server()
+        try:
+            await client.get('/api/session')
+            response=await client.post(f"/api/presets/{preset['id']}/models",json={},headers={'Origin':str(client.make_url('/')).rstrip('/')})
+            assert response.status==200,await response.text()
+            refreshed=await response.json()
+            assert calls==[('GET','/object_info')]
+            assert next(f for f in refreshed['fields'] if f['role']=='diffusion_model')['options'][-1]=='new.gguf'
+            assert service.presets.get(preset['id'])['mappings'][0]==old_mappings[0]
+            assert service.presets.get(preset['id'])['graph']==graph
+        finally:
+            await client.close()
+    asyncio.run(scenario())
+
+
+def test_custom_diffusion_name_uses_model_output_metadata_without_mapping_connections():
+    from comfyui_control.mobile.workflows import suggested_mappings
+    graph={
+        'quantized':{'class_type':'CustomLoader','inputs':{'model_name':'flux.gguf'}},
+        'encoder':{'class_type':'CustomEncoder','inputs':{'model_name':'text.gguf'}},
+        'alias':{'class_type':'OtherLoader','inputs':{'diffusion_model_name':'flux.safetensors'}},
+        'linked':{'class_type':'OtherLoader','inputs':{'diffusion_model_name':['quantized',0]}},
+    }
+    info={'CustomLoader':{'output':['MODEL']},'CustomEncoder':{'output':['CLIP']}}
+    targets={(m['node'],m['input']):m['role'] for m in suggested_mappings(graph,info)}
+    assert targets=={('quantized','model_name'):'diffusion_model',('alias','diffusion_model_name'):'diffusion_model'}
+
+
 def test_optional_network_password_keeps_secrets_out_of_url(tmp_path):
     hashed = password_hash('correct horse battery')
     assert check_password('correct horse battery', hashed)

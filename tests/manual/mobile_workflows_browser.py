@@ -15,14 +15,16 @@ from playwright.async_api import async_playwright,expect
 from test_mobile_integration import ComfyStub
 from test_mobile_workflow_sources import flux_saved
 from comfyui_control.mobile.workflow_sources import editor_to_api
-from comfyui_control.mobile.workflows import suggested_mappings
+from comfyui_control.mobile.workflows import suggested_mappings, fields_for
 from comfyui_control.mobile.settings import MobileSettings
-from comfyui_control.mobile.service import MobileService
+from comfyui_control.mobile.service import MobileService, revision, json_safe
 from comfyui_control.mobile.server import MobileHTTP
 
 async def main():
     root=Path(tempfile.mkdtemp(prefix='comfy-mobile-controls-'))
     editor,info=flux_saved.__wrapped__()
+    info['ArbitraryDiffusion']['input']['required']['model_name']=info['ArbitraryDiffusion']['input']['required'].pop('unet_name')
+    info['ArbitraryDiffusion']['output']=['MODEL']
     original=deepcopy(editor)
     graph=editor_to_api(editor,info)
     stub=ComfyStub(graph)
@@ -35,7 +37,14 @@ async def main():
     settings=MobileSettings(comfy_url=str(upstream.make_url('/')))
     service=MobileService(root/'data',settings,root/'out')
     preset=service.presets.create('Desktop default',graph)
-    preset=service.presets.map(preset['id'],suggested_mappings(graph))
+    # Simulate an older preset: no diffusion mapping and a custom prompt key/label.
+    mappings=suggested_mappings(graph)
+    prompt_mapping=next(m for m in mappings if m['role']=='positive')
+    prompt_mapping.update(key='my-prompt',label='My prompt')
+    preset=service.presets.map(preset['id'],mappings,automatic=True)
+    legacy_draft=json_safe({'revision':revision(preset),
+        'values':{f['key']:'Unsent before upgrading' if f['role']=='positive' else f['default'] for f in fields_for(preset,info)},
+        'mappings':preset['mappings'],'randomSeed':False,'disabledLoras':[]})
     other=service.presets.create('A second preset',graph)
     settings.default_preset=preset['id']
     await service.start()
@@ -49,6 +58,7 @@ async def main():
       async with async_playwright() as p:
         browser=await p.chromium.launch(headless=True,args=['--no-sandbox'])
         context=await browser.new_context(viewport={'width':390,'height':844},device_scale_factor=2,is_mobile=True,has_touch=True)
+        await context.add_init_script('localStorage.setItem('+json.dumps('comfy-mobile-draft-'+preset['id'])+','+json.dumps(json.dumps(legacy_draft))+');')
         page=await context.new_page()
         page.on('pageerror',lambda error:errors.append(str(error)))
         await page.goto(url)
@@ -56,6 +66,15 @@ async def main():
         assert await page.locator('#login').is_hidden()
         await page.locator('[data-role="diffusion_model"]').wait_for()
         assert await page.locator('#model-controls .control').count()==3
+        await expect(page.locator('[data-role="positive"]')).to_have_value('Unsent before upgrading')
+        await page.locator('[data-role="diffusion_model"]').select_option('another.gguf')
+        await page.locator('[data-role="positive"]').fill('Keep my new draft')
+        info['ArbitraryDiffusion']['input']['required']['model_name'][0].append('newly-installed.gguf')
+        await page.locator('#refresh-models').click()
+        await expect(page.locator('[data-role="diffusion_model"] option[value="newly-installed.gguf"]')).to_have_count(1)
+        await expect(page.locator('[data-role="diffusion_model"]')).to_have_value('another.gguf')
+        await expect(page.locator('[data-role="positive"]')).to_have_value('Keep my new draft')
+        assert service.presets.get(preset['id'])['mappings'][0]['role']!='diffusion_model'
         await page.locator('#preset').select_option('saved:nested/Flux Portrait.json')
         await expect(page.locator('#preset')).not_to_have_value('saved:nested/Flux Portrait.json')
         selected=await page.locator('#preset').input_value()
@@ -86,7 +105,7 @@ async def main():
         await page.locator('#generate').click()
         await expect(page.locator('#job-title')).to_have_text('In the queue')
         sent=stub.submissions[0]['prompt']
-        assert sent['diff']['inputs']['unet_name']=='another.gguf'
+        assert sent['diff']['inputs']['model_name']=='another.gguf'
         assert sent['vae']['inputs']['vae_name']=='other-vae.safetensors'
         assert sent['encoder']['inputs']['clip_name']=='other-text.gguf'
         assert sent['sampler']['inputs']['steps']==32 and sent['sampler']['inputs']['cfg']==4.5
@@ -102,6 +121,8 @@ async def main():
         assert not errors,errors
         print(json.dumps({'login':'optional; fresh browser opens without a password','default':'selected from desktop preferences with multiple presets',
             'saved_workflow':'selected from ComfyUI catalog and imported','controls':'three model selectors, sampler/scheduler, steps/CFG sliders, calculator fields',
+            'legacy_preset_and_unsent_draft_upgrade':'passed','custom_diffusion_model_name':'selectable; submitted value verified',
+            'fresh_model_choices':'newly installed model appears without losing prompt/model edits',
             'connection_and_source_preservation':True,'fixed_64_bit_seed':'exact','mobile_widths':[320,375,390,430,768,1200],'unsupported_custom_widget':'clear error, previous form retained','javascript_errors':errors}))
         await browser.close()
     finally:

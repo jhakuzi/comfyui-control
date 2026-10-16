@@ -1,7 +1,7 @@
 # Mobile WebUI — preliminary testing
 
 This feature is integrated into the desktop app on **`testing/mobile-webui`**
-(`0.9.0.dev4`). It is not in the stable COPR release. No separate service or
+(`0.9.0.dev5`). It is not in the stable COPR release. No separate service or
 mobile installation is required. Keep the desktop app open while using it.
 
 ## Try it without replacing your stable installation
@@ -114,6 +114,17 @@ Recognized literal inputs get controls automatically. The page shows separate
 **Diffusion model**, **VAE**, and **Text encoder** selectors when those loaders
 exist. Workflows using checkpoints or multiple text encoders keep their own
 loaders. Choices come from ComfyUI, including custom/quantized loaders.
+
+Older presets gain missing model controls when opened with ComfyUI online;
+existing mapping keys, labels and roles are preserved. Custom loaders using
+`model_name`, `model_path` or `model_file` are recognized when their metadata
+declares a single `MODEL` output. Other input names can still be mapped explicitly.
+Use **Refresh model choices** after starting ComfyUI or adding models. This
+fetches fresh choices and adds missing loader controls without changing the
+saved graph or replacing your current prompt/model edits. Choices remain specific
+to the selected loader; the app does not swap node types or quantization formats.
+Controls explicitly hidden in the mapping editor stay hidden on ordinary loads;
+the refresh button can restore recognized model controls when wanted.
 
 **Generation settings** contains sampler/scheduler, CFG (or guidance), steps,
 seed and batch where present. Steps/CFG have sliders plus numeric inputs.

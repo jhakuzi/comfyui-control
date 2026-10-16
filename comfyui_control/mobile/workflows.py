@@ -88,11 +88,12 @@ def validate_mappings(graph, mappings):
     return result
 
 
-def suggested_mappings(graph):
+def suggested_mappings(graph, info=None):
     """Recognize literal input names; custom node classes/IDs remain unrestricted."""
     names = {
         "ckpt_name": ("model", "Checkpoint"), "unet_name": ("diffusion_model", "Diffusion model"),
         "diffusion_model": ("diffusion_model", "Diffusion model"), "vae_name": ("vae", "VAE"),
+        "diffusion_model_name": ("diffusion_model", "Diffusion model"),
         "clip_name": ("text_encoder", "Text encoder"), "clip_name1": ("text_encoder", "Text encoder 1"),
         "clip_name2": ("text_encoder", "Text encoder 2"), "text_encoder_name": ("text_encoder", "Text encoder"),
         "sampler_name": ("sampler", "Sampler"), "scheduler": ("scheduler", "Scheduler"),
@@ -129,6 +130,9 @@ def suggested_mappings(graph):
     for field in candidates(graph, {}):
         inputs = graph[field["node"]]["inputs"]
         found = names.get(field["input"])
+        metadata = (info or {}).get(graph[field["node"]]["class_type"], {})
+        if field["input"] in {"model_name", "model_path", "model_file"} and metadata.get("output") == ["MODEL"]:
+            found = ("diffusion_model", "Diffusion model")
         if "aspect_ratio" in inputs and "divisible_by" in inputs:
             found = resolution.get(field["input"], found)
         if field["input"] == "text":
@@ -153,6 +157,27 @@ def suggested_mappings(graph):
             title = source.get("_meta", {}).get("title", source["class_type"])
             item["label"] += " · " + title
     return result[:200]
+
+
+def with_model_controls(preset, info):
+    """Add missing loader controls without changing existing keys, roles or the graph."""
+    item = deepcopy(preset)
+    targets = {(m["node"], m["input"]) for m in item["mappings"]}
+    keys = {m["key"] for m in item["mappings"]}
+    for mapping in suggested_mappings(item["graph"], info):
+        if mapping["role"] not in {"model", "diffusion_model", "vae", "text_encoder"} or (mapping["node"], mapping["input"]) in targets:
+            continue
+        if len(item["mappings"]) >= 200:
+            break
+        index = len(item["mappings"])
+        while f"model-{index}" in keys:
+            index += 1
+        mapping["key"] = f"model-{index}"
+        item["mappings"].append(mapping)
+        keys.add(mapping["key"])
+    item["mappings"] = validate_mappings(item["graph"], item["mappings"])
+    item["model_controls_version"] = 1
+    return item
 
 
 def fields_for(preset, info):
@@ -239,8 +264,10 @@ class Presets:
         save_json(self.path(item["id"]), item)
         return item
 
-    def map(self, identifier, mappings):
+    def map(self, identifier, mappings, *, automatic=False):
         item = self.get(identifier)
         item["mappings"] = validate_mappings(item["graph"], mappings)
+        if not automatic:
+            item["model_controls_version"] = 1
         save_json(self.path(identifier), item)
         return item

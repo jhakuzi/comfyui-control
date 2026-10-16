@@ -270,7 +270,7 @@ class MobileDialog(QDialog):
                     break
         if preset is None:
             preset = store.create(name, graph)
-            preset = store.map(preset["id"], suggested_mappings(preset["graph"]))
+            preset = store.map(preset["id"], suggested_mappings(preset["graph"]), automatic=True)
             if source:
                 preset["comfy_source"] = source
                 save_json(store.path(preset["id"]), preset)

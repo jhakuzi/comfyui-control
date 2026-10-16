@@ -87,6 +87,12 @@ the only new runtime dependencies; QR generation does not require Pillow.
 ## Verification performed
 
 - Existing desktop/config/controller tests and new mobile tests run together.
+- Regression coverage verifies older presets acquire missing model controls
+  without changing existing mappings or graph connections, and that explicit
+  mapping edits remain respected. Model refresh bypasses cached node metadata.
+  Chromium exercised a custom loader's `model_name` selector, verified the
+  selected value in the submitted API graph, and preserved an older browser's
+  unsent draft through the upgrade and fresh-model discovery.
 - The desktop picker discovers nested local workflow files without a running
   ComfyUI, imports API JSON offline, refreshes newly saved files, and reuses an
   unchanged preset. Tests reject symlink escapes and check that source JSON is
@@ -145,8 +151,8 @@ The separate manual browser checks need Playwright/Chromium. SSE progress
 snapshots omit prompt/control values; full job details are fetched on new jobs
 and image changes rather than on every progress event. Packaging must
 include `mobile/web/*` in the wheel/app ZIP and `aiohttp`/`qrcode` in Fedora
-dependencies. The Python development version is `0.9.0.dev4`; RPM uses
-`0.9.0-0.4.dev4`, so a later stable `0.9.0-1` sorts above it.
+dependencies. The Python development version is `0.9.0.dev5`; RPM uses
+`0.9.0-0.5.dev5`, so a later stable `0.9.0-1` sorts above it.
 
 Optional, reproducible manual checks from the repository root:
 

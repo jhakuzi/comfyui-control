@@ -196,6 +196,10 @@ class MobileHTTP:
             return json_response(await self.service.saved_workflows())
         return json_response(await self.service.import_saved_workflow((await object_body(request)).get("name")), status=201)
 
+    async def refresh_models(self, request):
+        await object_body(request)
+        return json_response(await self.service.refresh_models(request.match_info["id"]))
+
     async def generate(self, request):
         job = await self.service.submit(await object_body(request), owner=request[OWNER])
         return json_response(self.service.public_job(job), status=202)
@@ -329,6 +333,7 @@ class MobileHTTP:
             web.get('/api/presets', self.presets), web.post('/api/presets', self.presets),
             web.get('/api/workflows/saved', self.saved_workflows), web.post('/api/workflows/saved', self.saved_workflows),
             web.get('/api/presets/{id}', self.preset), web.put('/api/presets/{id}', self.preset), web.delete('/api/presets/{id}', self.preset),
+            web.post('/api/presets/{id}/models', self.refresh_models),
             web.post('/api/generate', self.generate), web.post('/api/jobs/{id}/cancel', self.cancel),
             web.get('/api/gallery', self.gallery), web.get('/api/images/{id}', self.image), web.get('/api/preview', self.preview),
         ])

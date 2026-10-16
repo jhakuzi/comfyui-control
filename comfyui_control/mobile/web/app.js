@@ -114,6 +114,8 @@ function saveDraft() {
   if (preset)
     writeStore("draft-" + preset.id, {
       revision: preset.revision,
+      graphRevision: preset.graph_revision,
+      fields: preset.fields.map(({ key, node, input, role, kind }) => ({ key, node, input, role, kind })),
       values: draft,
       randomSeed,
       disabledLoras: [...disabledLoras],
@@ -235,6 +237,7 @@ async function selectWorkflow(id) {
 async function choosePreset(id, reuse) {
   const epoch = ++presetEpoch;
   preset = null;
+  $("refresh-models").hidden = !id;
   updateGenerate();
   for (const target of [
     "prompt-controls",
@@ -260,16 +263,24 @@ async function choosePreset(id, reuse) {
   preset = loaded;
   const stored = reuse || readStore("draft-" + id, {});
   const same = stored.revision === preset.revision;
+  // Model discovery adds controls without changing the graph. Keep drafts only
+  // when both the graph and each existing control's target/type still match.
+  const upgraded = !!stored.revision && stored.revision === preset.model_upgrade_revision;
+  const compatible = same || upgraded || (stored.graphRevision && stored.graphRevision === preset.graph_revision);
+  const oldFields = stored.fields || (upgraded ? stored.mappings : []) || [];
+  const canReuse = (field) => same || (compatible && oldFields.some(
+    (old) => ["key", "node", "input", "role"].every((key) => old[key] === field[key]) && (!old.kind || old.kind === field.kind),
+  ));
   draft = Object.fromEntries(
     preset.fields.map((field) => [
       field.key,
-      same && Object.hasOwn(stored.values || {}, field.key)
+      canReuse(field) && Object.hasOwn(stored.values || {}, field.key)
         ? stored.values[field.key]
         : field.default,
     ]),
   );
-  randomSeed = same ? !!stored.randomSeed : false;
-  disabledLoras = new Set(same ? stored.disabledLoras || [] : []);
+  randomSeed = compatible ? !!stored.randomSeed : false;
+  disabledLoras = new Set(compatible ? stored.disabledLoras || [] : []);
   mappingDraft = new Map(
     (same && Array.isArray(stored.mappings)
       ? stored.mappings
@@ -286,6 +297,14 @@ async function choosePreset(id, reuse) {
       },
     ]),
   );
+  if (!same && compatible && Array.isArray(stored.mappings)) {
+    const oldTargets = new Set(oldFields.map((field) => field.node + "\0" + field.input));
+    for (const target of oldTargets) mappingDraft.delete(target);
+    for (const field of stored.mappings) {
+      if (preset.candidates.some((candidate) => candidate.node === field.node && candidate.input === field.input))
+        mappingDraft.set(field.node + "\0" + field.input, field);
+    }
+  }
   $("delete-preset").hidden = false;
   if (preset.missing_nodes.length)
     notice("Missing ComfyUI nodes: " + preset.missing_nodes.join(", "));
@@ -973,6 +992,26 @@ $("preset").addEventListener(
   guarded(() => selectWorkflow($("preset").value)),
 );
 $("refresh-workflows").addEventListener("click", loadSavedWorkflows);
+$("refresh-models").addEventListener(
+  "click",
+  guarded(async () => {
+    if (!preset || busy) return;
+    const id = preset.id;
+    saveDraft();
+    busy = true;
+    $("refresh-models").disabled = true;
+    updateGenerate();
+    try {
+      await api("/api/presets/" + id + "/models", { method: "POST", body: "{}" });
+      if (preset?.id === id) await choosePreset(id);
+      notice("Model choices refreshed.");
+    } finally {
+      busy = false;
+      $("refresh-models").disabled = false;
+      updateGenerate();
+    }
+  }),
+);
 $("generate-form").addEventListener("submit", generate);
 $("mapping-search").addEventListener("input", renderMappings);
 $("save-mapping").addEventListener(

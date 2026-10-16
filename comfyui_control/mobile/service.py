@@ -14,7 +14,7 @@ import aiohttp
 
 from .client import ComfyClient, ComfyError
 from .settings import save_json
-from .workflows import Presets, candidates, fields_for, render, suggested_mappings
+from .workflows import Presets, candidates, fields_for, render, suggested_mappings, with_model_controls
 from .workflow_sources import saved_workflows, saved_workflow_graph
 
 
@@ -143,8 +143,8 @@ class MobileService:
                 subscriber.get_nowait()
             subscriber.put_nowait(state)
 
-    async def metadata(self):
-        if time.monotonic() - self.info_time > 30 or not self.info:
+    async def metadata(self, force=False):
+        if force or time.monotonic() - self.info_time > 30 or not self.info:
             self.info = await self.client.request("GET", "/object_info")
             self.info_time = time.monotonic()
         return self.info
@@ -155,9 +155,26 @@ class MobileService:
             missing = sorted({n["class_type"] for n in preset["graph"].values()} - set(info))
         except ComfyError:
             info, missing = {}, []
+        if info and preset.get("model_controls_version") != 1:
+            previous = preset
+            preset = with_model_controls(preset, info)
+            if preset["mappings"] != previous["mappings"]:
+                preset["model_upgrade_revision"] = revision(previous)
+            save_json(self.presets.path(preset["id"]), preset)
         return {"id": preset["id"], "name": preset["name"], "revision": revision(preset),
+                "graph_revision": hashlib.sha256(json.dumps(preset["graph"], sort_keys=True).encode()).hexdigest(),
+                "model_upgrade_revision": preset.get("model_upgrade_revision"),
                 "fields": fields_for(preset, info), "candidates": [{k: v for k, v in item.items() if k != "default"} for item in candidates(preset["graph"], info)],
                 "missing_nodes": missing}
+
+    async def refresh_models(self, identifier):
+        info = await self.metadata(force=True)
+        previous = self.presets.get(identifier)
+        preset = with_model_controls(previous, info)
+        if preset["mappings"] != previous["mappings"]:
+            preset["model_upgrade_revision"] = revision(previous)
+        save_json(self.presets.path(identifier), preset)
+        return await self.describe(preset)
 
     async def saved_workflows(self):
         return await saved_workflows(self.client)
