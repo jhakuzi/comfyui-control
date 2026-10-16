@@ -172,7 +172,8 @@ class MobileHTTP:
 
     async def presets(self, request):
         if request.method == "GET":
-            return json_response(self.service.presets.list())
+            return json_response([{**item, "default": item["id"] == self.settings.default_preset}
+                                  for item in self.service.presets.list()])
         body = await object_body(request)
         if isinstance(body.get("workflow"), str):
             body["workflow"] = json.loads(body["workflow"])
@@ -189,6 +190,11 @@ class MobileHTTP:
         else:
             preset = self.service.presets.get(identifier)
         return json_response(await self.service.describe(preset))
+
+    async def saved_workflows(self, request):
+        if request.method == "GET":
+            return json_response(await self.service.saved_workflows())
+        return json_response(await self.service.import_saved_workflow((await object_body(request)).get("name")), status=201)
 
     async def generate(self, request):
         job = await self.service.submit(await object_body(request), owner=request[OWNER])
@@ -321,6 +327,7 @@ class MobileHTTP:
             web.post('/api/login', self.login), web.get('/api/session', self.session), web.post('/api/logout', self.logout),
             web.get('/api/state', self.state), web.post('/api/resume', self.resume), web.get('/api/events', self.events),
             web.get('/api/presets', self.presets), web.post('/api/presets', self.presets),
+            web.get('/api/workflows/saved', self.saved_workflows), web.post('/api/workflows/saved', self.saved_workflows),
             web.get('/api/presets/{id}', self.preset), web.put('/api/presets/{id}', self.preset), web.delete('/api/presets/{id}', self.preset),
             web.post('/api/generate', self.generate), web.post('/api/jobs/{id}/cancel', self.cancel),
             web.get('/api/gallery', self.gallery), web.get('/api/images/{id}', self.image), web.get('/api/preview', self.preview),

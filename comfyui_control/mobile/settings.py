@@ -76,12 +76,14 @@ def url_host(value):
 @dataclass
 class MobileSettings:
     enabled: bool = False
-    bind: str = "127.0.0.1"
+    bind: str = "0.0.0.0"
     port: int = 8189
     advertised: str = ""
     comfy_url: str = "http://127.0.0.1:8188"
-    require_auth: bool = True
+    require_auth: bool = False
     password: str = ""  # Salted PBKDF2 hash, never a plaintext password.
+    default_preset: str = ""
+    preferences_version: int = 1
 
     @classmethod
     def load(cls, path=None):
@@ -92,23 +94,31 @@ class MobileSettings:
         if not isinstance(value, dict):
             raise ValueError("Mobile settings must be a JSON object.")
         result = cls(**{k: v for k, v in value.items() if k in {f.name for f in fields(cls)}})
+        if "preferences_version" not in value:
+            # Upgrade the old defaults; explicit custom addresses and passwords stay.
+            if result.bind == "127.0.0.1" and not result.advertised:
+                result.bind = "0.0.0.0"
+            if not result.password:
+                result.require_auth = False
         result.validate(require_password=False)
         return result
 
     def validate(self, require_password=True):
         if type(self.enabled) is not bool or type(self.require_auth) is not bool:
             raise ValueError("Invalid mobile enable/authentication setting.")
+        if type(self.preferences_version) is not int or self.preferences_version < 1:
+            raise ValueError("Invalid mobile preferences version.")
         if type(self.port) is not int or not 1024 <= self.port <= 65535:
             raise ValueError("Choose a mobile port between 1024 and 65535.")
-        for value in (self.bind, self.advertised, self.comfy_url, self.password):
+        for value in (self.bind, self.advertised, self.comfy_url, self.password, self.default_preset):
             if not isinstance(value, str):
                 raise ValueError("Invalid mobile text setting.")
         try:
-            address = ipaddress.ip_address(self.bind)
+            ipaddress.ip_address(self.bind)
         except ValueError:
             raise ValueError("Listening address must be an IP, such as 127.0.0.1, 0.0.0.0, or a VPN interface IP.") from None
-        if not address.is_loopback and not self.require_auth:
-            raise ValueError("A password is required when listening beyond localhost.")
+        if self.default_preset and not re.fullmatch(r"[0-9a-f]{32}", self.default_preset):
+            raise ValueError("Choose a saved default mobile workflow.")
         if self.enabled and self.require_auth and require_password and not self.password:
             raise ValueError("Set a mobile password before enabling the server.")
         upstream = urlsplit(self.comfy_url)

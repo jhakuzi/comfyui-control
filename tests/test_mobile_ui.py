@@ -78,3 +78,78 @@ def test_automatic_mobile_start_and_window_shutdown(app, tmp_path, monkeypatch):
     app.processEvents()
     assert not window.mobile.running
     assert window.controller.state == 'stopped'
+
+
+def test_lan_detection_optional_password_and_default_workflow(app,tmp_path,monkeypatch):
+    from comfyui_control.mobile.workflows import Presets
+    monkeypatch.setenv('XDG_CONFIG_HOME',str(tmp_path))
+    monkeypatch.setattr('comfyui_control.mobile.settings.lan_address',lambda:'192.168.1.42')
+    monkeypatch.setattr('comfyui_control.mobile_widgets.lan_address',lambda:'192.168.1.42')
+    runtime=MobileRuntime()
+    dialog=MobileDialog(runtime,Config())
+    assert dialog.bind.text()=='0.0.0.0'
+    assert dialog.current_url=='http://192.168.1.42:8189/'
+    assert not dialog.auth.isChecked() and not dialog.password.isEnabled()
+    dialog.bind.setText('127.0.0.1')
+    dialog.advertised.setText('old-vpn.example')
+    dialog.detect.click()
+    assert dialog.bind.text()=='0.0.0.0' and dialog.advertised.text()==''
+    dialog._save_workflow('Saved on PC',{'custom-id':{'class_type':'CustomLoader','inputs':{'unet_name':'flux.gguf'}}},source='nested/Flux.json')
+    chosen=dialog.default_preset.currentData()
+    assert chosen and Presets(tmp_path/'comfyui-control/mobile/presets').get(chosen)['name']=='Saved on PC'
+    assert Presets(tmp_path/'comfyui-control/mobile/presets').get(chosen)['comfy_source']=='nested/Flux.json'
+    dialog.enabled.setChecked(True)
+    with patch.object(runtime,'configure') as configure:
+        dialog._apply()
+        configure.assert_called_once()
+    saved=MobileSettings.load()
+    assert saved.enabled and not saved.require_auth and saved.default_preset==chosen
+    assert saved.url()=='http://192.168.1.42:8189/'
+    # A configured password remains available when protection is toggled off/on.
+    dialog.auth.setChecked(True)
+    assert dialog.password.isEnabled()
+    dialog.password.setText('optional password test')
+    with patch.object(runtime,'configure'):
+        dialog._apply()
+    assert MobileSettings.load().require_auth
+    dialog.auth.setChecked(False)
+    with patch.object(runtime,'configure'):
+        dialog._apply()
+    saved=MobileSettings.load()
+    assert not saved.require_auth and check_password('optional password test',saved.password)
+    dialog.close()
+
+
+def test_desktop_queued_workflow_fetch_keeps_qt_responsive(app,tmp_path,monkeypatch):
+    import asyncio
+    from aiohttp import web
+    from aiohttp.test_utils import TestServer
+    monkeypatch.setenv('XDG_CONFIG_HOME',str(tmp_path))
+    graph={'loader':{'class_type':'AnyQuantizedLoader','inputs':{'unet_name':'model.gguf'}}}
+    async def endpoint(request):
+        await asyncio.sleep(.05)
+        if request.path=='/queue':
+            return web.json_response({'queue_pending':[[1,'queued-id',graph,{},[]]],'queue_running':[]})
+        return web.json_response({})
+    async def scenario():
+        upstream=web.Application()
+        upstream.router.add_get('/queue',endpoint)
+        upstream.router.add_get('/history',endpoint)
+        server=TestServer(upstream)
+        await server.start_server()
+        dialog=MobileDialog(MobileRuntime(),Config())
+        dialog.comfy_url.setText(str(server.make_url('/')))
+        dialog._fetch_workflow('From active ComfyUI')
+        ticks=0
+        end=time.monotonic()+5
+        while dialog.worker and time.monotonic()<end:
+            app.processEvents()
+            ticks+=1
+            await asyncio.sleep(.01)
+        app.processEvents()
+        assert dialog.worker is None and ticks>1
+        assert dialog.default_preset.currentData()
+        assert 'Workflow copied' in dialog.workflow_status.text()
+        dialog.close()
+        await server.close()
+    asyncio.run(scenario())

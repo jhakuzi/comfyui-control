@@ -86,6 +86,10 @@
                 Reuse last generation
               </button>
               <div id="model-controls"></div>
+              <button id="refresh-workflows" class="text-button" type="button">
+                Refresh saved ComfyUI workflows
+              </button>
+              <p id="workflow-source-note" class="hint" hidden></p>
             </section>
             <details class="card" id="lora-card" hidden>
               <summary>
@@ -96,6 +100,10 @@
             <details class="card" id="settings-card" hidden>
               <summary>Generation settings</summary>
               <div id="basic-controls" class="control-grid"></div>
+            </details>
+            <details class="card" id="resolution-card" hidden>
+              <summary>Resolution</summary>
+              <div id="resolution-controls" class="control-grid"></div>
             </details>
             <details class="card" id="advanced">
               <summary>Advanced & workflows</summary>

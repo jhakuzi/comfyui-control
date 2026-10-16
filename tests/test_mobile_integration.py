@@ -37,6 +37,8 @@ class ComfyStub:
         self.submissions = []
         self.interrupts = []
         self.safe_cancel_supported = True
+        self.saved = {}
+        self.object_info = None
 
     async def ws(self, request):
         ws = web.WebSocketResponse()
@@ -56,7 +58,16 @@ class ComfyStub:
 
     async def endpoint(self, request):
         if request.path == '/object_info':
+            if self.object_info is not None:
+                return web.json_response(self.object_info)
             return web.json_response({node['class_type']: {'input': {}} for node in self.graph.values()})
+        if request.path == '/userdata':
+            return web.json_response(list(self.saved))
+        if request.path.startswith('/userdata/workflows/'):
+            name = request.path.removeprefix('/userdata/workflows/')
+            if name not in self.saved:
+                raise web.HTTPNotFound()
+            return web.json_response(self.saved[name])
         if request.path == '/history':
             return web.json_response(self.history)
         if request.path.startswith('/history/'):
@@ -240,7 +251,7 @@ def test_browser_ownership_resume_live_progress_completion_and_cookie_persistenc
         stub = ComfyStub(graph)
         upstream = TestServer(stub.app())
         await upstream.start_server()
-        settings = MobileSettings(password=password_hash('session test password'), comfy_url=str(upstream.make_url('/')))
+        settings = MobileSettings(require_auth=True, password=password_hash('session test password'), comfy_url=str(upstream.make_url('/')))
         output = tmp_path/'out'
         output.mkdir()
         png = (Path(__file__).parents[1]/'comfyui_control/assets/comfyui-control.png').read_bytes()

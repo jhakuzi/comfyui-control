@@ -42,7 +42,11 @@ browser/copy actions, and a local SVG QR rasterized by Qt for display.
 
 `mobile/workflows.py` validates API graphs, immutable import, literal-only
 mappings, metadata-derived choices, typed/ranged modifications, LoRA groups,
-and exact seed handling. No workflow-specific node IDs/classes are hardcoded.
+and exact seed handling. Recognized input names get suggested mappings; the
+explicit editor remains available for custom names. No node IDs/classes are hardcoded.
+`mobile/workflow_sources.py` handles the saved catalog, exact snapshot matching,
+and validated editor-to-API conversion. The desktop performs network imports in
+an on-demand Qt thread-pool task so settings remain responsive.
 
 `mobile/client.py` is the new fixed-origin ComfyUI client. `mobile/service.py`
 handles job journaling/idempotency, WebSocket events, bounded snapshots, queued
@@ -58,7 +62,10 @@ the only new runtime dependencies; QR generation does not require Pillow.
 
 ## Compatibility boundaries
 
-- ComfyUI's node-editor JSON needs API export first.
+- Saved workflows are listed/read only beneath ComfyUI's `workflows/` userdata
+  directory. Imports prefer exact API history snapshots, then metadata conversion.
+  Unknown widget serialization, frontend-only nodes, subgraphs or bypass modes
+  require a matching snapshot or API export; inputs/connections aren't guessed.
 - Opaque nested widget data and connection rewiring are preserved, not exposed.
 - Complex LoRA bypass and nonliteral generation inputs need a suitable input in
   the source workflow; the mobile interface does not rebuild nodes.
@@ -80,6 +87,16 @@ the only new runtime dependencies; QR generation does not require Pillow.
 ## Verification performed
 
 - Existing desktop/config/controller tests and new mobile tests run together.
+- Tests cover automatic LAN defaults and migration, optional LAN authentication,
+  PC default-workflow selection, background desktop imports, saved catalog path
+  confinement, three model selectors, sampler/CFG/steps sliders, and calculator
+  edits with width/height links preserved. Chromium exercised those controls at
+  320–1200 pixel widths against representative custom-node metadata.
+- Real ComfyUI 0.40.0 also imported a temporary saved node-editor workflow through
+  its userdata catalog, converted it using actual metadata, generated/upscaled
+  two images, and retained the original saved JSON. The temporary workflow was
+  removed afterward. The actual Flux calculator plugin/quantized inference was
+  not installed or executed; its controls were tested with representative metadata.
 - Tests exercise immutable arbitrary custom-node graphs, quantized-loader model
   choices from metadata, multiple LoRA strength mappings, fixed 64-bit seeds,
   authentication, CSRF/Host rejection, path and symlink confinement, durable
@@ -121,8 +138,8 @@ The separate manual browser checks need Playwright/Chromium. SSE progress
 snapshots omit prompt/control values; full job details are fetched on new jobs
 and image changes rather than on every progress event. Packaging must
 include `mobile/web/*` in the wheel/app ZIP and `aiohttp`/`qrcode` in Fedora
-dependencies. The Python development version is `0.9.0.dev2`; RPM uses
-`0.9.0-0.2.dev2`, so a later stable `0.9.0-1` sorts above it.
+dependencies. The Python development version is `0.9.0.dev3`; RPM uses
+`0.9.0-0.3.dev3`, so a later stable `0.9.0-1` sorts above it.
 
 Optional, reproducible manual checks from the repository root:
 
@@ -151,3 +168,13 @@ saving without a diffusion model, and has no prompt/model/LoRA controls.
 
 This branch is preliminary: push no release tag and publish nothing to the
 stable COPR project while testing.
+
+Saved catalog/editor conversion smoke check against an already running ComfyUI:
+
+```bash
+.venv-test/bin/python tests/manual/mobile_saved_comfy_smoke.py --comfy-url http://127.0.0.1:8188
+```
+
+This creates then removes one uniquely named temporary saved workflow and leaves
+its two small generated images in output. The optional browser control check is
+`tests/manual/mobile_workflows_browser.py` (requires pytest and Playwright).

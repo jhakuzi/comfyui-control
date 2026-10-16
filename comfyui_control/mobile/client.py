@@ -16,7 +16,7 @@ class ComfyClient:
         self.session = session
         self.base = base_url.rstrip("/")
 
-    async def request(self, method, path, data=None):
+    async def request(self, method, path, data=None, expected_type=dict):
         try:
             async with self.session.request(method, self.base + path, json=data,
                                             timeout=aiohttp.ClientTimeout(total=30)) as response:
@@ -25,8 +25,6 @@ class ComfyClient:
                     value = json.loads(text) if text else {}
                 except ValueError:
                     raise ComfyError("ComfyUI returned an invalid response. Check the ComfyUI URL.") from None
-                if not isinstance(value, dict):
-                    raise ComfyError("ComfyUI returned an unexpected API response. Check the ComfyUI URL.")
                 if response.status >= 400:
                     details = value.get("error", value) if isinstance(value, dict) else value
                     if isinstance(details, dict):
@@ -39,6 +37,8 @@ class ComfyClient:
                             summaries.append(f"Node {node}: " + "; ".join(messages))
                         details = str(details) + " · " + " · ".join(summaries)
                     raise ComfyError(str(details)[:2500], rejected=response.status < 500)
+                if not isinstance(value, expected_type):
+                    raise ComfyError("ComfyUI returned an unexpected API response. Check the ComfyUI URL.")
                 return value
         except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
             raise ComfyError("ComfyUI is unavailable. Start it in the desktop app and check its API URL.") from exc

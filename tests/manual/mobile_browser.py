@@ -37,7 +37,7 @@ async def main():
     upstream = TestServer(stub.app())
     await upstream.start_server()
     output = OUT/'output'; output.mkdir(exist_ok=True)
-    settings = MobileSettings(bind='0.0.0.0', password=password_hash('browser testing password'), comfy_url=str(upstream.make_url('/')))
+    settings = MobileSettings(bind='0.0.0.0', require_auth=True, password=password_hash('browser testing password'), comfy_url=str(upstream.make_url('/')))
     service = MobileService(Path(tempfile.mkdtemp(prefix='state-', dir=OUT)), settings, output)
     # Fresh test state each time.
     service.jobs = {}

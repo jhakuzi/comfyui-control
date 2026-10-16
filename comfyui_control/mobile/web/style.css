@@ -107,6 +107,13 @@ input[type="checkbox"] {
   accent-color: var(--accent);
   flex-shrink: 0;
 }
+input[type="range"] {
+  accent-color: var(--accent);
+  min-height: 44px;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+}
 input[type="file"] {
   font-size: 0.85rem;
 }

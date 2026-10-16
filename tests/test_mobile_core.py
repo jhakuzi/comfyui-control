@@ -79,7 +79,7 @@ def test_metadata_drives_model_choices_and_limits(tmp_path, mobile_graph):
     assert render(preset, {"model": "other.gguf"}, info=info)[0]['quantized']['inputs']['file'] == 'other.gguf'
 
 
-def test_settings_require_network_password_and_keep_secrets_out_of_url(tmp_path):
+def test_optional_network_password_keeps_secrets_out_of_url(tmp_path):
     hashed = password_hash('correct horse battery')
     assert check_password('correct horse battery', hashed)
     assert not check_password('incorrect', hashed)
@@ -89,8 +89,9 @@ def test_settings_require_network_password_and_keep_secrets_out_of_url(tmp_path)
     assert settings.url() == 'http://my-vpn.example:8189/'
     assert 'correct horse battery' not in (tmp_path/'mobile.json').read_text()
     assert hashed not in settings.url()
-    with pytest.raises(ValueError, match='password is required'):
-        replace(settings, require_auth=False).validate()
+    replace(settings, require_auth=False).validate()
+    with pytest.raises(ValueError, match='Set a mobile password'):
+        replace(settings, require_auth=True, password='').validate()
     with pytest.raises(ValueError):
         replace(settings, advertised='http://user:secret@vpn.example').validate()
 
@@ -129,7 +130,7 @@ def test_unmapped_literals_are_private_and_progress_omits_prompt_history(tmp_pat
 
 def test_auth_csrf_host_validation_and_output_confinement(tmp_path):
     async def scenario():
-        settings = MobileSettings(password=password_hash('test password 123'))
+        settings = MobileSettings(require_auth=True, password=password_hash('test password 123'))
         service = MobileService(tmp_path/'data', settings, tmp_path/'output')
         client = TestClient(TestServer(MobileHTTP(service).app()), cookie_jar=aiohttp.CookieJar(unsafe=True))
         await client.start_server()
@@ -160,3 +161,18 @@ def test_auth_csrf_host_validation_and_output_confinement(tmp_path):
         finally:
             await client.close()
     asyncio.run(scenario())
+
+
+def test_upgrade_previous_localhost_defaults_preserves_explicit_preferences(tmp_path,monkeypatch):
+    monkeypatch.setattr('comfyui_control.mobile.settings.lan_address',lambda:'192.168.10.20')
+    path=tmp_path/'settings.json'
+    path.write_text(json.dumps({'enabled':True,'bind':'127.0.0.1','port':8189,'require_auth':True,'password':''}))
+    upgraded=MobileSettings.load(path)
+    assert upgraded.bind=='0.0.0.0' and not upgraded.require_auth
+    assert upgraded.url()=='http://192.168.10.20:8189/'
+    upgraded.bind='127.0.0.1'
+    upgraded.save(path)
+    assert MobileSettings.load(path).bind=='127.0.0.1'  # A new explicit choice is respected.
+    path.write_text(json.dumps({'bind':'127.0.0.1','advertised':'https://vpn.example','require_auth':True,'password':'existing-hash'}))
+    explicit=MobileSettings.load(path)
+    assert explicit.bind=='127.0.0.1' and explicit.require_auth and explicit.password=='existing-hash'

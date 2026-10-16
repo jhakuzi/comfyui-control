@@ -21,6 +21,7 @@ let mappingDraft = new Map(),
   viewerIndex = 0;
 let fullStatePending = false;
 let fullStateAgain = false;
+let presetEpoch = 0;
 let connected = false,
   recovering = false,
   initialized = false;
@@ -136,6 +137,7 @@ function saveUI() {
   writeStore("ui", uiState);
 }
 function restoreUI() {
+  uiReady = false;
   for (const [id, open] of Object.entries(uiState.details || {})) {
     if ($(id)?.tagName === "DETAILS") $(id).open = !!open;
   }
@@ -176,13 +178,62 @@ async function loadPresets(selectId) {
   $("preset").replaceChildren(new Option("Choose a workflow…", ""));
   for (const item of items) $("preset").add(new Option(item.name, item.id));
   $("empty-presets").hidden = items.length > 0;
-  const stored = selectId || readStore("preset", "");
-  if (items.some((item) => item.id === stored)) {
+  const stored = [
+    selectId,
+    readStore("preset", ""),
+    items.find((item) => item.default)?.id,
+    items.length === 1 ? items[0].id : "",
+  ].find((id) => items.some((item) => item.id === id));
+  if (stored) {
     $("preset").value = stored;
     await choosePreset(stored);
   }
+  await loadSavedWorkflows();
+}
+async function loadSavedWorkflows() {
+  $("preset").querySelector("optgroup")?.remove();
+  $("refresh-workflows").disabled = true;
+  try {
+    const names = await api("/api/workflows/saved");
+    if (names.length) {
+      const group = node("optgroup");
+      group.label = "Saved in ComfyUI";
+      for (const name of names)
+        group.append(new Option(name.replace(/\.json$/i, ""), "saved:" + name));
+      $("preset").append(group);
+    }
+    $("workflow-source-note").hidden = !!names.length;
+    $("workflow-source-note").textContent =
+      "Save a workflow in ComfyUI to select it here, or choose one from the desktop app.";
+  } catch {
+    $("workflow-source-note").hidden = false;
+    $("workflow-source-note").textContent =
+      "Saved ComfyUI workflows are unavailable. Start ComfyUI, then refresh this list. Your mobile presets remain available.";
+  } finally {
+    $("refresh-workflows").disabled = false;
+  }
+}
+async function selectWorkflow(id) {
+  if (!id.startsWith("saved:")) return choosePreset(id);
+  const previous = preset;
+  busy = true;
+  updateGenerate();
+  try {
+    const item = await api("/api/workflows/saved", {
+      method: "POST",
+      body: JSON.stringify({ name: id.slice(6) }),
+    });
+    await loadPresets(item.id);
+  } catch (error) {
+    $("preset").value = previous?.id || "";
+    throw error;
+  } finally {
+    busy = false;
+    updateGenerate();
+  }
 }
 async function choosePreset(id, reuse) {
+  const epoch = ++presetEpoch;
   preset = null;
   updateGenerate();
   for (const target of [
@@ -190,14 +241,22 @@ async function choosePreset(id, reuse) {
     "model-controls",
     "lora-controls",
     "basic-controls",
+    "resolution-controls",
     "advanced-controls",
     "mapping-controls",
   ])
     $(target).replaceChildren();
-  for (const target of ["lora-card", "settings-card", "delete-preset"])
+  for (const target of [
+    "lora-card",
+    "settings-card",
+    "resolution-card",
+    "delete-preset",
+  ])
     $(target).hidden = true;
   if (!id) return;
+  writeStore("preset", id);
   const loaded = await api("/api/presets/" + encodeURIComponent(id));
+  if (epoch !== presetEpoch) return;
   preset = loaded;
   const stored = reuse || readStore("draft-" + id, {});
   const same = stored.revision === preset.revision;
@@ -294,6 +353,38 @@ function control(field, container) {
           : input.value;
     saveDraft();
   });
+  if (
+    ["steps", "cfg", "resolution_mp", "lora_strength"].includes(field.role) &&
+    ["int", "float"].includes(field.kind) &&
+    !field.options
+  ) {
+    const slider = node("input");
+    slider.type = "range";
+    slider.setAttribute("aria-label", field.label + " slider");
+    slider.min = field.min ?? (field.role === "steps" ? 1 : 0);
+    const practical =
+      field.role === "steps"
+        ? 100
+        : field.role === "cfg"
+          ? 30
+          : field.role === "resolution_mp"
+            ? 8
+            : 2;
+    slider.max = Math.min(
+      field.max ?? Infinity,
+      Math.max(practical, Number(input.value), Number(slider.min) + 1),
+    );
+    slider.step = field.step || (field.kind === "int" ? 1 : 0.05);
+    slider.value = input.value;
+    slider.addEventListener("input", () => {
+      input.value = slider.value;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    input.addEventListener("input", () => {
+      slider.value = input.value;
+    });
+    wrap.insertBefore(slider, input);
+  }
   container.append(wrap);
   return input;
 }
@@ -307,7 +398,10 @@ function renderFields() {
     for (const field of roles("negative")) control(field, details);
     $("prompt-controls").append(details);
   }
-  for (const field of roles("model")) control(field, $("model-controls"));
+  for (const field of preset.fields.filter((field) =>
+    ["model", "diffusion_model", "vae", "text_encoder"].includes(field.role),
+  ))
+    control(field, $("model-controls"));
   const loras = preset.fields.filter((field) => field.role.startsWith("lora_"));
   const groups = [...new Set(loras.map((field) => field.group))];
   for (const group of groups) {
@@ -341,7 +435,9 @@ function renderFields() {
   $("lora-card").hidden = !groups.length;
   $("lora-count").textContent = `· ${groups.length} configured`;
   const basics = preset.fields.filter((field) =>
-    ["width", "height", "steps", "cfg", "seed", "batch"].includes(field.role),
+    ["sampler", "scheduler", "steps", "cfg", "seed", "batch"].includes(
+      field.role,
+    ),
   );
   for (const field of basics) control(field, $("basic-controls"));
   if (roles("seed").length) {
@@ -365,6 +461,19 @@ function renderFields() {
     $("basic-controls").append(label);
   }
   $("settings-card").hidden = !basics.length;
+  const resolution = preset.fields.filter((field) =>
+    [
+      "width",
+      "height",
+      "resolution_mp",
+      "aspect_ratio",
+      "alignment",
+      "custom_ratio",
+      "custom_aspect_ratio",
+    ].includes(field.role),
+  );
+  for (const field of resolution) control(field, $("resolution-controls"));
+  $("resolution-card").hidden = !resolution.length;
   for (const field of roles("advanced")) control(field, $("advanced-controls"));
   $("reuse-last").hidden = !state.jobs.some((job) => job.preset === preset.id);
 }
@@ -372,6 +481,16 @@ const roleNames = {
   positive: "Positive prompt",
   negative: "Negative prompt",
   model: "Model / checkpoint",
+  diffusion_model: "Diffusion model",
+  vae: "VAE",
+  text_encoder: "Text encoder",
+  sampler: "Sampler",
+  scheduler: "Scheduler",
+  resolution_mp: "Resolution · megapixels",
+  aspect_ratio: "Resolution · aspect ratio",
+  alignment: "Resolution · divisible by",
+  custom_ratio: "Resolution · custom ratio",
+  custom_aspect_ratio: "Resolution · custom aspect ratio",
   lora_model: "LoRA model",
   lora_strength: "LoRA strength",
   lora_enabled: "LoRA enabled",
@@ -403,11 +522,20 @@ function renderMappings() {
         "negative",
         "model",
         "lora_model",
+        "diffusion_model",
+        "vae",
+        "text_encoder",
+        "sampler",
+        "scheduler",
+        "aspect_ratio",
+        "custom_aspect_ratio",
       ].includes(role)
         ? candidate.kind === "text"
-        : ["width", "height", "steps", "seed", "batch"].includes(role)
+        : ["width", "height", "steps", "seed", "batch", "alignment"].includes(
+              role,
+            )
           ? candidate.kind === "int"
-          : ["cfg", "lora_strength"].includes(role)
+          : ["cfg", "lora_strength", "resolution_mp"].includes(role)
             ? ["int", "float"].includes(candidate.kind)
             : role === "lora_enabled"
               ? candidate.kind === "bool"
@@ -787,7 +915,7 @@ async function bootstrap() {
     );
     await Promise.all([snapshot, reconciled]);
     if (epoch !== recoveryEpoch) return;
-    if (!initialized) {
+    if (!initialized || !preset) {
       await loadPresets();
       if (epoch !== recoveryEpoch) return;
       restoreUI();
@@ -812,6 +940,7 @@ function pauseConnection() {
   saveDraft();
   saveUI();
   recoveryEpoch++;
+  presetEpoch++;
   closeEvents();
   clearTimeout(retryTimer);
   retryTimer = null;
@@ -841,8 +970,9 @@ $("login-form").addEventListener(
 );
 $("preset").addEventListener(
   "change",
-  guarded(() => choosePreset($("preset").value)),
+  guarded(() => selectWorkflow($("preset").value)),
 );
+$("refresh-workflows").addEventListener("click", loadSavedWorkflows);
 $("generate-form").addEventListener("submit", generate);
 $("mapping-search").addEventListener("input", renderMappings);
 $("save-mapping").addEventListener(

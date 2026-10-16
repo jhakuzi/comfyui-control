@@ -1,5 +1,6 @@
 """Immutable API graphs and explicit, reusable mappings for arbitrary nodes."""
 from copy import deepcopy
+from collections import Counter
 import json
 import math
 from pathlib import Path
@@ -10,6 +11,8 @@ import uuid
 from .settings import save_json
 
 ROLES = {"positive", "negative", "model", "lora_model", "lora_strength", "lora_enabled",
+         "diffusion_model", "vae", "text_encoder", "sampler", "scheduler",
+         "resolution_mp", "aspect_ratio", "alignment", "custom_ratio", "custom_aspect_ratio",
          "width", "height", "steps", "cfg", "seed", "batch", "advanced"}
 
 
@@ -43,8 +46,8 @@ def candidates(graph, info):
             if type(value) not in (str, int, float, bool):
                 continue
             schema = input_schema(graph, node_id, name, info)
-            options = schema[0] if schema and isinstance(schema[0], list) else None
             limits = schema[1] if len(schema) > 1 and isinstance(schema[1], dict) else {}
+            options = schema[0] if schema and isinstance(schema[0], list) else limits.get("options")
             result.append({"node": node_id, "input": name, "label": f"{title} · {name}",
                            "default": value, "kind": "bool" if type(value) is bool else "int" if type(value) is int else "float" if type(value) is float else "text",
                            "options": options, "min": limits.get("min"), "max": limits.get("max"), "step": limits.get("step")})
@@ -66,11 +69,11 @@ def validate_mappings(graph, mappings):
             raise ValueError("Map each literal input at most once. Node connections cannot be edited.")
         base = available[target]
         role = item["role"]
-        if role in {"positive", "negative", "model", "lora_model"} and base["kind"] != "text":
+        if role in {"positive", "negative", "model", "lora_model", "diffusion_model", "vae", "text_encoder", "sampler", "scheduler", "aspect_ratio", "custom_aspect_ratio"} and base["kind"] != "text":
             raise ValueError(f"{role} must map to a text or model-name input.")
-        if role in {"width", "height", "steps", "seed", "batch"} and base["kind"] != "int":
+        if role in {"width", "height", "steps", "seed", "batch", "alignment"} and base["kind"] != "int":
             raise ValueError(f"{role} must map to an integer input.")
-        if role in {"cfg", "lora_strength"} and base["kind"] not in {"int", "float"}:
+        if role in {"cfg", "lora_strength", "resolution_mp"} and base["kind"] not in {"int", "float"}:
             raise ValueError(f"{role} must map to a numeric input.")
         if role == "lora_enabled" and base["kind"] != "bool":
             raise ValueError("LoRA enabled must map to a boolean input.")
@@ -83,6 +86,73 @@ def validate_mappings(graph, mappings):
         keys.add(key)
         targets.add(target)
     return result
+
+
+def suggested_mappings(graph):
+    """Recognize literal input names; custom node classes/IDs remain unrestricted."""
+    names = {
+        "ckpt_name": ("model", "Checkpoint"), "unet_name": ("diffusion_model", "Diffusion model"),
+        "diffusion_model": ("diffusion_model", "Diffusion model"), "vae_name": ("vae", "VAE"),
+        "clip_name": ("text_encoder", "Text encoder"), "clip_name1": ("text_encoder", "Text encoder 1"),
+        "clip_name2": ("text_encoder", "Text encoder 2"), "text_encoder_name": ("text_encoder", "Text encoder"),
+        "sampler_name": ("sampler", "Sampler"), "scheduler": ("scheduler", "Scheduler"),
+        "steps": ("steps", "Steps"), "cfg": ("cfg", "CFG"), "seed": ("seed", "Seed"),
+        "guidance": ("cfg", "Guidance"),
+        "noise_seed": ("seed", "Seed"), "width": ("width", "Width"), "height": ("height", "Height"),
+        "batch_size": ("batch", "Batch size"), "lora_name": ("lora_model", "LoRA"),
+        "strength_model": ("lora_strength", "Model strength"), "strength_clip": ("lora_strength", "CLIP strength"),
+    }
+    resolution = {"megapixel": ("resolution_mp", "Megapixels"), "megapixels": ("resolution_mp", "Megapixels"),
+                  "resolution": ("resolution_mp", "Megapixels"), "aspect_ratio": ("aspect_ratio", "Aspect ratio"),
+                  "divisible_by": ("alignment", "Divisible by"), "custom_ratio": ("custom_ratio", "Custom ratio"),
+                  "custom_aspect_ratio": ("custom_aspect_ratio", "Custom aspect ratio")}
+    prompt_nodes = {"positive": set(), "negative": set()}
+    def trace(node_id, seen):
+        found, pending = set(), [node_id]
+        while pending:
+            node_id = pending.pop()
+            if node_id in seen or node_id not in graph:
+                continue
+            seen.add(node_id)
+            inputs = graph[node_id]["inputs"]
+            if isinstance(inputs.get("text"), str):
+                found.add(node_id)
+            pending.extend(value[0] for value in inputs.values() if isinstance(value, list) and len(value) == 2 and isinstance(value[0], str))
+        return found
+    for node in graph.values():
+        for role in prompt_nodes:
+            value = node["inputs"].get(role)
+            if isinstance(value, list) and len(value) == 2 and isinstance(value[0], str):
+                prompt_nodes[role] |= trace(value[0], set())
+    text_nodes = [key for key, node in graph.items() if isinstance(node["inputs"].get("text"), str)]
+    result = []
+    for field in candidates(graph, {}):
+        inputs = graph[field["node"]]["inputs"]
+        found = names.get(field["input"])
+        if "aspect_ratio" in inputs and "divisible_by" in inputs:
+            found = resolution.get(field["input"], found)
+        if field["input"] == "text":
+            roles = [role for role in prompt_nodes if field["node"] in prompt_nodes[role]]
+            if len(roles) == 1:
+                found = (roles[0], "Prompt" if roles[0] == "positive" else "Negative prompt")
+            elif len(text_nodes) == 1:
+                found = ("positive", "Prompt")
+        if not found:
+            continue
+        role, label = found
+        item = {"node": field["node"], "input": field["input"], "role": role, "label": label, "key": f"field-{len(result)}"}
+        try:
+            validate_mappings(graph, [item])
+        except ValueError:
+            continue
+        result.append(item)
+    counts = Counter(item["label"] for item in result)
+    for item in result:
+        if counts[item["label"]] > 1:
+            source = graph[item["node"]]
+            title = source.get("_meta", {}).get("title", source["class_type"])
+            item["label"] += " · " + title
+    return result[:200]
 
 
 def fields_for(preset, info):

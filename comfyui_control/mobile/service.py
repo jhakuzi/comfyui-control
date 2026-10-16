@@ -14,7 +14,8 @@ import aiohttp
 
 from .client import ComfyClient, ComfyError
 from .settings import save_json
-from .workflows import Presets, candidates, fields_for, render
+from .workflows import Presets, candidates, fields_for, render, suggested_mappings
+from .workflow_sources import saved_workflows, saved_workflow_graph
 
 
 def revision(preset):
@@ -157,6 +158,21 @@ class MobileService:
         return {"id": preset["id"], "name": preset["name"], "revision": revision(preset),
                 "fields": fields_for(preset, info), "candidates": [{k: v for k, v in item.items() if k != "default"} for item in candidates(preset["graph"], info)],
                 "missing_nodes": missing}
+
+    async def saved_workflows(self):
+        return await saved_workflows(self.client)
+
+    async def import_saved_workflow(self, name):
+        graph = await saved_workflow_graph(self.client, name)
+        for item in self.presets.list():
+            existing = self.presets.get(item["id"])
+            if existing.get("comfy_source") == name and existing["graph"] == graph:
+                return await self.describe(existing)
+        preset = self.presets.create(Path(name).stem[:100], graph)
+        preset["comfy_source"] = name
+        preset["mappings"] = suggested_mappings(graph)
+        save_json(self.presets.path(preset["id"]), preset)
+        return await self.describe(preset)
 
     async def submit(self, body, owner=None):
         request_id = body.get("request_id")
