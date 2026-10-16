@@ -4,6 +4,10 @@ A small Qt app for ComfyUI on Linux, built with KDE Plasma in mind.
 Start/stop, restart, Git or Comfy CLI updates, launch flags, and folder shortcuts.
 Includes a [Mobile WebUI](docs/MOBILE.md) for generating images from your phone.
 
+**Testing branch · 0.10.0.dev1:** collapsible system/sampling monitoring, mobile
+image comparison, and optional crash recovery. [Try it and see the testing notes](docs/TESTING_FEATURES.md).
+COPR remains on the stable release.
+
 ![ComfyUI Control 0.8.1 with the dark theme](docs/screenshots/comfyui-control-0.8.1-dark.png)
 
 ## Install
@@ -44,6 +48,7 @@ Generate from your phone over your LAN or VPN using saved ComfyUI workflows.
 - Edit prompts, choose models (including GGUF), and adjust supported LoRAs and generation settings.
 - Follow live progress and previews above Generate while scrolling. Jobs and drafts recover after reconnecting.
 - Browse your gallery, save images, and reuse settings or create variations.
+- In this testing build, select two gallery images to compare them with a touch slider.
 
 Open **Mobile WebUI…** in the desktop app, enable it, choose a default workflow,
 click **Apply**, and scan the QR code. Keep the desktop app and ComfyUI running.

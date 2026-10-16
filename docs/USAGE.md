@@ -122,6 +122,10 @@ bash install.sh
 
 ## Troubleshooting
 
+The preliminary testing branch adds a **System & generation** panel and optional
+crash recovery in **Edit launch configuration…**. See [monitoring, recovery and
+image comparison](TESTING_FEATURES.md) for controls and measurement limits.
+
 | Problem | Check |
 | --- | --- |
 | ComfyUI exits immediately | Read the log and verify your Python or launch script works in a terminal. |

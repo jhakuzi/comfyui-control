@@ -1,6 +1,6 @@
 Name:           comfyui-control
-Version:        0.9.0
-Release:        1%{?dist}
+Version:        0.10.0
+Release:        0.1.dev1%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
 License:        MIT
@@ -62,6 +62,10 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Fri Oct 16 2026 ComfyUI Control contributors - 0.10.0-0.1.dev1
+- Testing build: collapsible hardware/sampling monitor and mobile image comparison.
+- Add private bounded crash diagnostics and optional recovery with capped backoff.
+
 * Fri Oct 16 2026 ComfyUI Control contributors - 0.9.0-1
 - Release integrated Mobile WebUI with workflow mapping, model controls, gallery and session recovery.
 - Keep live progress and previews anchored above Generate while browsing.

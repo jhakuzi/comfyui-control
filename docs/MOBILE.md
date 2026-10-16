@@ -259,6 +259,21 @@ of the selected output folder populate the gallery. Mobile-created images have
 saved prompt/settings metadata for reuse. Other images may have no mobile
 metadata. Temporary previews and deleted files can become unavailable.
 
+### Compare two images (testing build)
+
+In **Gallery**, tap **Select two images**, select A and B, then **Compare**.
+Drag the divider or use the range slider; keyboard arrows, Home and End work
+too. **Swap A / B** reverses the images and **Center** restores the 50% split.
+Images retain their proportions in the same viewport. Closing keeps the gallery
+position and selection. Full images load only when the comparison opens.
+
+The table highlights differing models, samplers, steps, CFG, seeds, resolution
+and LoRA values when available. Mobile jobs use their saved mapped settings;
+local PNGs can supply recognized settings from ComfyUI's embedded prompt metadata.
+Missing metadata shows an unavailable message. Prompts and arbitrary custom-node
+values are excluded, and another browser's private job settings are not returned.
+Original images are neither changed nor copied.
+
 ## Home-screen / PWA use
 
 The site has a manifest, icons, standalone mode, and iPhone home-screen metadata.
