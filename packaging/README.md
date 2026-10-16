@@ -1,7 +1,7 @@
 # Fedora RPM and COPR
 
-Version `0.10.0` includes monitoring, mobile image comparison and optional crash
-recovery. Fedora packaging is `0.10.0-1`; see the [feature guide](../docs/FEATURES.md)
+Version `0.10.1` includes monitoring, mobile image comparison and optional crash
+recovery. Fedora packaging is `0.10.1-1`; see the [feature guide](../docs/FEATURES.md)
 and [mobile setup guide](../docs/MOBILE.md). Development versions
 remain blocked from stable COPR publishing.
 
@@ -40,7 +40,7 @@ On Fedora, install the build tools:
 sudo dnf install python3 rpm-build dnf5-plugins
 sudo dnf builddep packaging/comfyui-control.spec
 python3 packaging/make_srpm.py --outdir dist
-rpmbuild --rebuild dist/comfyui-control-0.10.0-1*.src.rpm
+rpmbuild --rebuild dist/comfyui-control-0.10.1-1*.src.rpm
 ```
 
 For a clean build environment, `mock` can build the generated SRPM instead.
@@ -51,7 +51,7 @@ Fedora's Python minor version and installation paths can change between releases
 Install the RPM built for your Fedora release:
 
 ```bash
-sudo dnf install ./comfyui-control-0.10.0-1.fc44.noarch.rpm
+sudo dnf install ./comfyui-control-0.10.1-1.fc44.noarch.rpm
 ```
 
 The first RPM was built and installed in an isolated Fedora 44 container with
@@ -122,8 +122,8 @@ reset `Release` to `1`, and rebuild the app ZIP on `main`. Then push a matching
 version tag, for example:
 
 ```bash
-git tag -a v0.10.0 -m 'Release 0.10.0'
-git push origin main v0.10.0
+git tag -a v0.10.1 -m 'Release 0.10.1'
+git push origin main v0.10.1
 ```
 
 Tag pushes automatically build and submit to COPR; ordinary commits do not.

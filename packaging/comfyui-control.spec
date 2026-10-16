@@ -1,5 +1,5 @@
 Name:           comfyui-control
-Version:        0.10.0
+Version:        0.10.1
 Release:        1%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
@@ -62,6 +62,10 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Fri Oct 16 2026 ComfyUI Control contributors - 0.10.1-1
+- Left-align monitoring and prevent wrapped/scaled metrics from overlapping the log.
+- Remove GPU power readings and show only Current/Average generation speed.
+
 * Fri Oct 16 2026 ComfyUI Control contributors - 0.10.0-1
 - Release hardware/sampling monitoring, mobile image comparison and optional crash recovery.
 - Show mobile preparation activity and default to randomized generation seeds.
