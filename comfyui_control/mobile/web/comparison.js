@@ -82,6 +82,18 @@ class ImageComparison {
   }
 
   gallery(items) {
+    const changed = this.selected.some((id) => {
+      const previous = this.items.find((item) => item.id === id);
+      const current = items.find((item) => item.id === id);
+      return !current || (previous && previous.url !== current.url);
+    });
+    if (changed) {
+      for (const id of this.selected) this.metadata.delete(id);
+      if (this.el("compare-dialog").open) {
+        this.el("compare-dialog").close();
+        this.notice("A selected image was removed or replaced. Review your selection before comparing again.");
+      }
+    }
     this.items = items;
     this.selected = this.selected.filter((id) => items.some((item) => item.id === id));
     this.update();

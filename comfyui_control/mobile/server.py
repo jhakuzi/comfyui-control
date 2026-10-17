@@ -213,7 +213,11 @@ class MobileHTTP:
         return json_response(self.service.public_job(await self.service.cancel(request.match_info["id"], owner=request[OWNER])))
 
     async def gallery(self, request):
-        return json_response(await self.service.gallery(owner=request[OWNER]))
+        images = await self.service.gallery(owner=request[OWNER], force=request.query.get('refresh') == '1')
+        if 'since' not in request.query:
+            return json_response(images)
+        revision = hashlib.sha256(json.dumps(images, sort_keys=True).encode()).hexdigest()
+        return json_response({'revision': revision, 'images': None if request.query['since'] == revision else images})
 
     async def prompts(self, request):
         if request.method == 'DELETE':
@@ -259,7 +263,8 @@ class MobileHTTP:
                 return web.Response(body=await self.encode_image(path, thumbnail=False), content_type='image/png', headers=headers)
             return web.FileResponse(path, headers=headers)
         candidate = self.service.output_dir / item["subfolder"] / item["filename"]
-        if item["type"] == "output" and (candidate.exists() or candidate.is_symlink()):
+        if item["type"] == "output" and (self.service.local_comfy or candidate.exists() or candidate.is_symlink()):
+            self.service.image_unavailable(item['id'])
             raise web.HTTPNotFound(text="Image is unavailable.")
         # This is not an arbitrary proxy: references originate in ComfyUI history.
         from urllib.parse import urlencode
@@ -272,8 +277,12 @@ class MobileHTTP:
             params["preview"] = "jpeg;75"
         query = urlencode(params)
         async with self.service.session.get(self.service.client.base + "/view?" + query) as upstream:
+            if upstream.status in {404, 410}:
+                self.service.image_unavailable(item['id'])
             if upstream.status != 200 or upstream.content_type not in {"image/png", "image/jpeg", "image/webp"}:
-                raise web.HTTPNotFound(text="Image was deleted or is unavailable.")
+                if upstream.status in {404, 410}:
+                    raise web.HTTPNotFound(text="Image was deleted or is unavailable.")
+                raise web.HTTPBadGateway(text='ComfyUI could not provide this image. Try again.')
             if thumb or private_metadata:
                 chunks, size = [], 0
                 async for chunk in upstream.content.iter_chunked(65536):

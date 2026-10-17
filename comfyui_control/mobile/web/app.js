@@ -16,6 +16,7 @@ let state = { jobs: [], online: false },
   events = null,
   busy = false;
 let submitting = false;
+let galleryRevision = "", galleryPromise = null, galleryTimer = null, galleryEpoch = 0;
 let mappingDraft = new Map(),
   gallery = [],
   viewerItems = [],
@@ -99,6 +100,8 @@ async function api(path, options = {}) {
   return body;
 }
 function showLogin() {
+  stopGallerySync();
+  galleryRevision = "";
   comparison.clearImages();
   if ($("image-dialog").open) $("image-dialog").close();
   if ($("prompt-history-dialog").open) $("prompt-history-dialog").close();
@@ -152,7 +155,6 @@ function restoreUI() {
   $("import-name").value = uiState.importName || "";
   renderMappings();
   selectTab(uiState.tab === "gallery" ? "gallery" : "create");
-  if (uiState.tab === "gallery") loadGallery();
   const scroll = uiState.scroll || 0;
   requestAnimationFrame(() => window.scrollTo(0, scroll));
   uiReady = true;
@@ -164,6 +166,8 @@ function selectTab(name) {
   $("gallery-tab").classList.toggle("selected", name === "gallery");
   syncGenerationDock();
   saveUI();
+  if (name === "gallery") loadGallery(true);
+  else stopGallerySync();
 }
 function currentJob() {
   return selectedJob === "new"
@@ -830,17 +834,28 @@ function applyState(value) {
   updateGenerate();
 }
 function renderImages(container, items) {
-  const signature = items.map((item) => item.id).join(",");
+  container.imageItems = items;
+  const signature = JSON.stringify(items.map((item) => [item.id, item.url, item.thumbnail]));
   if (container.dataset.signature === signature) return;
   container.dataset.signature = signature;
-  container.replaceChildren();
+  const existing = new Map([...container.children].map((button) => [button.dataset.imageId, button]));
+  for (const [id, button] of existing) {
+    if (!items.some((item) => item.id === id)) button.remove();
+  }
   items.forEach((item, index) => {
+    const source = item.thumbnail || item.url;
+    const previous = existing.get(item.id);
+    if (previous?.dataset.source === source && previous.querySelector("img")) {
+      if (container.children[index] !== previous) container.insertBefore(previous, container.children[index] || null);
+      return;
+    }
     const button = node("button");
     button.type = "button";
     button.dataset.imageId = item.id;
+    button.dataset.source = source;
     button.setAttribute("aria-label", "View " + item.filename);
     const image = node("img");
-    image.src = item.thumbnail || item.url;
+    image.src = source;
     image.alt = item.filename;
     image.loading = "lazy";
     image.decoding = "async";
@@ -855,24 +870,65 @@ function renderImages(container, items) {
     });
     button.append(image);
     button.addEventListener("click", () => {
-      if (container.id === "gallery-grid" && comparison.choose(item)) return;
-      openImage(items, index);
+      const currentItems = container.imageItems;
+      const currentIndex = currentItems.findIndex((entry) => entry.id === item.id);
+      if (currentIndex < 0) return;
+      if (container.id === "gallery-grid" && comparison.choose(currentItems[currentIndex])) return;
+      openImage(currentItems, currentIndex);
     });
-    container.append(button);
+    if (previous) previous.replaceWith(button);
+    if (container.children[index] !== button) container.insertBefore(button, container.children[index] || null);
   });
 }
-async function loadGallery() {
+function stopGallerySync() {
+  clearTimeout(galleryTimer);
+  galleryEpoch++;
+  galleryPromise = null;
+}
+function loadGallery(force = false) {
+  if (document.hidden || $("gallery-page").hidden || $("workspace").hidden) return;
+  if (galleryPromise) return galleryPromise;
+  clearTimeout(galleryTimer);
+  const epoch = galleryEpoch;
   $("refresh-gallery").disabled = true;
-  try {
-    gallery = await api("/api/gallery");
-    renderImages($("gallery-grid"), gallery);
-    comparison.gallery(gallery);
-    $("gallery-empty").hidden = !!gallery.length;
-  } catch (error) {
-    notice(error.message);
-  } finally {
-    $("refresh-gallery").disabled = false;
-  }
+  galleryPromise = (async () => {
+    try {
+      const result = await api(`/api/gallery?since=${encodeURIComponent(galleryRevision)}${force ? "&refresh=1" : ""}`);
+      if (epoch !== galleryEpoch) return;
+      galleryRevision = result.revision;
+      if (result.images) {
+        const oldGallery = gallery;
+        gallery = result.images;
+        if ($("image-dialog").open && viewerItems === oldGallery) {
+          const previous = viewerItems[viewerIndex];
+          const index = gallery.findIndex((item) => item.id === previous.id);
+          if (index < 0) {
+            $("image-dialog").close();
+            notice("This image was removed from the output folder.");
+          } else if (gallery[index].url !== previous.url) {
+            openImage(gallery, index);
+          } else {
+            viewerItems = gallery;
+            viewerIndex = index;
+            $("previous-image").disabled = $("next-image").disabled = gallery.length < 2;
+          }
+        }
+      }
+      renderImages($("gallery-grid"), gallery);
+      comparison.gallery(gallery);
+      $("gallery-empty").hidden = !!gallery.length;
+    } catch (error) {
+      if (force && epoch === galleryEpoch) notice(error.message);
+    } finally {
+      if (epoch === galleryEpoch) {
+        galleryPromise = null;
+        $("refresh-gallery").disabled = false;
+        if (connected && !document.hidden && !$("gallery-page").hidden && !$("workspace").hidden)
+          galleryTimer = setTimeout(() => loadGallery(), 5000);
+      }
+    }
+  })();
+  return galleryPromise;
 }
 function openImage(items, index) {
   viewerItems = items;
@@ -1008,7 +1064,7 @@ async function bootstrap() {
     connected = true;
     retryDelay = 500;
     $("offline").hidden = true;
-    if (!$("gallery-page").hidden) loadGallery();
+    if (!$("gallery-page").hidden) loadGallery(true);
   })();
   try {
     await recoveryPromise;
@@ -1021,6 +1077,7 @@ async function bootstrap() {
   }
 }
 function pauseConnection() {
+  stopGallerySync();
   saveDraft();
   saveUI();
   recoveryEpoch++;
@@ -1198,9 +1255,8 @@ $("reuse-last").addEventListener(
 $("create-tab").addEventListener("click", () => selectTab("create"));
 $("gallery-tab").addEventListener("click", () => {
   selectTab("gallery");
-  loadGallery();
 });
-$("refresh-gallery").addEventListener("click", loadGallery);
+$("refresh-gallery").addEventListener("click", () => loadGallery(true));
 $("close-image").addEventListener("click", () => $("image-dialog").close());
 $("previous-image").addEventListener("click", () =>
   openImage(viewerItems, viewerIndex - 1),

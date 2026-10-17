@@ -53,7 +53,7 @@ async def main(browser_name):
         page.on('pageerror',lambda error:errors.append(str(error)))
         def requested(request):
             parsed=urlsplit(request.url)
-            if re.fullmatch(r'/api/images/[a-f0-9]{32}',parsed.path) and not parsed.query: full_requests.append(parsed.path)
+            if re.fullmatch(r'/api/images/[a-f0-9]{32}',parsed.path) and "thumbnail=" not in parsed.query and "download=" not in parsed.query: full_requests.append(parsed.path)
         page.on('request',requested)
         await page.goto(url)
         await page.locator('#gallery-tab').click()
@@ -71,7 +71,7 @@ async def main(browser_name):
         async def slow_b(route):
             await release_b.wait()
             await route.continue_()
-        await page.route('**/api/images/'+b_id,slow_b)
+        await page.route('**/api/images/'+b_id+'?*',slow_b)
         await page.evaluate('window.scrollTo(0,500)')
         scroll=await page.evaluate('window.scrollY')
         await page.locator('#compare-images').click()
@@ -82,7 +82,7 @@ async def main(browser_name):
         release_b.set()
         await expect(page.locator('#compare-viewport')).to_be_visible()
         await expect(page.locator('#compare-slider')).to_be_enabled()
-        await page.unroute('**/api/images/'+b_id,slow_b)
+        await page.unroute('**/api/images/'+b_id+'?*',slow_b)
         await expect(page.locator('#compare-slider')).to_have_value('50')
         await page.wait_for_function('document.querySelector("#compare-a").naturalWidth===64 && document.querySelector("#compare-b").naturalWidth===128')
         assert len(full_requests)==2
@@ -123,7 +123,7 @@ async def main(browser_name):
                 (390,844,59,0,34,0,24), (1200,844,0,0,0,0,16)):
             await page.set_viewport_size({'width':width,'height':height})
             await page.evaluate('size=>document.documentElement.style.fontSize=size+"px"',font)
-            await page.evaluate('insets=>{for(const [side,value] of Object.entries(insets)) document.documentElement.style.setProperty("--dialog-safe-"+side,value+"px")}',dict(top=top,right=right,bottom=bottom,left=left))
+            await page.evaluate('insets=>{for(const [side,value] of Object.entries(insets)) document.documentElement.style.setProperty("--safe-area-"+side,value+"px")}',dict(top=top,right=right,bottom=bottom,left=left))
             for position in ('top','bottom'):
                 await page.locator('#compare-dialog').evaluate('(el,position)=>el.scrollTop=position==="top"?0:el.scrollHeight',position)
                 bounds=await page.locator('#close-compare').bounding_box()
@@ -146,7 +146,7 @@ async def main(browser_name):
         await expect(page.locator('#compare-viewport')).to_be_visible()
         assert await page.locator('#compare-dialog').evaluate('(el)=>el.scrollTop')==0
         assert len(full_requests)==2
-        await page.evaluate('()=>{for(const side of ["top","right","bottom","left"]) document.documentElement.style.removeProperty("--dialog-safe-"+side)}')
+        await page.evaluate('()=>{for(const side of ["top","right","bottom","left"]) document.documentElement.style.removeProperty("--safe-area-"+side)}')
         await page.set_viewport_size({'width':390,'height':844})
         await page.screenshot(path=str(root/'comparison.png'))
         await page.locator('#close-compare').click()
@@ -174,7 +174,7 @@ async def main(browser_name):
             attempts+=1
             if attempts==1: await route.abort('failed')
             else: await route.continue_()
-        await page.route('**/api/images/'+c_id,interrupted)
+        await page.route('**/api/images/'+c_id+'?*',interrupted)
         await page.locator('#compare-images').click()
         await expect(page.locator('#retry-compare')).to_be_visible()
         await expect(page.locator('#compare-loading')).to_contain_text('1/2 images ready')
@@ -184,13 +184,13 @@ async def main(browser_name):
         assert attempts==2 and full_requests.count('/api/images/'+b_id)==1
         assert await page.evaluate('comparison.images.size')==2
         await page.locator('#close-compare').click()
-        await page.unroute('**/api/images/'+c_id,interrupted)
+        await page.unroute('**/api/images/'+c_id+'?*',interrupted)
         # A newly selected missing image reports an error, with cached B kept.
         evicted=await page.evaluate('(id)=>comparison.images.get(id).url',c_id)
         await page.get_by_role('button',name='View C0.png',exact=True).click()
         assert await page.evaluate('(url)=>fetch(url).then(()=>false,()=>true)',evicted)
         await page.get_by_role('button',name='View C1.png',exact=True).click()
-        await page.route('**/api/images/*',lambda route:route.fulfill(status=404,body='Unavailable') if '/parameters' not in route.request.url and not urlsplit(route.request.url).query else route.continue_())
+        await page.route('**/api/images/*',lambda route:route.fulfill(status=404,body='Unavailable') if '/parameters' not in route.request.url and 'thumbnail=' not in urlsplit(route.request.url).query else route.continue_())
         await page.locator('#compare-images').click()
         await expect(page.locator('#compare-error')).to_be_visible()
         await page.locator('#close-compare').click()

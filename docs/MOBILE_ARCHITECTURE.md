@@ -1,5 +1,36 @@
 # Mobile WebUI architecture and verification
 
+## 0.11.1.dev2 gallery controls and file reconciliation
+
+The existing sticky comparison toolbar now reserves the same safe-area insets
+as the dialogs. Selection, Done selecting and Compare stay reachable in a long
+gallery without changing the layout or comparison cache design.
+
+Gallery requests share a locked, short-lived filesystem scan cache in the
+existing service. Worker-thread scans validate old references as well as finding
+new output; restoring job associations cannot resurrect deleted local files.
+History, workflow mappings, ownership and generation records remain intact.
+File modification timestamps version image URLs so replacement files invalidate
+thumbnails and selected-pair blobs. Remote/temp references survive absent local
+files; only confirmed ComfyUI 404/410 responses mark them unavailable.
+
+The browser checks a small gallery revision response every five seconds while
+Gallery is visible, pauses on tab/background/auth changes, and forces a refresh
+on opening/recovery. ComfyUI has no file-deletion event to reuse. Reconciliation
+retains unchanged thumbnail DOM nodes, prunes deleted selections and closes
+viewers of deleted images. Failed network requests retain the previous gallery.
+There are no additional filesystem watchers, image copies, GPU samplers or
+generation/reconnect services.
+
+All 202 automated checks passed locally and on Fedora 44/Python 3.14. Browser
+checks passed in Chromium and Linux WebKit for sticky controls with simulated
+iPhone insets, real fixture deletion/replacement, selection/blob eviction,
+open-viewer reconciliation, retained thumbnail nodes, failed-network handling,
+and paused/foreground synchronization. Existing comparison-cache, metadata,
+history, custom GGUF/two-LoRA and generation/session-recovery checks passed too.
+Browser generation uses a ComfyUI protocol test double; physical iPhone and
+real LAN/VPN checks remain user validation.
+
 ## 0.11.1.dev1 comparison layout fix
 
 Shared dialog bounds reserve CSS `safe-area-inset-*` space and track the dynamic

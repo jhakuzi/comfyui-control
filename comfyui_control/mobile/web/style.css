@@ -12,10 +12,10 @@
   --accent: #e7f67b;
   --accent-text: #1c230a;
   --generation-dock-height: 0px;
-  --dialog-safe-top: env(safe-area-inset-top, 0px);
-  --dialog-safe-right: env(safe-area-inset-right, 0px);
-  --dialog-safe-bottom: env(safe-area-inset-bottom, 0px);
-  --dialog-safe-left: env(safe-area-inset-left, 0px);
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", system-fallback, sans-serif;
   font-size: 16px;
@@ -227,7 +227,7 @@ p {
 main {
   max-width: 740px;
   margin: auto;
-  padding: 0 18px calc(35px + var(--generation-dock-height) + env(safe-area-inset-bottom));
+  padding: 0 calc(18px + var(--safe-area-right)) calc(35px + var(--generation-dock-height) + env(safe-area-inset-bottom)) calc(18px + var(--safe-area-left));
 }
 .card {
   background: var(--surface);
@@ -507,8 +507,8 @@ details details {
 .comparison-actions {
   margin-bottom: 16px;
   position: sticky;
-  top: 8px;
-  z-index: 1;
+  top: calc(8px + var(--safe-area-top));
+  z-index: 3;
   background: var(--bg);
   padding: 8px 0;
 }
@@ -669,17 +669,17 @@ progress:indeterminate::-webkit-progress-bar {
 }
 dialog {
   position: fixed;
-  inset: calc(12px + var(--dialog-safe-top)) calc(10px + var(--dialog-safe-right))
-    calc(12px + var(--dialog-safe-bottom)) calc(10px + var(--dialog-safe-left));
+  inset: calc(12px + var(--safe-area-top)) calc(10px + var(--safe-area-right))
+    calc(12px + var(--safe-area-bottom)) calc(10px + var(--safe-area-left));
   margin: auto;
   height: fit-content;
   background: var(--bg);
   color: var(--text);
   border: 1px solid var(--line);
   border-radius: 20px;
-  width: min(760px, calc(100% - 20px - var(--dialog-safe-left) - var(--dialog-safe-right)));
-  max-height: calc(100vh - 24px - var(--dialog-safe-top) - var(--dialog-safe-bottom));
-  max-height: calc(100dvh - 24px - var(--dialog-safe-top) - var(--dialog-safe-bottom));
+  width: min(760px, calc(100% - 20px - var(--safe-area-left) - var(--safe-area-right)));
+  max-height: calc(100vh - 24px - var(--safe-area-top) - var(--safe-area-bottom));
+  max-height: calc(100dvh - 24px - var(--safe-area-top) - var(--safe-area-bottom));
   overflow: auto;
   overscroll-behavior: contain;
   padding: 0;
@@ -738,8 +738,8 @@ dialog::backdrop {
     padding-right: 28px;
   }
   main {
-    padding-left: 28px;
-    padding-right: 28px;
+    padding-left: calc(28px + var(--safe-area-left));
+    padding-right: calc(28px + var(--safe-area-right));
   }
   .masthead {
     padding-left: 28px;

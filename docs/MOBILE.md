@@ -350,6 +350,8 @@ their shared embedded metadata. Keep the ownership ledger when preserving jobs.
 *Comparison with test images and example generation metadata.*
 
 In **Gallery**, tap **Select two images**, select A and B, then **Compare**.
+Selection and Compare stay pinned below the phone's safe area while scrolling;
+**Done selecting** leaves your pair selected for comparison.
 Drag the divider or use the range slider; keyboard arrows, Home and End work
 too. **Swap A / B** reverses the images and **Center** restores the 50% split.
 Images retain their proportions in the same viewport. Closing keeps the gallery
@@ -360,6 +362,17 @@ loading count appears until both are downloaded and ready. On a weak connection,
 Testing 0.11.1 keeps **Close** pinned while scrolling and positions dialogs inside
 the phone's safe areas, clear of the status bar, camera cutout and home indicator.
 Reopening comparison starts at the top without discarding the cached pair.
+
+While Gallery is visible, it checks for output changes every five seconds.
+Opening Gallery, returning to the app, or tapping **Refresh** checks immediately.
+Deleted local output files disappear from the gallery and comparison selection;
+replacing a file refreshes its thumbnail and cached comparison. Other thumbnails
+stay in place. An open viewer/comparison closes if its image was deleted.
+Network errors keep the previous gallery until connection returns.
+
+Local synchronization uses the output folder configured in desktop Settings.
+For a remote ComfyUI API, references are removed only when ComfyUI confirms an
+image is missing; this app cannot scan that remote machine's filesystem.
 
 The selected pair stays in the phone tab's memory, so reopening or swapping it
 works without further image downloads, even offline. Only that pair is kept;

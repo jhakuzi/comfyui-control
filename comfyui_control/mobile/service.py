@@ -70,6 +70,9 @@ class MobileService:
         self.connection = "Connecting to ComfyUI…"
         self.queue = {"queue_running": [], "queue_pending": []}
         self.images = {}
+        self.unavailable_images = set()
+        self.gallery_time = 0
+        self.gallery_lock = asyncio.Lock()
         self.image_owners = {}
         self.ownership_available = True
         self.ownership_dirty = False
@@ -115,6 +118,8 @@ class MobileService:
         self.output_dir = Path(output).resolve()
         self.output_scope = self.scope_for(self.output_dir)
         self.images.clear()
+        self.unavailable_images.clear()
+        self.gallery_time = 0
         self.preview = self.preview_job = None
         for job in self.current_jobs():
             for item in job.get("images", []):
@@ -349,8 +354,16 @@ class MobileService:
         image_type = descriptor.get("type", "output")
         key = hashlib.sha256((self.output_scope + ":" + image_type + ":" + str(relative)).encode()).hexdigest()[:32]
         previous = self.images.get(key, {})
+        stamp = previous.get('modified', '')
+        if job and job != previous.get('job'):
+            stamp = ''
+            self.unavailable_images.discard(key)
+        version = f'v={stamp}&' if stamp else ''
         item = {**previous, "id": key, "filename": filename, "subfolder": subfolder, "type": image_type, "job": job or previous.get("job"),
-                "url": f"/api/images/{key}", "thumbnail": f"/api/images/{key}?thumbnail=1", "download": f"/api/images/{key}?download=1"}
+                "url": f"/api/images/{key}" + (f'?v={stamp}' if stamp else ''),
+                "thumbnail": f"/api/images/{key}?{version}thumbnail=1", "download": f"/api/images/{key}?{version}download=1"}
+        if not previous or item['job'] != previous.get('job'):
+            self.gallery_time = 0
         self.images[key] = item
         if job in self.jobs:
             owner = self.jobs[job].get('owner') or ''
@@ -558,43 +571,90 @@ class MobileService:
             await asyncio.sleep(delay)
             delay = min(delay * 2, 15)
 
-    async def gallery(self, owner=None):
-        # Explicit refresh only: no recurring filesystem scans or image duplication.
+    def image_unavailable(self, identifier):
+        # A network failure is not evidence of deletion. Call only on confirmed
+        # missing local files or a ComfyUI 404/410 response.
+        self.unavailable_images.add(identifier)
+        self.gallery_time = 0
+
+    async def gallery(self, owner=None, force=False):
+        requested = time.monotonic()
+        async with self.gallery_lock:
+            if (force and self.gallery_time < requested) or not self.gallery_time or time.monotonic() - self.gallery_time >= 2:
+                await self.scan_gallery()
+            ordered = sorted(self.images.values(), key=lambda item: item.get('created',
+                self.jobs.get(item.get('job'), {}).get('created', 0)), reverse=True)
+            return [{**item, 'job': item.get('job') if owner is None or
+                     self.jobs.get(item.get('job'), {}).get('owner') == owner else None}
+                    for item in ordered if item['id'] not in self.unavailable_images][:200]
+
+    async def scan_gallery(self):
+        # Shared across clients; filesystem work runs off the HTTP/Qt threads.
+        # Validate old references separately so the scan limit cannot resurrect
+        # deleted files or incorrectly prune valid files beyond that limit.
         root = self.output_dir
+        scope = self.output_scope
+        references = dict(self.images)
+        for job in self.current_jobs():
+            for descriptor in job.get('images', []):
+                ref = self.image_ref(descriptor, job['id'])
+                if ref:
+                    references[ref['id']] = ref
         def scan():
             found = []
+            valid = {}
+            for identifier, item in references.items():
+                path = self.local_image(item, root)
+                if path:
+                    try:
+                        stat = path.stat()
+                        valid[identifier] = (stat.st_mtime, str(stat.st_mtime_ns))
+                    except OSError:
+                        pass
             count = 0
             if not root.is_dir():
-                return found
+                return found, valid
             for folder, directories, files in os.walk(root, followlinks=False):
                 directories[:] = [d for d in directories if not (Path(folder) / d).is_symlink()]
                 for filename in files:
                     count += 1
                     if count > 10000:
-                        return found
+                        return found, valid
                     path = Path(folder) / filename
                     if path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"} or path.is_symlink():
                         continue
                     try:
-                        found.append((path.stat().st_mtime, path.relative_to(root)))
+                        stat = path.stat()
+                        if path.is_file():
+                            found.append((stat.st_mtime, str(stat.st_mtime_ns), path.relative_to(root)))
                     except OSError:
                         continue
-            return found
-        found = await asyncio.to_thread(scan)
-        for created, path in sorted(found, reverse=True)[:100]:
+            return found, valid
+        found, valid = await asyncio.to_thread(scan)
+        if scope != self.output_scope:
+            return  # Configuration changed while the worker was scanning.
+        for identifier, item in list(self.images.items()):
+            if self.local_comfy and item['type'] == 'output' and identifier in references and identifier not in valid:
+                self.images.pop(identifier, None)
+        for created, modified, path in sorted(found, reverse=True)[:200]:
             ref = self.image_ref({"filename": path.name, "subfolder": str(path.parent) if path.parent != Path(".") else "", "type": "output"})
             if ref:
-                ref["created"] = created
-        # Restore job associations after the filesystem scan.
-        for job in self.current_jobs():
-            for ref in job.get("images", []):
-                self.image_ref(ref, job["id"])
+                valid[ref['id']] = (created, modified)
+        for identifier, (created, modified) in valid.items():
+            ref = self.images.get(identifier)
+            if not ref:
+                continue
+            ref.update(created=created, modified=modified,
+                       url=f'/api/images/{identifier}?v={modified}',
+                       thumbnail=f'/api/images/{identifier}?v={modified}&thumbnail=1',
+                       download=f'/api/images/{identifier}?v={modified}&download=1')
+            self.unavailable_images.discard(identifier)
         def created(item):
             return item.get("created", self.jobs.get(item.get("job"), {}).get("created", 0))
         ordered = sorted(self.images.values(), key=created, reverse=True)
         self.images = {item["id"]: item for item in ordered[:500]}
-        return [{**item, "job": item.get("job") if owner is None or self.jobs.get(item.get("job"), {}).get("owner") == owner else None}
-                for item in ordered[:200]]
+        self.unavailable_images.intersection_update(self.images)
+        self.gallery_time = time.monotonic()
 
     async def image_parameters(self, identifier, owner=None):
         from .image_metadata import parameters, png_parameters
@@ -655,10 +715,10 @@ class MobileService:
         except OSError:
             return {'positive': [], 'negative': [], 'parameters': [], 'additional': [], 'unavailable': True}
 
-    def local_image(self, item):
+    def local_image(self, item, root=None):
         if item.get("type") != "output":
             return None
-        root = self.output_dir
+        root = self.output_dir if root is None else root
         path = root / item["subfolder"] / item["filename"]
         # Reject symlink components, including symlinks to another output tree.
         relative = path.relative_to(root)
