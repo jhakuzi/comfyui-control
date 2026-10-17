@@ -359,7 +359,7 @@ position and selection. Full images download only when comparison opens; a
 loading count appears until both are downloaded and ready. On a weak connection,
 **Retry loading images** keeps the successfully loaded image and retries the other.
 
-Testing 0.11.1 keeps **Close** pinned while scrolling and positions dialogs inside
+Version 0.11.1 keeps **Close** pinned while scrolling and positions dialogs inside
 the phone's safe areas, clear of the status bar, camera cutout and home indicator.
 Reopening comparison starts at the top without discarding the cached pair.
 

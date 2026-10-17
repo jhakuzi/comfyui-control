@@ -1,6 +1,6 @@
 Name:           comfyui-control
 Version:        0.11.1
-Release:        0.2.dev2%{?dist}
+Release:        1%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
 License:        MIT
@@ -62,6 +62,10 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Sat Oct 17 2026 ComfyUI Control contributors - 0.11.1-1
+- Keep comparison Close and gallery selection controls reachable on iPhone.
+- Synchronize deleted/replaced output files and preserve unchanged thumbnails.
+
 * Sat Oct 17 2026 ComfyUI Control contributors - 0.11.1-0.2.dev2
 - Testing: keep gallery comparison controls reachable while scrolling on iPhone.
 - Reconcile deleted/replaced output files without reloading unchanged thumbnails.

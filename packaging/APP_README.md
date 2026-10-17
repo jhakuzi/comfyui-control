@@ -2,7 +2,7 @@
 
 A small Qt desktop app for starting, stopping, and updating ComfyUI on Linux.
 
-Testing version **0.11.1.dev2** keeps comparison controls reachable on iPhone
+Version **0.11.1** keeps comparison controls reachable on iPhone
 and syncs the visible gallery with deleted or replaced output files.
 See the [feature guide](https://github.com/jhakuzi/comfyui-control/blob/main/docs/FEATURES.md).
 Use **Mobile WebUI** to enable the embedded listener, configure your LAN/VPN

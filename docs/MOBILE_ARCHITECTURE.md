@@ -1,5 +1,8 @@
 # Mobile WebUI architecture and verification
 
+Release **0.11.1** includes the comparison safe-area and gallery synchronization
+fixes below. The user confirmed the iPhone testing build works before release.
+
 ## 0.11.1.dev2 gallery controls and file reconciliation
 
 The existing sticky comparison toolbar now reserves the same safe-area insets
