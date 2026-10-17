@@ -41,6 +41,7 @@ class Sample(QRunnable):
 class MonitorPanel(QWidget):
     expanded_changed = Signal(bool)
     observation_changed = Signal(bool)
+    hardware_sampled = Signal(object)
 
     def __init__(self, controller, config, parent=None, reader=None):
         super().__init__(parent)
@@ -50,6 +51,7 @@ class MonitorPanel(QWidget):
         self.worker = None
         self.enabled = config.monitoring_enabled
         self.last_observing = False
+        self.mobile_demand = False
         self.metrics = dict(cpu=None, ram_used=None, ram_total=None, process_memory=None, gpus=[])
         layout = QVBoxLayout(self)
         layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
@@ -132,8 +134,9 @@ class MonitorPanel(QWidget):
         self._activity()
 
     def _activity(self):
-        active = self.enabled and self.isVisible() and not self.window().isMinimized() and (self.toggle.isChecked() or self.controller.state in {'starting','running'})
-        observing = active and self.controller.state in {'starting','running'}
+        desktop_active = self.enabled and self.isVisible() and not self.window().isMinimized() and (self.toggle.isChecked() or self.controller.state in {'starting','running'})
+        active = desktop_active or self.mobile_demand
+        observing = desktop_active and self.controller.state in {'starting','running'}
         if observing != self.last_observing:
             if not observing:
                 self.performance.disconnect()
@@ -159,6 +162,11 @@ class MonitorPanel(QWidget):
         self.worker = None
         self.metrics = value
         self.render()
+        self.hardware_sampled.emit(value)
+
+    def set_mobile_demand(self, enabled):
+        self.mobile_demand = enabled
+        self._activity()
 
     def execution(self, kind, data, when):
         if kind == 'disconnected':
@@ -196,4 +204,5 @@ class MonitorPanel(QWidget):
 
     def stop(self):
         self.enabled = False
+        self.mobile_demand = False
         self._activity()

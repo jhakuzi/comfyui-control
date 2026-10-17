@@ -2,8 +2,8 @@
 
 A small Qt desktop app for starting, stopping, and updating ComfyUI on Linux.
 
-Version **0.10.2** includes a roomier desktop layout, system/sampling
-monitoring, mobile image comparison, and optional crash recovery.
+Version **0.11.0.dev1** tests mobile generation statistics, prompt history and
+favorites, and image details alongside the existing desktop controls.
 See the [feature guide](https://github.com/jhakuzi/comfyui-control/blob/main/docs/FEATURES.md).
 Use **Mobile WebUI…** to enable the embedded listener, configure your LAN/VPN
 address and password, and scan the QR. It is disabled by default.

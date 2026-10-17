@@ -332,6 +332,8 @@ class MainWindow(QMainWindow):
         self.monitor.expanded_changed.connect(self._monitor_expanded)
         self.monitor.observation_changed.connect(self._observe_generation)
         self.mobile.execution.connect(self.monitor.execution)
+        self.mobile.monitoring_requested.connect(self.monitor.set_mobile_demand)
+        self.monitor.hardware_sampled.connect(self.mobile.publish_hardware)
         layout.addWidget(self.monitor)
         self.crash_notice = QWidget()
         crash_row=QHBoxLayout(self.crash_notice)

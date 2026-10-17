@@ -278,6 +278,68 @@ of the selected output folder populate the gallery. Mobile-created images have
 saved prompt/settings metadata for reuse. Other images may have no mobile
 metadata. Temporary previews and deleted files can become unavailable.
 
+### Live statistics (testing branch)
+
+The pinned progress card shows only **s/it**, **used VRAM** and **GPU utilization**.
+It shares the desktop sampler, including AMD sysfs/ROCm and NVIDIA detection;
+opening more phone tabs does not start additional GPU readers. Samples are
+requested about once a second while a connected phone has an active job, even
+if the desktop monitor is collapsed or minimized. Closing/suspending the page
+releases that request. Normal desktop monitoring can still keep the sampler busy.
+
+Sampling speed uses the current job's actual progress-event intervals, excluding
+model loading. Missing sensors, ambiguous/parallel progress and connection gaps
+show `--`. Hardware values refer to this PC: if the configured ComfyUI API URL
+points to another machine, GPU metrics stay unavailable. Reconnection restores
+cached job progress without submitting another generation.
+
+### Prompt history and favorites (testing branch)
+
+Tap **History & favorites** near the prompt. Search Recent or Favorites, tap a
+prompt to restore its positive and negative fields, or use the star/Delete actions.
+Reuse changes prompts only; it keeps the current models, seed and other settings
+and never presses Generate. Multiple text inputs are restored in mapping order;
+if their counts differ, choose a matching workflow first.
+
+History is recorded only after ComfyUI accepts a submission, including acceptance
+recovered after a lost response. Repeated identical prompt pairs update one entry
+and keep its favorite flag. Deleting an entry is not undone by reconnecting or
+reopening an old job. **Clear history** confirms removal of all entries, including
+favorites, without deleting images or presets.
+
+History belongs to the existing browser-identity cookie and survives app restarts.
+Tabs sharing that identity share history; a different browser profile gets its
+own. The private files live under `mobile/prompts/` in the app configuration folder.
+Each identity retains up to 200 entries/100 favorites and 4 MiB; old non-favorites
+are removed first. Very large prompt sets (over 100,000 characters) or storage
+errors do not stop generation and show a history warning instead.
+
+### Image details (testing branch)
+
+Open a gallery image and expand **Details**. Prompts and common generation values
+appear first; models/LoRAs and additional parameters are collapsible. **Copy prompt**
+copies the positive text, with a selection-based fallback for ordinary LAN HTTP.
+If the browser blocks copying, the prompt text remains selectable.
+
+Mobile images use their original saved submission values, even after a preset is
+edited. Existing local ComfyUI PNGs can supply embedded API-graph metadata. The
+inspector uses existing mapping/detection rules; it does not guess ambiguous
+custom prompt inputs or require standard node classes. It reports the actual
+image dimensions separately from workflow resolution settings. No missing value
+is invented. Non-PNGs without saved mobile-job data can show dimensions only.
+
+Additional details include mapped inputs and safe numeric/boolean or enumerated
+custom-node values, not raw graphs, arbitrary PNG text, or credential-like inputs.
+Unknown connections and the original graph are untouched.
+
+The output gallery is still shared, but another mobile identity cannot inspect
+your generation details or reuse settings. A small `mobile/image-owners.json`
+ledger retains that boundary after old job records are pruned. When another
+identity opens/downloads an owned image, the server sends pixels without its
+embedded prompt text; the original file is not modified. Thumbnails also omit
+embedded text. Images created directly in ComfyUI, with no mobile owner, retain
+their shared embedded metadata. Keep the ownership ledger when preserving jobs.
+
 ### Compare two images
 
 <img src="screenshots/mobile-comparison-0.10.1.png" alt="Touch comparison divider and highlighted differences in generation settings" width="360">

@@ -100,6 +100,8 @@ async function api(path, options = {}) {
 }
 function showLogin() {
   if ($("image-dialog").open) $("image-dialog").close();
+  if ($("prompt-history-dialog").open) $("prompt-history-dialog").close();
+  if ($("compare-dialog").open) $("compare-dialog").close();
   $("offline").hidden = true;
   if (events) events.close();
   events = null;
@@ -173,6 +175,7 @@ function syncGenerationDock() {
     dock = $("generation-dock"),
     card = $("job-card"),
     destination = active ? dock : $("job-output");
+  renderGenerationStats(job);
   if (card.parentElement !== destination) {
     if (active) destination.prepend(card);
     else destination.append(card);
@@ -191,6 +194,15 @@ function syncGenerationDock() {
       : `${images.length} images ready · View results`;
   }
   dock.hidden = !active && !submitting && !$("gallery-page").hidden;
+}
+function renderGenerationStats(job) {
+  $("generation-stats").hidden = !job || !activeStatuses.has(job.status);
+  const numeric = (value) => typeof value === "number" && Number.isFinite(value);
+  const timing = connected && state.online && job?.status === "running" ? job.seconds_per_iteration : null;
+  const hardware = connected && state.online ? state.hardware || {} : {};
+  $("stat-iteration").textContent = numeric(timing) ? timing.toFixed(2) : "--";
+  $("stat-vram").textContent = numeric(hardware.vram_used) ? (hardware.vram_used / 2 ** 30).toFixed(1) + " GiB" : "--";
+  $("stat-gpu").textContent = numeric(hardware.utilization) ? Math.round(hardware.utilization) + "%" : "--";
 }
 function updateGenerate() {
   const job = state.jobs.find((item) => item.id === selectedJob);
@@ -674,6 +686,7 @@ async function generate(event) {
       method: "POST",
       body: JSON.stringify(body),
     });
+    if (job.prompt_history_notice) notice(job.prompt_history_notice);
     pendingSubmission = null;
     writeStore("pending", null);
     selectedJob = job.id;
@@ -868,20 +881,7 @@ function openImage(items, index) {
   $("download-image").href = item.download;
   $("previous-image").disabled = $("next-image").disabled = items.length < 2;
   $("reuse-image").disabled = $("vary-image").disabled = !job;
-  $("image-metadata").replaceChildren();
-  if (job) {
-    $("image-metadata").append(node("p", job.preset_name));
-    for (const field of job.controls || [])
-      $("image-metadata").append(
-        node("p", `${field.label}: ${job.values[field.key]}`),
-      );
-  } else
-    $("image-metadata").append(
-      node(
-        "p",
-        "Generated outside this mobile interface. Saved mobile settings are unavailable.",
-      ),
-    );
+  imageDetails.select(item);
   if (!$("image-dialog").open) $("image-dialog").showModal();
 }
 async function reuseJob(job, variation = false) {
@@ -1313,5 +1313,23 @@ function connectionFailure(error) {
   scheduleRecovery();
 }
 const comparison = new ImageComparison({ api, notice, read: readStore, write: writeStore });
+const imageDetails = new ImageDetails({ api });
+const promptHistory = new PromptHistoryView({ api, reuse: (entry) => {
+  if (!preset) throw new Error("Choose a workflow before reusing a prompt.");
+  const changes = [];
+  for (const role of ["positive", "negative"]) {
+    const fields = preset.fields.filter((field) => field.role === role);
+    const saved = entry[role] || [];
+    if (saved.length && saved.length !== fields.length)
+      throw new Error("This prompt uses a different number of text inputs. Choose a matching workflow before reusing it.");
+    fields.forEach((field, index) => changes.push([field.key, saved[index]?.value || ""]));
+  }
+  for (const [key, value] of changes) {
+    draft[key] = value;
+    $("control-" + key).value = value;
+  }
+  saveDraft();
+  notice("Prompt restored. Review it, then Generate when ready.");
+} });
 $("reconnect").addEventListener("click", foreground);
 bootstrap().catch(connectionFailure);

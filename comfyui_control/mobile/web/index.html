@@ -22,6 +22,8 @@
     <link rel="icon" href="/icon.png" />
     <link rel="stylesheet" href="/style.css" />
     <script src="/comparison.js" defer></script>
+    <script src="/prompt_history.js" defer></script>
+    <script src="/image_details.js" defer></script>
     <script src="/app.js" defer></script>
     <title>comfyui-control Mobile</title>
   </head>
@@ -83,6 +85,7 @@
                 Import an API-format workflow below to get started.
               </p>
               <div id="prompt-controls"></div>
+              <button id="prompt-history" class="text-button" type="button">History & favorites</button>
               <button id="reuse-last" class="text-button" type="button" hidden>
                 Reuse last generation
               </button>
@@ -190,6 +193,11 @@
               </div>
               <p id="job-detail" class="hint"></p>
               <progress id="progress" max="1" value="0" hidden></progress>
+              <div id="generation-stats" class="generation-stats" hidden aria-live="off" aria-label="Live generation statistics">
+                <span><b id="stat-iteration">--</b> s/it</span>
+                <span>VRAM <b id="stat-vram">--</b></span>
+                <span>GPU <b id="stat-gpu">--</b></span>
+              </div>
               <img
                 id="preview"
                 class="preview"
@@ -245,6 +253,22 @@
       </div>
       <p id="notice" role="alert" hidden></p>
     </main>
+    <dialog id="prompt-history-dialog" aria-labelledby="prompt-history-title">
+      <div class="viewer">
+        <div class="heading">
+          <h2 id="prompt-history-title">Your prompts</h2>
+          <button id="close-prompt-history" class="small" type="button">Close</button>
+        </div>
+        <input id="prompt-history-search" type="search" placeholder="Search your prompts…" aria-label="Search prompt history" />
+        <div class="actions history-filters">
+          <button id="history-recent" type="button" aria-pressed="true">Recent</button>
+          <button id="history-favorites" type="button" aria-pressed="false">Favorites</button>
+        </div>
+        <p id="prompt-history-status" class="hint" role="status"></p>
+        <div id="prompt-history-list"></div>
+        <button id="clear-prompt-history" class="text-button danger" type="button">Clear history</button>
+      </div>
+    </dialog>
     <dialog id="compare-dialog" aria-labelledby="compare-title">
       <div class="viewer">
         <div class="heading">
@@ -299,8 +323,10 @@
           On iPhone you can also touch and hold the image to save it to Photos.
           Swipe left or right to browse.
         </p>
-        <details>
-          <summary>Generation details</summary>
+        <details id="image-details">
+          <summary>Details</summary>
+          <button id="copy-image-prompt" class="text-button" type="button" disabled>Copy prompt</button>
+          <p id="copy-prompt-status" class="hint" role="status"></p>
           <div id="image-metadata"></div>
         </details>
         <div class="actions">

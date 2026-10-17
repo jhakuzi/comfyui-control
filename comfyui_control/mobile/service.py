@@ -9,13 +9,17 @@ from pathlib import Path
 import struct
 import time
 import uuid
+from urllib.parse import urlsplit
 
 import aiohttp
 
 from .client import ComfyClient, ComfyError
-from .settings import save_json
+from .settings import lan_address, save_json
 from .workflows import Presets, candidates, fields_for, render, suggested_mappings, with_model_controls, MODEL_CONTROLS_VERSION
 from .workflow_sources import saved_workflows, saved_workflow_graph
+from ..performance import GenerationPerformance
+from .prompt_history import PromptHistory
+from .image_metadata import generation_details
 
 
 def revision(preset):
@@ -36,14 +40,22 @@ def json_safe(value):
 
 
 class MobileService:
-    def __init__(self, directory, settings, output_dir, desktop_state="stopped", observer=None):
+    def __init__(self, directory, settings, output_dir, desktop_state="stopped", observer=None, monitoring=None):
         self.observer = observer
+        self.monitoring = monitoring
+        self.monitoring_active = False
+        self.hardware = {}
+        self.hardware_time = 0
+        self.performance = {}
         self.directory = Path(directory)
         self.settings = settings
+        self.local_comfy = urlsplit(settings.comfy_url).hostname in {'127.0.0.1', 'localhost', '::1', lan_address(), settings.bind} - {'0.0.0.0', '::'}
         self.output_dir = Path(output_dir).resolve()
         self.output_scope = self.scope_for(self.output_dir)
         self.desktop_state = desktop_state
         self.presets = Presets(self.directory / "presets")
+        self.prompts = PromptHistory(self.directory / 'prompts')
+        self.prompt_lock = asyncio.Lock()
         try:
             saved = json.loads((self.directory / "jobs.json").read_text())
             self.jobs = saved.get("jobs", {})
@@ -53,9 +65,25 @@ class MobileService:
         except (OSError, ValueError, KeyError):
             self.jobs, self.client_id = {}, str(uuid.uuid4())
         self.online = False
+        for job in self.jobs.values():
+            job['seconds_per_iteration'] = None
         self.connection = "Connecting to ComfyUI…"
         self.queue = {"queue_running": [], "queue_pending": []}
         self.images = {}
+        self.image_owners = {}
+        self.ownership_available = True
+        self.ownership_dirty = False
+        ownership_path = self.directory / 'image-owners.json'
+        if ownership_path.exists():
+            try:
+                if ownership_path.stat().st_size > 16 * 1024**2:
+                    raise ValueError()
+                owners = json.loads(ownership_path.read_text())
+                if not isinstance(owners, dict) or not all(isinstance(k,str) and isinstance(v,str) for k,v in owners.items()):
+                    raise ValueError()
+                self.image_owners = owners
+            except (OSError, ValueError):
+                self.ownership_available = False  # Fail closed; never overwrite a damaged privacy ledger.
         for job in self.current_jobs():
             for item in job.get("images", []):
                 self.image_ref(item, job.get("id"))
@@ -99,6 +127,7 @@ class MobileService:
 
     async def stop(self):
         self.closed = True
+        self.update_monitoring()
         for subscriber in self.subscribers:
             if subscriber.full():
                 subscriber.get_nowait()
@@ -117,32 +146,56 @@ class MobileService:
             for key in terminal[:len(self.jobs) - 100]:
                 self.jobs.pop(key, None)
         save_json(self.directory / "jobs.json", {"client_id": self.client_id, "jobs": self.jobs})
+        if self.ownership_dirty and self.ownership_available:
+            save_json(self.directory / 'image-owners.json', self.image_owners)
+            self.ownership_dirty = False
 
     @staticmethod
     def public_job(job):
-        return {k: v for k, v in job.items() if k not in {"graph", "scope", "owner"}}
+        return {k: v for k, v in job.items() if k not in {"graph", "scope", "owner", "prompt_history_recorded", "metadata"}}
 
     def state(self, include_details=True, owner=None):
         jobs = [j for j in self.current_jobs() if owner is None or j.get("owner") == owner][-100:]
         if include_details:
             public = [self.public_job(job) for job in jobs]
         else:
-            keys = {"id", "status", "phase", "progress", "prompt_id", "position", "preset_name", "error"}
+            keys = {"id", "status", "phase", "progress", "prompt_id", "position", "preset_name", "error", "seconds_per_iteration"}
             public = [{**{k: v for k, v in job.items() if k in keys}, "image_count": len(job.get("images", []))} for job in jobs]
         preview_allowed = owner is None or any(j["id"] == self.preview_job for j in jobs)
         return json_safe({"instance": self.instance_id, "version": self.state_version,
                 "online": self.online, "connection": self.connection, "desktop": self.desktop_state,
                 "jobs": public, "partial": not include_details, "queue_remaining": len(self.queue.get("queue_running", [])) + len(self.queue.get("queue_pending", [])),
+                "hardware": self.hardware if self.online and time.monotonic() - self.hardware_time < 5 else {},
                 "preview": f"/api/preview?v={self.preview_version}" if self.preview and preview_allowed else None,
                 "preview_job": self.preview_job if preview_allowed else None})
 
     def broadcast(self):
+        self.update_monitoring()
         self.state_version += 1
         for subscriber, owner in self.subscribers.items():
             state = self.state(include_details=False, owner=owner)
             if subscriber.full():
                 subscriber.get_nowait()
             subscriber.put_nowait(state)
+
+    def update_monitoring(self):
+        active_owners = {j.get('owner') for j in self.current_jobs() if j['status'] in {'submitting', 'queued', 'running', 'cancelling'}}
+        # These are the controller PC's sensors, not those of a remote ComfyUI.
+        active = not self.closed and self.online and self.local_comfy and any(owner in active_owners for owner in self.subscribers.values())
+        if active != self.monitoring_active:
+            self.monitoring_active = active
+            if not active:
+                self.hardware = {}
+            if self.monitoring:
+                self.monitoring(active)
+
+    def update_hardware(self, sample):
+        if not self.monitoring_active:
+            return
+        self.hardware = {key: value for key, value in sample.items() if key in {'utilization', 'vram_used'}
+                         and type(value) in (int, float) and math.isfinite(value) and value >= 0}
+        self.hardware_time = time.monotonic()
+        self.broadcast()
 
     async def metadata(self, force=False):
         if force or time.monotonic() - self.info_time > 30 or not self.info:
@@ -217,8 +270,11 @@ class MobileService:
             # Journal before the network request. A lost response never retries a prompt blindly.
             job = {"id": request_id, "owner": owner, "scope": self.output_scope, "preset": preset["id"], "preset_name": preset["name"], "revision": revision(preset),
                    "values": actual, "disabled_loras": body.get("disabled_loras", []), "created": time.time(),
-                   "status": "submitting", "phase": "preparing", "progress": None, "images": [], "prompt_id": None}
-            job["controls"] = [{k: field[k] for k in ("key", "label", "role", "kind")} for field in fields_for(preset, info)]
+                   "status": "submitting", "phase": "preparing", "progress": None, "images": [], "prompt_id": None,
+                   "prompt_history_recorded": False}
+            controls = fields_for(preset, info)
+            job["controls"] = [{k: field[k] for k in ("key", "label", "role", "kind", "node", "input", "group")} for field in controls]
+            job['metadata'] = generation_details(controls, actual, graph, info)
             self.jobs[request_id] = job
             self.persist()
             try:
@@ -230,10 +286,36 @@ class MobileService:
                 job.update(status="failed" if exc.rejected else "unknown", error=str(exc))
             except (KeyError, TypeError):
                 job.update(status="unknown", error="ComfyUI's submission response was incomplete. Reconnecting before retrying is safest.")
+            await self._record_prompt(job)
             self.persist()
             self.broadcast()
             self.schedule_refresh()
             return job
+
+    async def prompt_history(self, owner, action='list', identifier=None, favorite=None):
+        async with self.prompt_lock:
+            if action == 'list':
+                return await asyncio.to_thread(self.prompts.list, owner)
+            if action == 'favorite':
+                return await asyncio.to_thread(self.prompts.favorite, owner, identifier, favorite)
+            if action == 'delete':
+                await asyncio.to_thread(self.prompts.delete, owner, identifier)
+            elif action == 'clear':
+                await asyncio.to_thread(self.prompts.clear, owner)
+            return {'ok': True}
+
+    async def _record_prompt(self, job):
+        if job.get('prompt_history_recorded') is not False or not job.get('prompt_id'):
+            return
+        job['prompt_history_recorded'] = True
+        if not job.get('owner'):
+            return
+        try:
+            async with self.prompt_lock:
+                await asyncio.to_thread(self.prompts.record, job['owner'], job.get('controls', []), job.get('values', {}))
+        except (OSError, ValueError):
+            # Accepted generations must never be retried because a history write failed.
+            job['prompt_history_notice'] = 'Generation submitted, but its prompt could not be saved to history. Check mobile storage or clear some history.'
 
     def schedule_refresh(self):
         self.refresh_needed = True
@@ -270,6 +352,12 @@ class MobileService:
         item = {**previous, "id": key, "filename": filename, "subfolder": subfolder, "type": image_type, "job": job or previous.get("job"),
                 "url": f"/api/images/{key}", "thumbnail": f"/api/images/{key}?thumbnail=1", "download": f"/api/images/{key}?download=1"}
         self.images[key] = item
+        if job in self.jobs:
+            owner = self.jobs[job].get('owner') or ''
+            ownership_key = self.image_ownership_key(item)
+            if self.image_owners.get(ownership_key) != owner:
+                self.image_owners[ownership_key] = owner
+                self.ownership_dirty = True
         return item
 
     async def refresh(self):
@@ -336,6 +424,10 @@ class MobileService:
                         job.pop("error", None)
                     elif job.get("prompt_id") and job["prompt_id"] not in history and job["status"] in {"running", "queued", "cancelling", "submitting"}:
                         job.update(status="unknown", progress=None, error="This job is no longer in ComfyUI's queue or recent history. Check ComfyUI before submitting again.")
+                    if job['status'] != 'running':
+                        job['seconds_per_iteration'] = None
+                        self.performance.pop(job['id'], None)
+                    await self._record_prompt(job)
                 self.online = True
                 self.connection = "Connected to ComfyUI"
                 self.persist()
@@ -397,10 +489,13 @@ class MobileService:
                                 if self.observer and isinstance(data, dict):
                                     self.observer(kind, data, time.monotonic())
                                 job = next((j for j in self.current_jobs() if j.get("prompt_id") == data.get("prompt_id")), None)
-                                if kind == "executing" and not data.get("prompt_id"):
+                                if kind in {"executing", "progress", "progress_state"} and not data.get("prompt_id"):
                                     running = [j for j in self.current_jobs() if j["status"] == "running"]
                                     job = running[0] if len(running) == 1 else None
                                 if job:
+                                    timing = self.performance.setdefault(job['id'], GenerationPerformance())
+                                    timing.event(kind, {**data, 'prompt_id': job['prompt_id']})
+                                    job['seconds_per_iteration'] = timing.snapshot()['current']
                                     if kind in {"execution_start", "executing"}:
                                         job["status"] = "running"
                                     if kind == "execution_start":
@@ -452,6 +547,10 @@ class MobileService:
             except (aiohttp.ClientError, asyncio.TimeoutError, ComfyError, OSError):
                 pass
             self.online = False
+            for timing in self.performance.values():
+                timing.disconnect()
+            for job in self.current_jobs():
+                job['seconds_per_iteration'] = None
             self.connection = "ComfyUI is offline; reconnecting…"
             if self.observer:
                 self.observer('disconnected', {}, time.monotonic())
@@ -502,6 +601,8 @@ class MobileService:
         item = self.images.get(identifier)
         if not item:
             raise ValueError('Image is no longer available. Refresh the gallery.')
+        if not self._metadata_allowed(item, owner):
+            return []
         job = self.jobs.get(item.get('job'))
         if job:
             # Gallery files are shared, but another browser's job metadata isn't.
@@ -513,6 +614,46 @@ class MobileService:
             return await asyncio.to_thread(png_parameters,path,self.info)
         except OSError:
             return []
+
+    def image_ownership_key(self, item):
+        # Keep local-file ownership when the API URL/port changes. Public image
+        # IDs still use the endpoint/output scope for normal session isolation.
+        path = self.output_dir / item['subfolder'] / item['filename']
+        return hashlib.sha256((item['type'] + ':' + str(path)).encode()).hexdigest()[:32]
+
+    def _metadata_allowed(self, item, owner):
+        if owner is None:
+            return True
+        job = self.jobs.get(item.get('job'))
+        if job:
+            return job.get('owner') == owner
+        if not self.ownership_available:
+            return False
+        key = self.image_ownership_key(item)
+        return key not in self.image_owners or self.image_owners[key] == owner
+
+    async def image_details(self, identifier, owner=None):
+        from .image_metadata import image_size, png_details
+        item = self.images.get(identifier)
+        if not item:
+            raise ValueError('Image is no longer available. Refresh the gallery.')
+        if not self._metadata_allowed(item, owner):
+            return {'restricted': True, 'positive': [], 'negative': [], 'parameters': [], 'additional': []}
+        job = self.jobs.get(item.get('job'))
+        path = self.local_image(item)
+        try:
+            if job:
+                result = deepcopy(job.get('metadata') or generation_details(job.get('controls',[]),job.get('values',{})))
+                result.update(source='mobile', image=await asyncio.to_thread(image_size,path))
+                return result
+            if self.online and self.client and not self.info:
+                try:
+                    await asyncio.wait_for(self.metadata(), 3)
+                except (ComfyError, asyncio.TimeoutError):
+                    pass
+            return await asyncio.to_thread(png_details,path,self.info)
+        except OSError:
+            return {'positive': [], 'negative': [], 'parameters': [], 'additional': [], 'unavailable': True}
 
     def local_image(self, item):
         if item.get("type") != "output":

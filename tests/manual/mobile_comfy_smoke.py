@@ -1,6 +1,7 @@
 """Optional image/queue test against an existing ComfyUI; no diffusion model needed."""
 import argparse
 import asyncio
+from copy import deepcopy
 import json
 from pathlib import Path
 import sys
@@ -63,11 +64,31 @@ async def check(comfy_url, output):
                 assert thumbnail.content_type == 'image/jpeg'
                 reduced = QImage.fromData(await thumbnail.read())
                 assert not reduced.isNull() and max(reduced.width(), reduced.height()) <= 384
+                details = await (await client.get(item['url'] + '/details')).json()
+                assert details['source'] == 'mobile'
+                assert next(field['value'] for field in details['parameters'] if field['label']=='Width') == 96
+                if output:
+                    assert details['image'] == {'width':128, 'height':128}
+            # An independent ComfyUI submission has no mobile job/mappings.
+            direct = deepcopy(graph)
+            direct['save']['inputs']['filename_prefix'] += '-direct'
+            accepted = await service.client.request('POST','/prompt',{'prompt':direct,'client_id':str(uuid.uuid4())})
+            for _ in range(200):
+                history = await service.client.request('GET','/history/' + accepted['prompt_id'])
+                if accepted['prompt_id'] in history:
+                    break
+                await asyncio.sleep(.1)
+            descriptors = [item for node in history[accepted['prompt_id']]['outputs'].values() for item in node.get('images',[])]
+            assert descriptors
+            if output:
+                ref = service.image_ref(descriptors[0])
+                details = await service.image_details(ref['id'],job['owner'])
+                assert details['source'] == 'png' and details['image'] == {'width':128,'height':128}
             again = await client.post('/api/generate',json=body,headers={'Origin':origin})
             assert (await again.json())['prompt_id'] == job['prompt_id']
             assert service.presets.get(preset['id'])['graph'] == graph
             assert any(item['job'] == job['id'] for item in await service.gallery())
-            print('PASS: actual ComfyUI queue, 2 images, upscaling, download, gallery, exact graph preservation, and duplicate-request protection.')
+            print('PASS: actual ComfyUI queue, images/upscaling, download/gallery, mobile and direct PNG details, exact graph preservation, and duplicate-request protection.')
             print('This test did not run diffusion or LoRA inference. Smoke-test images remain in ComfyUI output.')
         finally:
             await service.stop()

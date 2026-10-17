@@ -56,6 +56,10 @@ Generate from your phone over your LAN or VPN using saved ComfyUI workflows.
 - Browse your gallery, save images, and reuse settings or create variations.
 - Select two gallery images to compare them with a touch slider.
 
+This testing branch also adds live s/it, VRAM and GPU usage, searchable prompt
+history/favorites, and an image Details inspector. These additions are not yet
+published to COPR.
+
 Open **Mobile WebUI…** in the desktop app, enable it, choose a default workflow,
 click **Apply**, and scan the QR code. Keep the desktop app and ComfyUI running.
 Password protection is optional.

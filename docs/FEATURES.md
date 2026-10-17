@@ -15,7 +15,9 @@ available, CPU/RAM, and owned ComfyUI process-group RSS.
   installed driver. No root access, btop, or extra monitoring package is needed.
 - Hardware is sampled roughly once a second in a worker, at most one sample
   at a time. Slow driver commands have timeouts. Hidden, minimized or disabled
-  panels stop polling; a collapsed panel samples while ComfyUI runs.
+  panels stop desktop polling; a collapsed panel samples while ComfyUI runs.
+  An active Mobile WebUI generation can request that same sampler while the
+  desktop panel is hidden or minimized.
 - Missing/unsupported metrics show `--`. Shared pages can appear more than once
   in process-group RSS. The app never claims this is GPU memory or unique PSS.
 - Disable the panel in **Edit launch configuration…** if unwanted.
@@ -52,6 +54,20 @@ and arbitrary node inputs. Existing local PNGs can supply recognized embedded
 ComfyUI prompt settings. Some custom inputs and non-PNG images have no metadata.
 Another browser's private job metadata stays private. Deleted images show an
 error. Full-resolution files load only in comparison and originals stay untouched.
+
+## Mobile additions in 0.11.0.dev1
+
+The testing branch adds three small controls to the existing mobile layout:
+
+- A row of s/it, used VRAM and GPU utilization inside the pinned progress card.
+- **History & favorites** beside the prompt, with private persistent prompt pairs,
+  search, reuse, favorites, deletion and clearing.
+- **Details** in the image viewer, with prompts, common settings, grouped LoRAs,
+  additional custom parameters and Copy prompt. Existing local ComfyUI PNGs can
+  supply metadata too; another mobile identity's details remain private.
+
+See [mobile usage and limits](MOBILE.md#live-statistics-testing-branch).
+No new runtime dependencies or ComfyUI extensions are required.
 
 ## Crash diagnostics and optional recovery
 
@@ -102,4 +118,6 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 .venv/bin/python tests/manual/mobile_workflows_browser.py --gguf
 .venv/bin/python tests/manual/mobile_comparison_browser.py
 .venv/bin/python tests/manual/mobile_preparation_browser.py
+.venv/bin/python tests/manual/mobile_extras_browser.py
+.venv/bin/python tests/manual/mobile_extras_browser.py --browser webkit
 ```

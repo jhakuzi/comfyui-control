@@ -1,6 +1,47 @@
 # Mobile WebUI architecture and verification
 
-## Existing application review
+## 0.11.0.dev1 additions
+
+The new statistics share `MonitorPanel`'s single Qt hardware sampler through
+`MobileRuntime`; SSE subscriber/job activity requests samples without a second
+GPU worker. Per-job sampling intervals use `GenerationPerformance` and the
+existing ComfyUI socket. Values and previews stay attached to their owner's job.
+The mobile progress card keeps its existing fixed position beside Generate.
+
+`mobile/prompt_history.py` uses the existing atomic/private JSON writer and
+browser-identity hash, separate from the bounded job journal. The service records
+accepted submissions and recovered acknowledgements once. History requests are
+serialized and run in the existing background I/O executor. No history polling,
+gallery dependency, workflow migration or extra ComfyUI extension is needed.
+
+`image_metadata.py` now shares PNG parsing between the existing comparison
+allowlist and the lazy Details endpoint. Explicit mapping roles take priority
+over detection; safe unmapped scalar parameters are supplemental. Submission
+snapshots remain stable if a preset changes. Image ownership survives job
+pruning in a separate ledger. Foreign-client image responses remove embedded
+text in memory, so downloading a PNG cannot bypass Details ownership; disk files
+are untouched. Unknown/unowned ComfyUI output remains shared as before.
+
+The small `prompt_history.js` and `image_details.js` components extend the current
+HTML dialogs and viewer. They use the existing API error handling, draft saving
+and SSE recovery rather than parallel generation/session logic.
+
+The 174 automated checks passed locally and with Fedora 44's system Qt during
+the development RPM build. The RPM/ZIP installation and embedded-server smoke
+checks passed. `mobile_extras_browser.py` passed in Chromium and Linux WebKit
+with phone/tablet/landscape viewports: pinned metrics, prompt search/favorites/
+reuse, persistent state after an app restart, loss/recovery of browser connectivity,
+independent clients, exact seeds, PNG/mobile details and copying were exercised
+with a protocol test double. Existing Chromium generation/recovery, comparison,
+preparation/seed and custom-GGUF mapping checks also ran. These are not physical
+iPhone Safari, LAN/VPN or real GPU inference tests.
+
+Against a real CPU ComfyUI server, the updated smoke check generated/upscaled
+images through the queue, loaded mobile submission details and metadata from a
+separate direct ComfyUI submission, preserved graphs/files, and checked request
+deduplication. Real AMD/NVIDIA sensor readings remain a hardware check.
+
+## Original desktop review (before Mobile WebUI)
 
 The existing app is Python/PySide6 Qt Widgets. `app.py` owns the main window and
 dialogs; `Controller` owns asynchronous `QProcess` sessions, process groups,

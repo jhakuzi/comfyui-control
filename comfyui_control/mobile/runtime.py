@@ -17,6 +17,7 @@ class MobileRuntime(QObject):
     changed = Signal(str, str)
     stopped = Signal()
     execution = Signal(str, object, float)
+    monitoring_requested = Signal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -83,7 +84,7 @@ class MobileRuntime(QObject):
         self.loop = asyncio.get_running_loop()
         self.loop.set_default_executor(ThreadPoolExecutor(max_workers=2, thread_name_prefix="comfy-mobile-io"))
         self.stop_event = asyncio.Event()
-        self.service = MobileService(data_dir(), settings, config.folder("output"), state, self._execution)
+        self.service = MobileService(data_dir(), settings, config.folder("output"), state, self._execution, self._monitoring)
         runner = None
         if settings.enabled:
             runner = web.AppRunner(MobileHTTP(self.service).app(), access_log=None, shutdown_timeout=1)
@@ -110,6 +111,12 @@ class MobileRuntime(QObject):
             except RuntimeError:
                 pass
 
+    def _monitoring(self, enabled):
+        try:
+            self.monitoring_requested.emit(enabled)
+        except RuntimeError:
+            pass
+
     def update_desktop(self, config, state):
         def update():
             if self.service:
@@ -120,6 +127,21 @@ class MobileRuntime(QObject):
                 self.service.broadcast()
         loop = self.loop
         if loop and loop.is_running():
+            try:
+                loop.call_soon_threadsafe(update)
+            except RuntimeError:
+                pass
+
+    def publish_hardware(self, metrics):
+        # Reuse the Qt sampler; never run another nvidia-smi/ROCm reader here.
+        gpus = metrics.get('gpus', [])
+        primary = max(gpus, key=lambda g: (g.get('utilization') if g.get('utilization') is not None else -1, g.get('vram_used') or 0)) if gpus else {}
+        sample = {key: primary.get(key) for key in ('utilization', 'vram_used')}
+        loop = self.loop
+        if loop and loop.is_running():
+            def update():
+                if self.service:
+                    self.service.update_hardware(sample)
             try:
                 loop.call_soon_threadsafe(update)
             except RuntimeError:

@@ -22,7 +22,7 @@ from .settings import check_password, lan_address
 ASSETS = Path(__file__).with_name("web")
 ICON = Path(__file__).parents[1] / "assets" / "comfyui-control.png"
 OWNER = web.RequestKey("mobile_owner", str) if hasattr(web, "RequestKey") else "mobile_owner"
-PUBLIC = {"/", "/app.js", "/comparison.js", "/style.css", "/manifest.webmanifest", "/sw.js", "/icon.png", "/icon-192.png", "/icon-512.png", "/api/login", "/api/session"}
+PUBLIC = {"/", "/app.js", "/comparison.js", "/prompt_history.js", "/image_details.js", "/style.css", "/manifest.webmanifest", "/sw.js", "/icon.png", "/icon-192.png", "/icon-512.png", "/api/login", "/api/session"}
 
 
 def json_response(value, **kwargs):
@@ -152,6 +152,7 @@ class MobileHTTP:
         await response.prepare(request)
         queue = asyncio.Queue(maxsize=2)
         self.service.subscribers[queue] = request[OWNER]
+        self.service.update_monitoring()
         queue.put_nowait(self.service.state(owner=request[OWNER]))
         try:
             while not self.service.closed:
@@ -168,6 +169,7 @@ class MobileHTTP:
             pass
         finally:
             self.service.subscribers.pop(queue, None)
+            self.service.update_monitoring()
         return response
 
     async def presets(self, request):
@@ -213,8 +215,22 @@ class MobileHTTP:
     async def gallery(self, request):
         return json_response(await self.service.gallery(owner=request[OWNER]))
 
+    async def prompts(self, request):
+        if request.method == 'DELETE':
+            await object_body(request)
+            return json_response(await self.service.prompt_history(request[OWNER], 'clear'))
+        return json_response(await self.service.prompt_history(request[OWNER]))
+
+    async def prompt(self, request):
+        body = await object_body(request)
+        return json_response(await self.service.prompt_history(request[OWNER],
+            'delete' if request.method == 'DELETE' else 'favorite', request.match_info['id'], body.get('favorite')))
+
     async def image_parameters(self, request):
         return json_response(await self.service.image_parameters(request.match_info['id'],request[OWNER]))
+
+    async def image_details(self, request):
+        return json_response(await self.service.image_details(request.match_info['id'],request[OWNER]))
 
     async def image(self, request):
         item = self.service.images.get(request.match_info["id"])
@@ -229,14 +245,18 @@ class MobileHTTP:
         if not item:
             raise web.HTTPNotFound(text="This image is no longer available. Refresh the gallery.")
         path = self.service.local_image(item)
+        private_metadata = not self.service._metadata_allowed(item, request[OWNER])
         headers = {}
         if request.query.get("download") == "1":
             # ASCII fallback avoids response-header injection via filenames.
             from urllib.parse import quote
-            headers["Content-Disposition"] = "attachment; filename*=UTF-8''" + quote(item["filename"], safe="")
+            filename = str(Path(item['filename']).with_suffix('.png')) if private_metadata else item['filename']
+            headers["Content-Disposition"] = "attachment; filename*=UTF-8''" + quote(filename, safe="")
         if path:
             if request.query.get("thumbnail") == "1":
                 return await self.thumbnail((item["id"], path.stat().st_mtime_ns), path)
+            if private_metadata:
+                return web.Response(body=await self.encode_image(path, thumbnail=False), content_type='image/png', headers=headers)
             return web.FileResponse(path, headers=headers)
         candidate = self.service.output_dir / item["subfolder"] / item["filename"]
         if item["type"] == "output" and (candidate.exists() or candidate.is_symlink()):
@@ -254,14 +274,16 @@ class MobileHTTP:
         async with self.service.session.get(self.service.client.base + "/view?" + query) as upstream:
             if upstream.status != 200 or upstream.content_type not in {"image/png", "image/jpeg", "image/webp"}:
                 raise web.HTTPNotFound(text="Image was deleted or is unavailable.")
-            if thumb:
+            if thumb or private_metadata:
                 chunks, size = [], 0
                 async for chunk in upstream.content.iter_chunked(65536):
                     size += len(chunk)
                     if size > 20 * 1024 * 1024:
                         raise web.HTTPRequestEntityTooLarge(max_size=20 * 1024 * 1024, actual_size=size)
                     chunks.append(chunk)
-                return await self.thumbnail(key, b"".join(chunks))
+                if thumb:
+                    return await self.thumbnail(key, b"".join(chunks))
+                return web.Response(body=await self.encode_image(b''.join(chunks), thumbnail=False), content_type='image/png', headers=headers)
             response = web.StreamResponse(headers={**headers, "Content-Type": upstream.content_type, "Cache-Control": "no-store"})
             await response.prepare(request)
             async for chunk in upstream.content.iter_chunked(65536):
@@ -271,35 +293,44 @@ class MobileHTTP:
 
     async def thumbnail(self, key, source):
         if key not in self.thumbnails:
-            def encode():
-                from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QSize, Qt
-                from PySide6.QtGui import QImageReader
-                buffer = None
-                if isinstance(source, Path):
-                    reader = QImageReader(str(source))
-                else:
-                    buffer = QBuffer()
-                    buffer.setData(source)
-                    buffer.open(QIODevice.OpenModeFlag.ReadOnly)
-                    reader = QImageReader(buffer)
-                reader.setAutoTransform(True)
-                reader.setScaledSize(reader.size().scaled(QSize(384, 384), Qt.AspectRatioMode.KeepAspectRatio))
-                image = reader.read()
-                if image.isNull():
-                    return None
-                data = QByteArray()
-                output = QBuffer(data)
-                output.open(QIODevice.OpenModeFlag.WriteOnly)
-                if not image.save(output, "JPEG", 80):
-                    return None
-                return bytes(data)
-            data = await asyncio.to_thread(encode)
-            if data is None:
-                raise web.HTTPNotFound(text="Thumbnail unavailable; open the original image.")
+            data = await self.encode_image(source, thumbnail=True)
             self.thumbnails[key] = data
             while len(self.thumbnails) > 64:
                 self.thumbnails.popitem(last=False)
         return web.Response(body=self.thumbnails[key], content_type="image/jpeg")
+
+    async def encode_image(self, source, thumbnail):
+        def encode():
+            from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QSize, Qt
+            from PySide6.QtGui import QImageReader
+            buffer = None
+            if isinstance(source, Path):
+                reader = QImageReader(str(source))
+            else:
+                buffer = QBuffer()
+                buffer.setData(source)
+                buffer.open(QIODevice.OpenModeFlag.ReadOnly)
+                reader = QImageReader(buffer)
+            reader.setAutoTransform(True)
+            if thumbnail:
+                reader.setScaledSize(reader.size().scaled(QSize(384, 384), Qt.AspectRatioMode.KeepAspectRatio))
+            image = reader.read()
+            if image.isNull():
+                return None
+            # Shared pixels must not bypass ownership via embedded PNG prompts.
+            # Encode only the HTTP response; the original file stays untouched.
+            for key in image.textKeys():
+                image.setText(key, '')
+            data = QByteArray()
+            output = QBuffer(data)
+            output.open(QIODevice.OpenModeFlag.WriteOnly)
+            if not image.save(output, 'JPEG' if thumbnail else 'PNG', 80 if thumbnail else -1):
+                return None
+            return bytes(data)
+        data = await asyncio.to_thread(encode)
+        if data is None:
+            raise web.HTTPNotFound(text='Image could not be read. Refresh the gallery.')
+        return data
 
     async def preview(self, request):
         job = self.service.jobs.get(self.service.preview_job, {})
@@ -338,8 +369,11 @@ class MobileHTTP:
             web.get('/api/presets/{id}', self.preset), web.put('/api/presets/{id}', self.preset), web.delete('/api/presets/{id}', self.preset),
             web.post('/api/presets/{id}/models', self.refresh_models),
             web.post('/api/generate', self.generate), web.post('/api/jobs/{id}/cancel', self.cancel),
+            web.get('/api/prompts', self.prompts), web.delete('/api/prompts', self.prompts),
+            web.put('/api/prompts/{id}', self.prompt), web.delete('/api/prompts/{id}', self.prompt),
             web.get('/api/gallery', self.gallery), web.get('/api/images/{id}', self.image), web.get('/api/preview', self.preview),
             web.get('/api/images/{id}/parameters', self.image_parameters),
+            web.get('/api/images/{id}/details', self.image_details),
         ])
         for path in PUBLIC - {"/api/login", "/api/session"}:
             app.router.add_get(path, self.asset)

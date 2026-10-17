@@ -294,6 +294,16 @@ main {
 .generate-bar > .job-card.has-preview progress {
   grid-column: 1;
 }
+.generation-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 0.73rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.generation-stats b { font-weight: 500; color: var(--text); }
+.generate-bar > .job-card.has-preview .generation-stats { grid-column: 1 / -1; }
 .generate-bar > .job-card .preview {
   grid-column: 2;
   grid-row: 1 / span 3;
@@ -648,6 +658,8 @@ dialog::backdrop {
   font-size: 0.85rem;
   color: var(--muted);
 }
+#image-dialog .viewer > .heading,
+#prompt-history-dialog .viewer > .heading { position: sticky; top: 0; background: var(--bg); z-index: 1; }
 #full-image {
   display: block;
   max-width: 100%;
@@ -657,11 +669,24 @@ dialog::backdrop {
   border-radius: 12px;
 }
 #image-metadata {
-  white-space: pre-wrap;
   font-size: 0.83rem;
   color: var(--muted);
   line-height: 1.7;
 }
+.metadata-list { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 5px 12px; }
+.metadata-list dt, .metadata-list dd { margin: 0; overflow-wrap: anywhere; }
+.metadata-list dt { color: var(--muted); }
+.metadata-list dd { color: var(--text); }
+.metadata-prompt { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+#image-metadata h3 { margin: 12px 0 4px; font-size: 0.83rem; }
+.clipboard-text { position: fixed; left: -9999px; top: 0; }
+.prompt-entry { border-top: 1px solid var(--line); padding: 12px 0; }
+.prompt-reuse { display: block; width: 100%; text-align: left; }
+.prompt-excerpt { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; }
+.prompt-excerpt.hint { margin: 8px 0 0; }
+.history-filters { margin-top: 12px; }
+.history-filters [aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+#prompt-history-dialog { max-width: 540px; }
 .job-card {
   scroll-margin-top: 20px;
 }
