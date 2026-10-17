@@ -352,14 +352,21 @@ In **Gallery**, tap **Select two images**, select A and B, then **Compare**.
 Drag the divider or use the range slider; keyboard arrows, Home and End work
 too. **Swap A / B** reverses the images and **Center** restores the 50% split.
 Images retain their proportions in the same viewport. Closing keeps the gallery
-position and selection. Full images load only when the comparison opens.
+position and selection. Full images download only when comparison opens; a
+loading count appears until both are downloaded and ready. On a weak connection,
+**Retry loading images** keeps the successfully loaded image and retries the other.
+
+The selected pair stays in the phone tab's memory, so reopening or swapping it
+works without further image downloads, even offline. Only that pair is kept;
+deselecting an image releases it. Refreshing/closing the page or signing out
+clears the cache. This works over ordinary LAN HTTP without a service worker.
 
 The table highlights differing models, samplers, steps, CFG, seeds, resolution
 and LoRA values when available. Mobile jobs use their saved mapped settings;
 local PNGs can supply recognized settings from ComfyUI's embedded prompt metadata.
 Missing metadata shows an unavailable message. Prompts and arbitrary custom-node
 values are excluded, and another browser's private job settings are not returned.
-Original images are neither changed nor copied.
+Original files are unchanged; no duplicate files are stored on the PC.
 
 ## Home-screen / PWA use
 

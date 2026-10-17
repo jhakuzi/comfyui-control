@@ -52,6 +52,15 @@ Chromium and Linux WebKit also checked the single visible Negative prompt
 heading and bordered refresh buttons directly below History & favorites at
 phone/tablet widths; the existing recovery, gallery and GGUF checks passed.
 
+Comparison downloads and decodes both images before showing the divider. Only
+the selected pair's blob URLs and comparison metadata are held in tab memory;
+deselection revokes URLs and authentication loss clears them. A failed download
+can be retried while retaining the completed side. Neither private HTTP caching
+nor service-worker image storage is enabled. Chromium and Linux WebKit checks
+exercise a delayed second image, offline reopen/swap, interrupted-download retry,
+URL eviction, authentication clearing, and unchanged original files. History and
+generation-reuse controls now use the same bordered button style as refresh.
+
 ## Original desktop review (before Mobile WebUI)
 
 The existing app is Python/PySide6 Qt Widgets. `app.py` owns the main window and

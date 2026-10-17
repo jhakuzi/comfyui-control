@@ -99,6 +99,7 @@ async function api(path, options = {}) {
   return body;
 }
 function showLogin() {
+  comparison.clearImages();
   if ($("image-dialog").open) $("image-dialog").close();
   if ($("prompt-history-dialog").open) $("prompt-history-dialog").close();
   if ($("compare-dialog").open) $("compare-dialog").close();
@@ -1314,7 +1315,7 @@ function connectionFailure(error) {
   updateGenerate();
   scheduleRecovery();
 }
-const comparison = new ImageComparison({ api, notice, read: readStore, write: writeStore });
+const comparison = new ImageComparison({ api, notice, read: readStore, write: writeStore, unauthorized: showLogin });
 const imageDetails = new ImageDetails({ api });
 const promptHistory = new PromptHistoryView({ api, reuse: (entry) => {
   if (!preset) throw new Error("Choose a workflow before reusing a prompt.");

@@ -84,6 +84,8 @@ async def main(browser_name,root):
         for width in (320,390,768):
             await page.set_viewport_size(dict(width=width,height=844))
             history=await page.locator('#prompt-history').bounding_box()
+            assert history['height']>=44
+            assert await page.locator('#prompt-history').evaluate("el=>getComputedStyle(el).borderTopStyle==='solid' && getComputedStyle(el).backgroundColor!=='rgba(0, 0, 0, 0)'")
             models=await page.locator('#model-controls').bounding_box()
             for action in ('refresh-models','refresh-workflows'):
                 box=await page.locator('#'+action).bounding_box()
@@ -99,6 +101,8 @@ async def main(browser_name,root):
         await page.get_by_role('checkbox',name='one.safetensors',exact=True).uncheck()
         await page.locator('#generate').click()
         await expect(page.locator('#job-title')).to_have_text('In the queue')
+        await expect(page.locator('#reuse-last')).to_be_visible()
+        assert await page.locator('#reuse-last').evaluate("el=>getComputedStyle(el).borderTopStyle==='solid' && getComputedStyle(el).backgroundColor!=='rgba(0, 0, 0, 0)'")
         assert len(stub.submissions)==1
         await until(lambda:service.monitoring_active)
         service.update_hardware(dict(utilization=72,vram_used=6*2**30))

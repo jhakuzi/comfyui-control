@@ -1,5 +1,6 @@
 """Gallery comparison checks against local image fixtures, not GPU generation."""
 import asyncio
+import argparse
 import json
 from pathlib import Path
 import re
@@ -18,7 +19,7 @@ from comfyui_control.mobile.settings import MobileSettings
 from comfyui_control.mobile.server import MobileHTTP
 
 
-async def main():
+async def main(browser_name):
     root=Path(tempfile.mkdtemp(prefix='mobile-comparison-'))
     output=root/'output'; output.mkdir()
     def image(name,width,height,steps,seed,color):
@@ -44,8 +45,10 @@ async def main():
     errors=[]; full_requests=[]
     try:
       async with async_playwright() as p:
-        browser=await p.chromium.launch(headless=True,args=['--no-sandbox'])
-        context=await browser.new_context(viewport={'width':390,'height':844},is_mobile=True,has_touch=True)
+        browser=await getattr(p,browser_name).launch(headless=True,**({'args':['--no-sandbox']} if browser_name=='chromium' else {}))
+        # Match ordinary LAN HTTP (no service worker), and let Playwright control
+        # individual downloads/offline transitions in both browser engines.
+        context=await browser.new_context(viewport={'width':390,'height':844},is_mobile=True,has_touch=True,service_workers='block')
         page=await context.new_page()
         page.on('pageerror',lambda error:errors.append(str(error)))
         def requested(request):
@@ -63,10 +66,23 @@ async def main():
         await expect(page.locator('#compare-images')).to_be_enabled()
         await page.get_by_role('button',name='View C0.png',exact=True).click()
         await expect(page.locator('#compare-images')).to_have_text('Compare · 2/2')
+        b_id=await page.get_by_role('button',name='View B.png',exact=True).get_attribute('data-image-id')
+        release_b=asyncio.Event()
+        async def slow_b(route):
+            await release_b.wait()
+            await route.continue_()
+        await page.route('**/api/images/'+b_id,slow_b)
         await page.evaluate('window.scrollTo(0,500)')
         scroll=await page.evaluate('window.scrollY')
         await page.locator('#compare-images').click()
         await expect(page.locator('#compare-dialog')).to_be_visible()
+        await expect(page.locator('#compare-loading')).to_have_text('Loading images · 1/2 ready…')
+        await expect(page.locator('#compare-viewport')).to_be_hidden()
+        await expect(page.locator('#compare-slider')).to_be_disabled()
+        release_b.set()
+        await expect(page.locator('#compare-viewport')).to_be_visible()
+        await expect(page.locator('#compare-slider')).to_be_enabled()
+        await page.unroute('**/api/images/'+b_id,slow_b)
         await expect(page.locator('#compare-slider')).to_have_value('50')
         await page.wait_for_function('document.querySelector("#compare-a").naturalWidth===64 && document.querySelector("#compare-b").naturalWidth===128')
         assert len(full_requests)==2
@@ -86,12 +102,13 @@ async def main():
         await page.mouse.move(box['x']+box['width']*.8,box['y']+box['height']*.5,steps=5)
         await page.mouse.up()
         assert int(await page.locator('#compare-slider').input_value())>=79
-        cdp=await context.new_cdp_session(page)
-        def touch(fraction): return [{'x':box['x']+box['width']*fraction,'y':box['y']+box['height']*.5}]
-        await cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':touch(.2)})
-        await cdp.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':touch(.7)})
-        await cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]})
-        assert int(await page.locator('#compare-slider').input_value())>=69
+        if browser_name=='chromium':
+            cdp=await context.new_cdp_session(page)
+            def touch(fraction): return [{'x':box['x']+box['width']*fraction,'y':box['y']+box['height']*.5}]
+            await cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':touch(.2)})
+            await cdp.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':touch(.7)})
+            await cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]})
+            assert int(await page.locator('#compare-slider').input_value())>=69
         before=await page.locator('#compare-a').get_attribute('src')
         await page.locator('#swap-compare').click()
         assert await page.locator('#compare-b').get_attribute('src')==before
@@ -104,16 +121,60 @@ async def main():
         await page.wait_for_function('(position)=>Math.abs(window.scrollY-position)<3',arg=scroll)
         assert abs(await page.evaluate('window.scrollY')-scroll)<3,(scroll,await page.evaluate('window.scrollY'),await page.evaluate('comparison.scroll'))
         assert await page.locator('#gallery-grid [aria-pressed="true"]').count()==2
+        # Reopen and swap entirely offline: no full-image or metadata downloads.
+        count=len(full_requests)
+        await context.set_offline(True)
+        await page.locator('#compare-images').click()
+        await expect(page.locator('#compare-viewport')).to_be_visible()
+        await expect(page.locator('#compare-slider')).to_be_enabled()
+        await page.locator('#swap-compare').click()
+        await page.wait_for_function('document.querySelector("#compare-a").naturalWidth===64 && document.querySelector("#compare-b").naturalWidth===128')
+        assert len(full_requests)==count
+        await page.locator('#close-compare').click()
+        await context.set_offline(False)
+        # Keep B cached, replace A with C0, interrupt its download, and retry.
+        await page.get_by_role('button',name='View A.png',exact=True).click()
+        await page.get_by_role('button',name='View C0.png',exact=True).click()
+        c_id=await page.get_by_role('button',name='View C0.png',exact=True).get_attribute('data-image-id')
+        attempts=0
+        async def interrupted(route):
+            nonlocal attempts
+            attempts+=1
+            if attempts==1: await route.abort('failed')
+            else: await route.continue_()
+        await page.route('**/api/images/'+c_id,interrupted)
+        await page.locator('#compare-images').click()
+        await expect(page.locator('#retry-compare')).to_be_visible()
+        await expect(page.locator('#compare-loading')).to_contain_text('1/2 images ready')
+        await expect(page.locator('#compare-viewport')).to_be_hidden()
+        await page.locator('#retry-compare').click()
+        await expect(page.locator('#compare-viewport')).to_be_visible()
+        assert attempts==2 and full_requests.count('/api/images/'+b_id)==1
+        assert await page.evaluate('comparison.images.size')==2
+        await page.locator('#close-compare').click()
+        await page.unroute('**/api/images/'+c_id,interrupted)
+        # A newly selected missing image reports an error, with cached B kept.
+        evicted=await page.evaluate('(id)=>comparison.images.get(id).url',c_id)
+        await page.get_by_role('button',name='View C0.png',exact=True).click()
+        assert await page.evaluate('(url)=>fetch(url).then(()=>false,()=>true)',evicted)
+        await page.get_by_role('button',name='View C1.png',exact=True).click()
         await page.route('**/api/images/*',lambda route:route.fulfill(status=404,body='Unavailable') if '/parameters' not in route.request.url and not urlsplit(route.request.url).query else route.continue_())
         await page.locator('#compare-images').click()
         await expect(page.locator('#compare-error')).to_be_visible()
         await page.locator('#close-compare').click()
+        cached=await page.evaluate('[...comparison.images.values()][0].url')
+        await page.evaluate('showLogin()')
+        assert await page.evaluate('comparison.images.size')==0
+        assert await page.evaluate('(url)=>fetch(url).then(()=>false,()=>true)',cached)
         assert {p.name:p.read_bytes() for p in output.iterdir()}==originals
         assert not errors,errors
-        print('PASS: exactly-two selection, lazy full images, mouse/touch/keyboard divider, swap/reset, metadata differences, aspect ratios, missing images, and preserved gallery state.')
+        print(f'PASS {browser_name}: two-image readiness, selected-pair memory cache, offline reopen/swap, interrupted download/retry, eviction/auth clearing, divider, metadata, missing images, preserved gallery/files.')
         print('Screenshot:',root/'comparison.png')
         await browser.close()
     finally:
         await service.stop(); await runner.cleanup(); await upstream.close()
 
-asyncio.run(main())
+if __name__=='__main__':
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--browser',choices=('chromium','webkit'),default='chromium')
+    asyncio.run(main(parser.parse_args().browser))
