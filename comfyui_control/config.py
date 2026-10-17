@@ -34,6 +34,7 @@ class Config:
     auto_restart: bool = False
     restart_limit: int = 3
     restart_backoff: int = 2
+    application_style: str = ""
 
     @classmethod
     def load(cls, path: Path | None = None) -> "Config":

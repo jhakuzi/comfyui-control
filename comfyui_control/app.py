@@ -7,11 +7,11 @@ import shutil
 import sys
 
 from PySide6.QtCore import QCoreApplication, QEvent, QLockFile, QProcess, QTimer, Qt, QUrl
-from PySide6.QtGui import QDesktopServices, QFontDatabase, QIcon, QTextCursor
+from PySide6.QtGui import QActionGroup, QDesktopServices, QFontDatabase, QIcon, QTextCursor
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
     QFileDialog, QFormLayout, QGridLayout, QHBoxLayout, QLabel, QLayout, QLineEdit, QMainWindow,
-    QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QToolButton, QVBoxLayout, QWidget,
+    QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QStyleFactory, QToolButton, QVBoxLayout, QWidget,
 )
 
 from .config import Config, config_path, expand
@@ -32,6 +32,25 @@ from .recovery_widgets import RecoverySettings, CrashDialog
 def application_icon():
     icon = QIcon(str(Path(__file__).with_name("assets") / "comfyui-control.png"))
     return icon if not icon.isNull() else QIcon.fromTheme("utilities-terminal")
+
+
+def apply_application_style(name):
+    """Keep Qt's startup style as the platform default; never load plugin paths."""
+    app = QApplication.instance()
+    default = app.property("comfyuiDefaultStyle")
+    if default is None:
+        default = app.style().objectName()
+        app.setProperty("comfyuiDefaultStyle", default)
+    available = {key.casefold(): key for key in QStyleFactory.keys()}
+    requested = available.get(name.casefold()) if name else default
+    found = requested is not None
+    requested = requested or default
+    if app.style().objectName().casefold() != requested.casefold():
+        style = QStyleFactory.create(requested)
+        if style is None:
+            return False
+        app.setStyle(style)
+    return found
 
 
 class SettingsDialog(QDialog):
@@ -264,12 +283,19 @@ class LogView(QPlainTextEdit):
 class MainWindow(QMainWindow):
     def __init__(self, config, first_run=False, load_error=""):
         super().__init__()
+        style_available = apply_application_style(config.application_style)
         self.setWindowTitle(f"ComfyUI Control {__version__}")
         self.setWindowIcon(application_icon())
         self.resize(920, 740)
         self.setMinimumSize(580, 400)
         self._closing = False
         self.controller = Controller(config, self)
+        self.appearance_menu = self.menuBar().addMenu("Appearance")
+        self.style_menu = self.appearance_menu.addMenu("Application style")
+        self.style_group = QActionGroup(self.style_menu)
+        self.style_group.setExclusive(True)
+        self.style_menu.aboutToShow.connect(self._style_choices)
+        self._style_choices()
         self.mobile = MobileRuntime(self)
         self.mobile.stopped.connect(self._mobile_stopped)
         body = QWidget()
@@ -389,6 +415,8 @@ class MainWindow(QMainWindow):
         self.controller.problem.connect(self._problem)
         self._state_changed("stopped")
         self.log.append_output("Ready. Select your ComfyUI installation and launch settings, then press Start.\nThis panel shows server output; it does not accept terminal commands.\n")
+        if not style_available:
+            self.log.append_output(f"\nSaved application style {config.application_style!r} is unavailable; using the system default.\n")
         if load_error:
             self.log.append_output(f"\nConfiguration could not be loaded: {load_error}\nYour existing file was left untouched.\n")
         if first_run:
@@ -404,6 +432,37 @@ class MainWindow(QMainWindow):
         except (ValueError, OSError) as exc:
             self.mobile_status.setText("Check mobile settings")
             self.log.append_output(f"\nMobile WebUI did not start: {exc}\n")
+
+    def _style_choices(self):
+        self.style_menu.clear()
+        selected = self.controller.config.application_style
+        choices = [("System default", ""), *((key, key) for key in sorted(QStyleFactory.keys(), key=str.casefold))]
+        if selected and not any(key.casefold() == selected.casefold() for _, key in choices):
+            choices.append((f"{selected} (unavailable)", selected))
+        for label, key in choices:
+            action = self.style_menu.addAction(label)
+            action.setData(key)
+            action.setCheckable(True)
+            action.setChecked(key.casefold() == selected.casefold())
+            action.setEnabled(not label.endswith(" (unavailable)"))
+            self.style_group.addAction(action)
+            action.triggered.connect(lambda checked=False, name=key: self._select_style(name))
+
+    def _select_style(self, name):
+        config = replace(self.controller.config, application_style=name)
+        try:
+            config.save()
+        except OSError as exc:
+            QMessageBox.warning(self, "Could not save appearance", str(exc))
+            for action in self.style_group.actions():
+                action.setChecked(action.data().casefold() == self.controller.config.application_style.casefold())
+            return
+        # This preference must not cancel recovery or reconfigure the server.
+        self.controller.config = config
+        if not apply_application_style(name):
+            QMessageBox.information(self, "Style unavailable", "This style could not be loaded. Choose System default or another available style.")
+        for action in self.style_group.actions():
+            action.setChecked(action.data().casefold() == name.casefold())
 
     def _mobile_settings(self):
         MobileDialog(self.mobile, self.controller.config, self).exec()
@@ -447,7 +506,7 @@ class MainWindow(QMainWindow):
         if choice.choice == "existing" and self._choose_folder():
             self._settings()
         elif choice.choice == "install":
-            dialog = InstallDialog(self)
+            dialog = InstallDialog(self, application_style=self.controller.config.application_style)
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 self._set_config(dialog.result_config)
                 self.log.append_output(f"\nComfy CLI setup complete: {dialog.result_config.comfy_dir}\n")
@@ -461,7 +520,8 @@ class MainWindow(QMainWindow):
         previous = self.controller.config
         config = Config(comfy_dir=path, monitoring_enabled=previous.monitoring_enabled,
                         monitor_expanded=previous.monitor_expanded, auto_restart=previous.auto_restart,
-                        restart_limit=previous.restart_limit, restart_backoff=previous.restart_backoff)
+                        restart_limit=previous.restart_limit, restart_backoff=previous.restart_backoff,
+                        application_style=previous.application_style)
         try:
             config.validate()
             config.save()

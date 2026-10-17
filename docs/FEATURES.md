@@ -37,6 +37,19 @@ invented. Terminal buffering can reduce precision.
 
 Closing or opening this panel never starts or restarts ComfyUI.
 
+## Desktop application style
+
+Use **Appearance → Application style** to choose an installed Qt widget style.
+**System default** follows the style Qt selects on startup; **Fusion**, **Breeze**,
+and other styles appear when available to this Qt installation. The choice
+applies immediately, persists across restarts and installation changes, and can
+be changed while ComfyUI runs. An unavailable saved style falls back to the
+system default. This changes desktop widgets; Plasma still supplies the color
+scheme, and the Mobile WebUI keeps its own appearance.
+
+The isolated Python environment and Fedora's native RPM may find different Qt
+style plugins. The app does not bundle or install Breeze itself.
+
 ## Compare images on your phone
 
 <img src="screenshots/mobile-comparison-0.10.1.png" alt="Mobile image comparison with a reveal divider and highlighted parameter differences" width="360">

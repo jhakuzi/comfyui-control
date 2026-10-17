@@ -115,7 +115,7 @@ def test_cli_failure_does_not_create_success_marker(tmp_path, fake_python, monke
 @pytest.mark.parametrize("gpu", ["", "--cpu"])
 def test_installer_selects_only_successful_result(app, tmp_path, fake_python, monkeypatch, gpu):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "settings"))
-    dialog = InstallDialog()
+    dialog = InstallDialog(application_style="Fusion")
     target = tmp_path / "ComfyUI"
     dialog.location.setText(str(target))
     dialog.python.setText(str(fake_python))
@@ -134,6 +134,7 @@ def test_installer_selects_only_successful_result(app, tmp_path, fake_python, mo
     assert Config.load().comfy_dir == str(target)
     assert Config.load().python == str(dialog.plan.environment / "bin" / "python")
     assert Config.load().update_method == "cli"
+    assert Config.load().application_style == "Fusion"
     assert Config.load().arguments == ("--cpu" if gpu == "--cpu" else "")
 
 
