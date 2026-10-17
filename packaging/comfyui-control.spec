@@ -1,6 +1,6 @@
 Name:           comfyui-control
 Version:        0.11.0
-Release:        0.1.dev1%{?dist}
+Release:        1%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
 License:        MIT
@@ -62,6 +62,12 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Sat Oct 17 2026 ComfyUI Control contributors - 0.11.0-1
+- Release mobile sampling/GPU metrics, private prompt history and image details.
+- Cache selected comparison images in memory and handle typed LoRA bypass chains.
+- Consolidate desktop Settings, add the Qt style picker and show the ComfyUI version.
+- Refresh randomized seed defaults while preserving fixed-seed reuse and recovery.
+
 * Sat Oct 17 2026 ComfyUI Control contributors - 0.11.0-0.1.dev1
 - Testing: shared mobile generation metrics, private prompt history and favorites.
 - Add image details with PNG metadata and persistent image ownership protection.

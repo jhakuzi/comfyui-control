@@ -27,6 +27,17 @@ def test_version_metadata_is_read_without_executing_installation_code(tmp_path):
     assert installed_version(tmp_path) == '0.41.0-rc.1'
 
 
+def test_version_metadata_without_optional_toml_parser(tmp_path, monkeypatch):
+    from comfyui_control import config
+    monkeypatch.setattr(config, 'tomllib', None)
+    version = tmp_path / 'comfyui_version.py'
+    version.write_text('__version__ = "0.40.0"')
+    assert installed_version(tmp_path) == '0.40.0'
+    version.unlink()
+    (tmp_path / 'pyproject.toml').write_text('[project]\nversion = "0.41.0"')
+    assert installed_version(tmp_path) == ''
+
+
 @pytest.mark.parametrize('contents', ['__version__ = "<b>wrong</b>"', '__version__ = 123', '__version__ = "first\\nsecond"', '!' * 65537, 'not python at all'])
 def test_missing_or_invalid_install_version_is_not_invented(tmp_path, contents):
     assert installed_version(tmp_path) == ''

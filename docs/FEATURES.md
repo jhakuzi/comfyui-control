@@ -68,9 +68,9 @@ ComfyUI prompt settings. Some custom inputs and non-PNG images have no metadata.
 Another browser's private job metadata stays private. Deleted images show an
 error. Full-resolution files load only in comparison and originals stay untouched.
 
-## Mobile additions in 0.11.0.dev1
+## Mobile additions in 0.11.0
 
-The testing branch adds three small controls to the existing mobile layout:
+Version 0.11.0 adds three small controls to the existing mobile layout:
 
 - A row of s/it, used VRAM and GPU utilization inside the pinned progress card.
 - **History & favorites** beside the prompt, with private persistent prompt pairs,
@@ -79,7 +79,7 @@ The testing branch adds three small controls to the existing mobile layout:
   additional custom parameters and Copy prompt. Existing local ComfyUI PNGs can
   supply metadata too; another mobile identity's details remain private.
 
-See [mobile usage and limits](MOBILE.md#live-statistics-testing-branch).
+See [mobile usage and limits](MOBILE.md#live-statistics).
 No new runtime dependencies or ComfyUI extensions are required.
 
 ## Crash diagnostics and optional recovery

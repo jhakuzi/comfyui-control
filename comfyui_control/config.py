@@ -7,7 +7,10 @@ from pathlib import Path
 import shlex
 import shutil
 import tempfile
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 still reads comfyui_version.py.
+    tomllib = None
 
 
 def config_path() -> Path:
@@ -34,7 +37,7 @@ def installed_version(directory: Path) -> str:
                         and any(isinstance(target, ast.Name) and target.id == '__version__' for target in node.targets)), '')
     except (OSError, ValueError, SyntaxError, RecursionError):
         version = ''
-    if not isinstance(version, str) or not version:
+    if tomllib is not None and (not isinstance(version, str) or not version):
         try:
             version = tomllib.loads(small_text('pyproject.toml')).get('project', {}).get('version', '')
         except (OSError, ValueError, TypeError, AttributeError):

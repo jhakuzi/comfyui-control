@@ -2,7 +2,7 @@
 
 A small Qt desktop app for starting, stopping, and updating ComfyUI on Linux.
 
-Version **0.11.0.dev1** tests mobile generation statistics, prompt history and
+Version **0.11.0** includes mobile generation statistics, prompt history and
 favorites, and image details alongside the existing desktop controls.
 See the [feature guide](https://github.com/jhakuzi/comfyui-control/blob/main/docs/FEATURES.md).
 Use **Mobile WebUI** to enable the embedded listener, configure your LAN/VPN

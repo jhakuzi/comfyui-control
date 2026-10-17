@@ -281,7 +281,7 @@ of the selected output folder populate the gallery. Mobile-created images have
 saved prompt/settings metadata for reuse. Other images may have no mobile
 metadata. Temporary previews and deleted files can become unavailable.
 
-### Live statistics (testing branch)
+### Live statistics
 
 The pinned progress card shows only **s/it**, **used VRAM** and **GPU utilization**.
 It shares the desktop sampler, including AMD sysfs/ROCm and NVIDIA detection;
@@ -296,7 +296,7 @@ show `--`. Hardware values refer to this PC: if the configured ComfyUI API URL
 points to another machine, GPU metrics stay unavailable. Reconnection restores
 cached job progress without submitting another generation.
 
-### Prompt history and favorites (testing branch)
+### Prompt history and favorites
 
 Tap **History & favorites** near the prompt. Search Recent or Favorites, tap a
 prompt to restore its positive and negative fields, or use the star/Delete actions.
@@ -317,7 +317,7 @@ Each identity retains up to 200 entries/100 favorites and 4 MiB; old non-favorit
 are removed first. Very large prompt sets (over 100,000 characters) or storage
 errors do not stop generation and show a history warning instead.
 
-### Image details (testing branch)
+### Image details
 
 Open a gallery image and expand **Details**. Prompts and common generation values
 appear first; models/LoRAs and additional parameters are collapsible. **Copy prompt**
