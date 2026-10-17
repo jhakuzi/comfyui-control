@@ -1,5 +1,20 @@
 # Mobile WebUI architecture and verification
 
+## 0.11.2.dev1 prompt editor
+
+The existing mapped positive-text control now starts at 288px rather than 144px.
+A native button in its label row toggles a taller responsive height, with
+`aria-expanded`/`aria-controls` and no form submission or input replacement.
+Expansion choices use the existing browser UI state, keyed by preset and field;
+prompt values, workflow mappings and generation/session services are unchanged.
+Negative prompts and workflow-import textareas retain their previous sizing.
+
+Chromium and Linux WebKit checks passed for touch/keyboard toggles, preservation
+of unsent multiline text and selection, refresh persistence, manual-resize reset,
+and phone/tablet/landscape widths. All 202 automated checks passed locally.
+Existing history, generation progress,
+recovery, metadata, GGUF and two-LoRA browser checks passed as part of that run.
+
 Release **0.11.1** includes the comparison safe-area and gallery synchronization
 fixes below. The user confirmed the iPhone testing build works before release.
 

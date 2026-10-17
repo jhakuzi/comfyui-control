@@ -1,6 +1,6 @@
 Name:           comfyui-control
-Version:        0.11.1
-Release:        1%{?dist}
+Version:        0.11.2
+Release:        0.1.dev1%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
 License:        MIT
@@ -62,6 +62,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Sat Oct 17 2026 ComfyUI Control contributors - 0.11.2-0.1.dev1
+- Testing: double the mobile prompt editor height and add a saved expand/collapse control.
+
 * Sat Oct 17 2026 ComfyUI Control contributors - 0.11.1-1
 - Keep comparison Close and gallery selection controls reachable on iPhone.
 - Synchronize deleted/replaced output files and preserve unchanged thumbnails.

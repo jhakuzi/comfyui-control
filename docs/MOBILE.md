@@ -215,6 +215,11 @@ stages it returns to a processing indicator. Loading has no invented percentage.
 5. Tap the completed image to view it, or open **Gallery**. Use **Save image**;
    in Safari you can also touch and hold an image to save it to Photos.
 
+Testing **0.11.2.dev1** doubles the positive prompt box's default height. Tap
+**Expand** beside its label for more writing space, then **Collapse** to return.
+Your size choice is remembered per workflow and prompt field across refreshes;
+resizing keeps the text intact and does not submit a generation.
+
 Use **Reuse last generation**, **Same seed**, or **New variation** to prepare
 the next form, then press **Generate**. Fixed 64-bit seeds retain their exact
 value. Randomization affects mapped seeds only. A preset without a seed mapping

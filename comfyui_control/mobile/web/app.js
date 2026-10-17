@@ -142,6 +142,7 @@ function saveUI() {
     ),
     search: $("mapping-search").value,
     importName: $("import-name").value,
+    expandedPrompts: uiState.expandedPrompts || {},
     scroll: window.scrollY,
   };
   writeStore("ui", uiState);
@@ -414,6 +415,31 @@ function control(field, container, hideLabel = false) {
     }
     input.value = draft[field.key] ?? "";
     wrap.append(label, input);
+  }
+  if (input.tagName === "TEXTAREA" && field.role === "positive") {
+    input.classList.add("positive");
+    wrap.classList.add("prompt-editor");
+    const heading = node("div", undefined, "prompt-editor-heading");
+    const toggle = node("button", undefined, "small prompt-editor-toggle");
+    toggle.type = "button";
+    toggle.setAttribute("aria-controls", inputId);
+    const editorKey = preset.id + ":" + field.key;
+    const resize = (expanded) => {
+      input.style.removeProperty("height");
+      wrap.classList.toggle("expanded", expanded);
+      toggle.textContent = expanded ? "Collapse" : "Expand";
+      toggle.setAttribute("aria-expanded", String(expanded));
+      toggle.setAttribute("aria-label", `${expanded ? "Collapse" : "Expand"} ${field.label} editor`);
+    };
+    resize(uiState.expandedPrompts?.[editorKey] === true);
+    toggle.addEventListener("click", () => {
+      const expanded = !wrap.classList.contains("expanded");
+      uiState.expandedPrompts = { ...uiState.expandedPrompts, [editorKey]: expanded };
+      resize(expanded);
+      saveUI();
+    });
+    label.replaceWith(heading);
+    heading.append(label, toggle);
   }
   input.id = inputId;
   input.dataset.role = field.role;

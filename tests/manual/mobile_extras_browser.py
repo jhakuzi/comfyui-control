@@ -75,6 +75,44 @@ async def main(browser_name,root):
         page=await context.new_page()
         page.on('pageerror',lambda error:errors.append(str(error)))
         await page.goto(url)
+        prompt = page.locator('[data-role="positive"]')
+        toggle = page.locator('.prompt-editor-toggle')
+        await expect(prompt).to_be_visible()
+        assert (await prompt.bounding_box())['height'] == 288
+        await expect(toggle).to_have_attribute('aria-expanded', 'false')
+        text = '\n'.join(f'Unsent prompt line {number}' for number in range(30))
+        await prompt.fill(text)
+        await prompt.evaluate('(el) => el.setSelectionRange(10, 20)')
+        await toggle.tap()
+        await expect(toggle).to_have_text('Collapse')
+        await expect(toggle).to_have_attribute('aria-expanded', 'true')
+        assert (await prompt.bounding_box())['height'] > 288
+        await expect(prompt).to_have_value(text)
+        assert await prompt.evaluate('(el) => [el.selectionStart, el.selectionEnd]') == [10, 20]
+        assert len(stub.submissions) == 0
+        await page.reload()
+        await expect(toggle).to_have_attribute('aria-expanded', 'true')
+        await expect(prompt).to_have_value(text)
+        for width, height in ((320, 568), (390, 844), (844, 390), (768, 1024), (1200, 844)):
+            await page.set_viewport_size(dict(width=width, height=height))
+            assert (await prompt.bounding_box())['height'] > 288
+            assert (await toggle.bounding_box())['height'] >= 44
+            assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        await page.set_viewport_size(dict(width=390, height=844))
+        await prompt.scroll_into_view_if_needed()
+        await page.screenshot(path=str(root/'prompt-expanded.png'))
+        # Collapsing also resets a desktop user's manual resize. Keyboard
+        # activation must not submit the generation form or change prompt text.
+        await prompt.evaluate('(el) => el.style.height="800px"')
+        await toggle.focus()
+        await page.keyboard.press('Enter')
+        await expect(toggle).to_have_attribute('aria-expanded', 'false')
+        assert (await prompt.bounding_box())['height'] == 288
+        await expect(prompt).to_have_value(text)
+        assert len(stub.submissions) == 0
+        await page.reload()
+        await expect(toggle).to_have_attribute('aria-expanded', 'false')
+        await expect(prompt).to_have_value(text)
         await page.locator('[data-role="positive"]').fill('A luminous city at dusk')
         await page.locator('#negative-controls').evaluate('(el)=>el.open=true')
         assert await page.locator('#negative-controls label:not(.visually-hidden)').count()==0
@@ -206,7 +244,7 @@ async def main(browser_name,root):
         assert service.presets.get(preset['id'])==original_preset
         assert originals=={p.name:p.read_bytes() for p in output.iterdir()}
         assert len(stub.submissions)==1 and not errors,errors
-        print(f'PASS {browser_name}: pinned live statistics, prompt search/favorites/reuse/persistence/isolation, lazy PNG/mobile metadata, clipboard, exact seeds, custom GGUF/two LoRAs, recovery and unchanged image files.')
+        print(f'PASS {browser_name}: larger prompt editor, saved touch/keyboard expand/collapse, preserved text/selection, pinned live statistics, prompt search/favorites/reuse/persistence/isolation, lazy PNG/mobile metadata, clipboard, exact seeds, custom GGUF/two LoRAs, recovery and unchanged image files.')
         await browser.close()
     finally:
         await service.stop(); await runner.cleanup(); await upstream.close()

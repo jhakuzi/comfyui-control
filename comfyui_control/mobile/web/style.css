@@ -105,6 +105,28 @@ textarea {
 textarea.negative {
   min-height: 90px;
 }
+textarea.positive {
+  min-height: 288px;
+  height: 288px;
+}
+.prompt-editor.expanded textarea.positive {
+  height: 576px;
+  height: clamp(432px, 70vh, 720px);
+  height: clamp(432px, 70dvh, 720px);
+}
+.prompt-editor-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0 8px;
+}
+.prompt-editor-heading label {
+  margin: 0;
+}
+.prompt-editor-toggle {
+  flex-shrink: 0;
+}
 input[type="checkbox"] {
   width: 22px;
   min-height: 22px;
