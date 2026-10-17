@@ -86,16 +86,18 @@
               </p>
               <div id="prompt-controls"></div>
               <button id="prompt-history" class="text-button" type="button">History & favorites</button>
+              <div class="workflow-actions">
+                <button id="refresh-models" class="small" type="button" hidden>
+                  Refresh model choices
+                </button>
+                <button id="refresh-workflows" class="small" type="button">
+                  Refresh saved ComfyUI workflows
+                </button>
+              </div>
               <button id="reuse-last" class="text-button" type="button" hidden>
                 Reuse last generation
               </button>
               <div id="model-controls"></div>
-              <button id="refresh-models" class="text-button" type="button" hidden>
-                Refresh model choices
-              </button>
-              <button id="refresh-workflows" class="text-button" type="button">
-                Refresh saved ComfyUI workflows
-              </button>
               <p id="workflow-source-note" class="hint" hidden></p>
             </section>
             <details class="card" id="lora-card" hidden>

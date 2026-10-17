@@ -41,6 +41,17 @@ images through the queue, loaded mobile submission details and metadata from a
 separate direct ComfyUI submission, preserved graphs/files, and checked request
 deduplication. Real AMD/NVIDIA sensor readings remain a hardware check.
 
+Follow-up testing passed all 184 checks locally and on Fedora 44/Python 3.14.8.
+Saved editor imports now omit muted nodes and resolve unambiguous typed bypass
+chains, including separate MODEL/CLIP paths, without interpreting disabled-node
+widgets or changing the source. Ambiguous/wildcard routing remains refused.
+Real CPU ComfyUI imported a saved workflow with a bypassed ImageScale and an
+unused decoder, then generated two images through the forwarded canvas link.
+This checks bypass execution without claiming real LoRA/model inference.
+Chromium and Linux WebKit also checked the single visible Negative prompt
+heading and bordered refresh buttons directly below History & favorites at
+phone/tablet widths; the existing recovery, gallery and GGUF checks passed.
+
 ## Original desktop review (before Mobile WebUI)
 
 The existing app is Python/PySide6 Qt Widgets. `app.py` owns the main window and

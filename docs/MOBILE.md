@@ -95,9 +95,11 @@ Mobile WebUI's default, not the node editor's browser-local startup tab.
 
 Imports prefer an exact matching executable snapshot from queue/history. When
 none exists, ordinary node-editor JSON is converted using ComfyUI's input
-metadata, preserving links and validating widget order/types. Custom dynamic
-widgets, frontend-only reroutes, bypass/mute modes, and subgraphs may need an
-API export. An ambiguous import is refused with instructions rather than guessing.
+metadata, preserving links and validating widget order/types. Muted nodes are
+omitted; bypassed LoRAs and other nodes are routed through their single matching
+typed input, including chains. Ambiguous bypasses, custom dynamic widgets,
+frontend-only reroutes, and subgraphs may need an API export. An ambiguous import
+is refused with instructions rather than guessing.
 For those workflows, queue the saved version once in ComfyUI and reselect it,
 or export API format. Uploading raw API JSON in **Advanced & workflows → Import
 workflow** remains supported.

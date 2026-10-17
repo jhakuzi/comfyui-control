@@ -78,6 +78,101 @@ def test_ambiguous_custom_widgets_and_bypass_require_exact_api(flux_saved):
         editor_to_api(editor,info)
 
 
+@pytest.fixture
+def bypassed_loras(flux_saved):
+    editor, info = flux_saved
+    # Arbitrary class names and node IDs: route from saved slot types or metadata,
+    # never from a hardcoded LoRA class/name. Two outputs must stay distinct.
+    info['OptionalAdapter'] = {'input': {'required': {'model': ['MODEL'], 'clip': ['CLIP'],
+        'strength': ['FLOAT']}}, 'output': ['MODEL', 'CLIP']}
+    info['ModelAdapter'] = {'input': {'required': {'model': ['MODEL'], 'strength': ['FLOAT']}},
+        'output': ['MODEL']}
+    editor['nodes'].extend([
+        {'id': 'adapter', 'type': 'OptionalAdapter', 'mode': 4,
+         'inputs': [{'name': 'model', 'link': 7}, {'name': 'clip', 'link': 8}],
+         'widgets_values': ['opaque extension state must not be interpreted']},
+        {'id': 83, 'type': 'ModelAdapter', 'mode': 4,
+         'inputs': [{'name': 'model', 'link': 9}], 'widgets_values': [.7]},
+    ])
+    editor['links'].extend([[7, 'diff', 0, 'adapter', 0, 'MODEL'],
+        [8, 'encoder', 0, 'adapter', 1, 'CLIP'], [9, 'adapter', 0, 83, 0, 'MODEL']])
+    editor['links'][0][1:3] = ['adapter', 1]
+    editor['links'][1][1:3] = [83, 0]
+    return editor, info
+
+
+def test_bypassed_lora_chain_preserves_model_and_encoder_routes(bypassed_loras):
+    editor, info = bypassed_loras
+    original = deepcopy(editor)
+    graph = editor_to_api(editor, info)
+    assert graph['sampler']['inputs']['model'] == ['diff', 0]
+    assert graph['text']['inputs']['clip'] == ['encoder', 0]
+    assert '83' not in graph and 'adapter' not in graph
+    assert graph['sampler']['inputs']['seed'] == 18446744073709551600
+    assert editor == original
+
+
+def test_saved_slot_types_allow_bypassing_an_unavailable_disabled_extension(bypassed_loras):
+    editor, info = bypassed_loras
+    for node in editor['nodes'][-2:]:
+        for entry in node['inputs']:
+            entry['type'] = 'MODEL' if entry['name'] == 'model' else 'CLIP'
+        node['outputs'] = [{'type': kind} for kind in info.pop(node['type'])['output']]
+    graph = editor_to_api(editor, info)
+    assert graph['sampler']['inputs']['model'] == ['diff', 0]
+    assert graph['text']['inputs']['clip'] == ['encoder', 0]
+
+
+def test_enabled_loras_keep_their_connections_and_strengths(bypassed_loras):
+    editor, info = bypassed_loras
+    for node, strength in zip(editor['nodes'][-2:], [.5, .7]):
+        node['mode'] = 0
+        node['widgets_values'] = [strength]
+    original = deepcopy(editor)
+    graph = editor_to_api(editor, info)
+    assert graph['sampler']['inputs']['model'] == ['83', 0]
+    assert graph['text']['inputs']['clip'] == ['adapter', 1]
+    assert graph['83']['inputs'] == {'model': ['adapter', 0], 'strength': .7}
+    assert graph['adapter']['inputs'] == {'model': ['diff', 0], 'clip': ['encoder', 0], 'strength': .5}
+    assert editor == original
+
+
+@pytest.mark.parametrize('problem', ['multiple-inputs', 'wildcard', 'mismatched-output', 'cycle'])
+def test_uncertain_bypass_routing_is_rejected(bypassed_loras, problem):
+    editor, info = bypassed_loras
+    adapter = editor['nodes'][-1]
+    if problem == 'multiple-inputs':
+        adapter['inputs'].append({'name': 'other', 'type': 'MODEL', 'link': None})
+    elif problem == 'wildcard':
+        info['ArbitrarySampler']['input']['required']['model'] = ['*']
+    elif problem == 'mismatched-output':
+        adapter['outputs'] = [{'type': 'CLIP'}]
+    else:
+        editor['links'][-1][1:3] = [83, 0]
+    with pytest.raises(ValueError, match='bypass'):
+        editor_to_api(editor, info)
+
+
+def test_muted_and_unused_bypassed_nodes_are_omitted_without_being_reenabled(flux_saved):
+    editor, info = flux_saved
+    editor['nodes'].extend([
+        {'id': 'muted', 'type': 'UnavailableExtension', 'mode': 2, 'widgets_values': [{}]},
+        {'id': 'bypassed', 'type': 'UnavailableExtension', 'mode': 4, 'widgets_values': [{}]},
+    ])
+    graph = editor_to_api(editor, info)
+    assert 'muted' not in graph and 'bypassed' not in graph
+    editor['nodes'][0]['mode'] = 2
+    with pytest.raises(ValueError, match="required input 'model' is not connected"):
+        editor_to_api(editor, info)
+
+
+def test_normal_missing_node_metadata_reports_the_actual_problem(flux_saved):
+    editor, info = flux_saved
+    del info['ArbitraryDiffusion']
+    with pytest.raises(ValueError, match='did not provide input metadata'):
+        editor_to_api(editor, info)
+
+
 def test_import_prefers_exact_queued_snapshot_for_custom_serialization(flux_saved):
     editor,info = flux_saved
     editor['nodes'][-1]['widgets_values'].append({'custom':'state'})
@@ -92,8 +187,9 @@ def test_import_prefers_exact_queued_snapshot_for_custom_serialization(flux_save
     assert asyncio.run(import_graph(Client(),editor)) == exact
 
 
-def test_saved_catalog_is_confined_and_import_reuses_mappings(tmp_path,flux_saved):
-    editor,info=flux_saved
+@pytest.mark.parametrize('workflow_fixture', ['flux_saved', 'bypassed_loras'])
+def test_saved_catalog_is_confined_and_import_reuses_mappings(tmp_path, request, workflow_fixture):
+    editor,info=request.getfixturevalue(workflow_fixture)
     class Client:
         async def request(self,method,path,**kwargs):
             if path.startswith('/userdata?'):

@@ -367,11 +367,12 @@ async function choosePreset(id, reuse) {
   saveDraft();
   updateGenerate();
 }
-function control(field, container) {
+function control(field, container, hideLabel = false) {
   const wrap = node("div", undefined, "control");
   if ((field.kind === "text" && !field.options) || field.role === "seed")
     wrap.classList.add("wide");
   const label = node("label", field.label);
+  if (hideLabel) label.classList.add("visually-hidden");
   const inputId = "control-" + field.key;
   label.htmlFor = inputId;
   let input;
@@ -463,7 +464,8 @@ function renderFields() {
     const details = node("details");
     details.id = "negative-controls";
     details.append(node("summary", "Negative prompt"));
-    for (const field of roles("negative")) control(field, details);
+    for (const field of roles("negative"))
+      control(field, details, roles("negative").length === 1);
     $("prompt-controls").append(details);
   }
   // Keep the three loaders together even when an older mapping placed the
