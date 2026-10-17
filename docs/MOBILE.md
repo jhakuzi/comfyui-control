@@ -357,6 +357,10 @@ position and selection. Full images download only when comparison opens; a
 loading count appears until both are downloaded and ready. On a weak connection,
 **Retry loading images** keeps the successfully loaded image and retries the other.
 
+Testing 0.11.1 keeps **Close** pinned while scrolling and positions dialogs inside
+the phone's safe areas, clear of the status bar, camera cutout and home indicator.
+Reopening comparison starts at the top without discarding the cached pair.
+
 The selected pair stays in the phone tab's memory, so reopening or swapping it
 works without further image downloads, even offline. Only that pair is kept;
 deselecting an image releases it. Refreshing/closing the page or signing out

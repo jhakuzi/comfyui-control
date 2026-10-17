@@ -2,8 +2,8 @@
 
 A small Qt desktop app for starting, stopping, and updating ComfyUI on Linux.
 
-Version **0.11.0** includes mobile generation statistics, prompt history and
-favorites, and image details alongside the existing desktop controls.
+Testing version **0.11.1.dev1** keeps comparison's Close button inside iPhone
+safe areas and visible while scrolling.
 See the [feature guide](https://github.com/jhakuzi/comfyui-control/blob/main/docs/FEATURES.md).
 Use **Mobile WebUI** to enable the embedded listener, configure your LAN/VPN
 address and password, and scan the QR. It is disabled by default.

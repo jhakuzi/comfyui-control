@@ -137,7 +137,10 @@ class ImageComparison {
     status.hidden = false;
     let ready = 0;
     status.textContent = "Loading images · 0/2 ready…";
-    if (!this.el("compare-dialog").open) this.el("compare-dialog").showModal();
+    if (!this.el("compare-dialog").open) {
+      this.el("compare-dialog").showModal();
+      this.el("compare-dialog").scrollTop = 0;
+    }
     this.renderParameters();
     // Metadata is optional and must never delay a cached/offline comparison.
     void Promise.all(ids.map(async (id) => {

@@ -1,5 +1,19 @@
 # Mobile WebUI architecture and verification
 
+## 0.11.1.dev1 comparison layout fix
+
+Shared dialog bounds reserve CSS `safe-area-inset-*` space and track the dynamic
+viewport height. The comparison header now uses the same sticky positioning as
+the image/history viewers; its Close button cannot shrink below its touch target.
+New comparison opens reset dialog scroll without discarding the selected pair.
+No viewport event listeners, additional requests, or generation changes are added.
+
+The regression check reproduces the old failure in Linux WebKit with simulated
+iPhone insets: Close started at y=33 inside a 59px top safe area. Chromium and
+WebKit now check reachable Close at the top and after scrolling, portrait and
+landscape insets, viewport-height changes, larger text, and reopening. These
+are controlled browser checks, not a physical iPhone/home-screen test.
+
 ## 0.11.0.dev1 additions
 
 The new statistics share `MonitorPanel`'s single Qt hardware sampler through

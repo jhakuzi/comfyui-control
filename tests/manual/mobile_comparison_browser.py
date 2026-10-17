@@ -115,6 +115,38 @@ async def main(browser_name):
         for width in (320,390,768,1200):
             await page.set_viewport_size({'width':width,'height':844})
             assert await page.locator('#compare-dialog').evaluate('(el)=>el.scrollWidth<=el.clientWidth')
+        # Desktop WebKit has zero notch insets. Supply explicit safe-area values
+        # to exercise the same CSS used by iPhone Safari/home-screen mode.
+        for width,height,top,right,bottom,left,font in (
+                (390,844,59,0,34,0,16), (320,568,20,0,0,0,16),
+                (844,390,0,59,21,59,16), (390,600,59,0,34,0,16),
+                (390,844,59,0,34,0,24), (1200,844,0,0,0,0,16)):
+            await page.set_viewport_size({'width':width,'height':height})
+            await page.evaluate('size=>document.documentElement.style.fontSize=size+"px"',font)
+            await page.evaluate('insets=>{for(const [side,value] of Object.entries(insets)) document.documentElement.style.setProperty("--dialog-safe-"+side,value+"px")}',dict(top=top,right=right,bottom=bottom,left=left))
+            for position in ('top','bottom'):
+                await page.locator('#compare-dialog').evaluate('(el,position)=>el.scrollTop=position==="top"?0:el.scrollHeight',position)
+                bounds=await page.locator('#close-compare').bounding_box()
+                assert bounds and bounds['y']>=top and bounds['y']+bounds['height']<=height-bottom,(browser_name,width,height,position,bounds)
+                assert bounds['x']>=left and bounds['x']+bounds['width']<=width-right
+                assert bounds['height']>=44 and bounds['width']>=44
+                center=dict(x=bounds['x']+bounds['width']/2,y=bounds['y']+bounds['height']/2)
+                assert await page.evaluate('point=>!!document.elementFromPoint(point.x,point.y)?.closest("#close-compare")',center)
+            assert await page.locator('#compare-dialog').evaluate('(el)=>el.scrollWidth<=el.clientWidth')
+            if (width,height,font)==(390,844,16):
+                await page.screenshot(path=str(root/'comparison-safe-area-scrolled.png'))
+                await page.locator('#compare-dialog').evaluate('(el)=>el.scrollTop=0')
+                await page.screenshot(path=str(root/'comparison-safe-area.png'))
+        await page.evaluate('()=>document.documentElement.style.removeProperty("font-size")')
+        # Close from the scrolled position, then reopen without losing the pair.
+        await page.set_viewport_size({'width':390,'height':844})
+        await page.locator('#close-compare').click()
+        await page.wait_for_function('(position)=>Math.abs(window.scrollY-position)<3',arg=scroll)
+        await page.locator('#compare-images').click()
+        await expect(page.locator('#compare-viewport')).to_be_visible()
+        assert await page.locator('#compare-dialog').evaluate('(el)=>el.scrollTop')==0
+        assert len(full_requests)==2
+        await page.evaluate('()=>{for(const side of ["top","right","bottom","left"]) document.documentElement.style.removeProperty("--dialog-safe-"+side)}')
         await page.set_viewport_size({'width':390,'height':844})
         await page.screenshot(path=str(root/'comparison.png'))
         await page.locator('#close-compare').click()
@@ -168,7 +200,7 @@ async def main(browser_name):
         assert await page.evaluate('(url)=>fetch(url).then(()=>false,()=>true)',cached)
         assert {p.name:p.read_bytes() for p in output.iterdir()}==originals
         assert not errors,errors
-        print(f'PASS {browser_name}: two-image readiness, selected-pair memory cache, offline reopen/swap, interrupted download/retry, eviction/auth clearing, divider, metadata, missing images, preserved gallery/files.')
+        print(f'PASS {browser_name}: safe-area Close at top/after scroll, rotation/viewport resize/large text, reopen resets dialog scroll, two-image readiness, offline cache/swap, interrupted-download retry, eviction/auth clearing, divider, metadata, missing images, preserved gallery/files.')
         print('Screenshot:',root/'comparison.png')
         await browser.close()
     finally:
