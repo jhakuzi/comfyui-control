@@ -5,7 +5,7 @@ A small Qt desktop app for starting, stopping, and updating ComfyUI on Linux.
 Version **0.11.0.dev1** tests mobile generation statistics, prompt history and
 favorites, and image details alongside the existing desktop controls.
 See the [feature guide](https://github.com/jhakuzi/comfyui-control/blob/main/docs/FEATURES.md).
-Use **Mobile WebUI…** to enable the embedded listener, configure your LAN/VPN
+Use **Mobile WebUI** to enable the embedded listener, configure your LAN/VPN
 address and password, and scan the QR. It is disabled by default.
 See the [mobile setup and workflow-mapping guide](https://github.com/jhakuzi/comfyui-control/blob/main/docs/MOBILE.md).
 
@@ -54,7 +54,7 @@ On first launch, choose your existing ComfyUI folder containing `main.py`,
 or install a new copy through Comfy CLI. New setup needs Konsole, GNOME Terminal,
 or xterm. GPU drivers and models are configured separately.
 
-Use **Edit launch configuration…** to select Python or a launch script and
+Use **Settings** to select Python or a launch script and
 inspect launch flags. For CLI updates, use **Choose environment…** to select
 your ComfyUI environment folder, such as `comfy-env`.
 

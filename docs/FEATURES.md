@@ -20,7 +20,7 @@ available, CPU/RAM, and owned ComfyUI process-group RSS.
   desktop panel is hidden or minimized.
 - Missing/unsupported metrics show `--`. Shared pages can appear more than once
   in process-group RSS. The app never claims this is GPU memory or unique PSS.
-- Disable the panel in **Edit launch configuration…** if unwanted.
+- Disable the panel in **Settings** if unwanted.
 
 Sampling statistics use actual monotonic progress-event intervals. New sampling
 stages reset the interval baseline, so model loading is excluded. The generation
@@ -39,10 +39,10 @@ Closing or opening this panel never starts or restarts ComfyUI.
 
 ## Desktop application style
 
-Use **Appearance → Application style** to choose an installed Qt widget style.
+Use **Settings → Application style** to choose an installed Qt widget style.
 **System default** follows the style Qt selects on startup; **Fusion**, **Breeze**,
 and other styles appear when available to this Qt installation. The choice
-applies immediately, persists across restarts and installation changes, and can
+applies when you save, persists across restarts and installation changes, and can
 be changed while ComfyUI runs. An unavailable saved style falls back to the
 system default. This changes desktop widgets; Plasma still supplies the color
 scheme, and the Mobile WebUI keeps its own appearance.
@@ -88,7 +88,7 @@ Unexpected nonzero/signal exits show **Crashed**, the exit code and **View crash
 log…**. Normal exit code zero, Stop, Restart, Update and app shutdown do not
 schedule crash recovery. Only app-owned processes are supervised.
 
-In **Edit launch configuration… → Crash recovery**, enable automatic restart if
+In **Settings → Crash recovery**, enable automatic restart if
 wanted. It is **off by default**. Choose 1–20 attempts (default 3) and an initial
 1–60 second delay (default 2). Delays double, capped at 60 seconds; 5 minutes of
 stable runtime resets the counter. A failed retry also consumes an attempt.

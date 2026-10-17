@@ -122,7 +122,7 @@ function saveDraft() {
       fields: preset.fields.map(({ key, node, input, role, kind }) => ({ key, node, input, role, kind })),
       values: draft,
       randomSeed,
-      seedPreferenceVersion: 1,
+      seedPreferenceVersion: 2,
       disabledLoras: [...disabledLoras],
       mappings: [...mappingDraft.values()],
     });
@@ -326,9 +326,9 @@ async function choosePreset(id, reuse) {
         : field.default,
     ]),
   );
-  // Older drafts saved the old fixed-seed default without recording a choice.
-  // Adopt randomization once; keep subsequent choices and explicit Same seed reuse.
-  randomSeed = compatible && (reuse || stored.seedPreferenceVersion === 1) && typeof stored.randomSeed === "boolean"
+  // Reset older saved defaults once, without losing prompts or fixed seed values.
+  // Keep new checkbox choices and explicit Same seed reuse across refreshes.
+  randomSeed = compatible && (reuse || stored.seedPreferenceVersion === 2) && typeof stored.randomSeed === "boolean"
     ? stored.randomSeed : true;
   disabledLoras = new Set(compatible ? stored.disabledLoras || [] : []);
   mappingDraft = new Map(

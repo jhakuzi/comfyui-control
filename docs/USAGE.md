@@ -58,7 +58,7 @@ The app uses its own Python/Qt environment. Your ComfyUI environment stays separ
 
 ![Startup choices](../startup-preview.png)
 
-Use **Set up ComfyUI…** to reopen setup or **Change folder…** to switch installations. Switching folders resets launch settings.
+Use **Set up ComfyUI** to reopen setup or **Change folder** to switch installations. Switching folders resets launch settings.
 
 <details>
 <summary>New installation setup</summary>
@@ -71,7 +71,11 @@ Setup creates a companion Python environment beside ComfyUI and runs `pip instal
 
 ## Launch settings
 
-Open **Edit launch configuration…** while stopped. Flags start collapsed: expand **Edit script flags**, **Script flags and additional arguments**, or **Edit launch flags**, depending on your launch method.
+The main heading shows **ComfyUI - version** when the selected installation
+provides version metadata. It refreshes after switching installations or finishing
+an update. The window title separately shows ComfyUI Control's version.
+
+Open **Settings** while stopped. Flags start collapsed: expand **Edit script flags**, **Script flags and additional arguments**, or **Edit launch flags**, depending on your launch method.
 
 | Setting | Use |
 | --- | --- |
@@ -82,7 +86,7 @@ Open **Edit launch configuration…** while stopped. Flags start collapsed: expa
 
 ![Launch settings with flags collapsed](../settings-preview.png)
 
-**Create launch script…** saves a new executable `.sh` with your environment, selected flags, and HIP allocator setting. Existing scripts are never overwritten. App-created scripts follow your current checkbox selections; hardcoded flags in custom scripts need manual editing. Custom scripts should forward `"$@"` and use `exec` to launch Python.
+**Create launch script** saves a new executable `.sh` with your environment, selected flags, and HIP allocator setting. Existing scripts are never overwritten. App-created scripts follow your current checkbox selections; hardcoded flags in custom scripts need manual editing. Custom scripts should forward `"$@"` and use `exec` to launch Python.
 
 Selecting an existing script reads its literal flags and VRAM value into the controls. Locked options come from the file; app-added arguments remain editable and are saved separately. Scripts are never executed for inspection. Variables or complex shell logic may prevent reliable detection.
 
@@ -125,13 +129,13 @@ bash install.sh
 ## Troubleshooting
 
 The app includes a **System & generation** panel and optional
-crash recovery in **Edit launch configuration…**. See [monitoring, recovery and
+crash recovery in **Settings**. See [monitoring, recovery and
 image comparison](FEATURES.md) for controls and measurement limits.
 
 | Problem | Check |
 | --- | --- |
 | ComfyUI exits immediately | Read the log and verify your Python or launch script works in a terminal. |
-| Folder unavailable | Mount the drive or use **Change folder…**. |
+| Folder unavailable | Mount the drive or use **Change folder**. |
 | CLI or setup terminal missing | Select/install `comfy-cli`; for setup, install Konsole, GNOME Terminal, or xterm. |
 | Script editor missing | Install Kate or KWrite, or edit the script manually. |
 | Bash reports `or: command not found` | Replace Fish-style `; or exit 1` with Bash `\|\| exit 1` in the launch script. |

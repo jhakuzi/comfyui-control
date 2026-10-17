@@ -1,11 +1,13 @@
 """Configuration and commands, without shell interpolation."""
 from dataclasses import asdict, dataclass, fields
+import ast
 import json
 import os
 from pathlib import Path
 import shlex
 import shutil
 import tempfile
+import tomllib
 
 
 def config_path() -> Path:
@@ -14,6 +16,30 @@ def config_path() -> Path:
 
 def expand(value: str) -> Path:
     return Path(os.path.expandvars(value)).expanduser().absolute()
+
+
+def installed_version(directory: Path) -> str:
+    """Read ComfyUI's version metadata without importing or executing its code."""
+    def small_text(name):
+        with (directory / name).open('rb') as stream:
+            data = stream.read(65537)
+        if len(data) > 65536:
+            raise ValueError('Version metadata is too large.')
+        return data.decode('utf-8-sig')
+
+    try:
+        tree = ast.parse(small_text('comfyui_version.py'))
+        version = next((node.value.value for node in tree.body
+                        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant)
+                        and any(isinstance(target, ast.Name) and target.id == '__version__' for target in node.targets)), '')
+    except (OSError, ValueError, SyntaxError, RecursionError):
+        version = ''
+    if not isinstance(version, str) or not version:
+        try:
+            version = tomllib.loads(small_text('pyproject.toml')).get('project', {}).get('version', '')
+        except (OSError, ValueError, TypeError, AttributeError):
+            version = ''
+    return version if isinstance(version, str) and 0 < len(version) <= 64 and all(c.isascii() and (c.isalnum() or c in '.+-_') for c in version) else ''
 
 
 @dataclass
@@ -130,7 +156,7 @@ class Config:
             executable = shutil.which(str(prefix / "bin" / "comfy")) or shutil.which("comfy")
         if not executable:
             raise ValueError(
-                "Comfy CLI was not found. Select its executable in Edit launch configuration, "
+                "Comfy CLI was not found. Select its executable in Settings, "
                 f"or install it in your ComfyUI environment: {shlex.join([python, '-m', 'pip', 'install', 'comfy-cli'])}"
             )
         return [executable, "--workspace", str(self.directory), "--skip-prompt", "update"], environment

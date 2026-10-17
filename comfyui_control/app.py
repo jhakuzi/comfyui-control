@@ -7,14 +7,14 @@ import shutil
 import sys
 
 from PySide6.QtCore import QCoreApplication, QEvent, QLockFile, QProcess, QTimer, Qt, QUrl
-from PySide6.QtGui import QActionGroup, QDesktopServices, QFontDatabase, QIcon, QTextCursor
+from PySide6.QtGui import QDesktopServices, QFontDatabase, QIcon, QTextCursor
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
     QFileDialog, QFormLayout, QGridLayout, QHBoxLayout, QLabel, QLayout, QLineEdit, QMainWindow,
     QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QStyleFactory, QToolButton, QVBoxLayout, QWidget,
 )
 
-from .config import Config, config_path, expand
+from .config import Config, config_path, expand, installed_version
 from .controller import Controller
 from .launch_script import create_launch_script
 from .script_flags import inspect_script
@@ -54,13 +54,32 @@ def apply_application_style(name):
 
 
 class SettingsDialog(QDialog):
-    def __init__(self, config, parent=None):
+    def __init__(self, config, parent=None, *, launch_locked=False):
         super().__init__(parent)
-        self.setWindowTitle("ComfyUI launch configuration")
+        self.setWindowTitle("Settings")
         self.resize(680, 520)
         self.original_config = config
         self.result_config = None
+        self.launch_locked = launch_locked
         layout = QVBoxLayout(self)
+        appearance = QFormLayout()
+        self.application_style = QComboBox()
+        self.application_style.addItem("System default", "")
+        for key in sorted(QStyleFactory.keys(), key=str.casefold):
+            self.application_style.addItem(key, key)
+        selected = next((index for index in range(self.application_style.count())
+                         if self.application_style.itemData(index).casefold() == config.application_style.casefold()), -1)
+        if selected < 0:
+            self.application_style.addItem(f"{config.application_style} (unavailable)", config.application_style)
+            selected = self.application_style.count() - 1
+            self.application_style.model().item(selected).setEnabled(False)
+        self.application_style.setCurrentIndex(selected)
+        appearance.addRow("Application style", self.application_style)
+        layout.addLayout(appearance)
+        if launch_locked:
+            note = QLabel("Stop ComfyUI to change launch settings." if config.comfy_dir else "Select a ComfyUI installation to change launch settings.")
+            note.setWordWrap(True)
+            layout.addWidget(note)
         form = QFormLayout()
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         self.folder = QLineEdit(config.comfy_dir)
@@ -122,11 +141,12 @@ class SettingsDialog(QDialog):
         form.addRow(self.monitoring)
         self.recovery_settings = RecoverySettings(config)
         form.addRow('Crash recovery', self.recovery_settings)
-        contents = QWidget()
-        contents.setLayout(form)
+        self.launch_contents = QWidget()
+        self.launch_contents.setLayout(form)
+        self.launch_contents.setEnabled(not launch_locked)
         area = QScrollArea()
         area.setWidgetResizable(True)
-        area.setWidget(contents)
+        area.setWidget(self.launch_contents)
         layout.addWidget(area)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self._save)
@@ -213,6 +233,16 @@ class SettingsDialog(QDialog):
             QMessageBox.warning(self, "Editor unavailable", "Could not open the launch script in the text editor.")
 
     def _save(self):
+        if self.launch_locked:
+            config = replace(self.original_config, application_style=self.application_style.currentData())
+            try:
+                config.save()
+            except OSError as exc:
+                QMessageBox.warning(self, "Could not save settings", str(exc))
+                return
+            self.result_config = config
+            self.accept()
+            return
         try:
             arguments = self.launch_options.argument_string()
         except ValueError as exc:
@@ -232,6 +262,7 @@ class SettingsDialog(QDialog):
             auto_restart=self.recovery_settings.enabled.isChecked(),
             restart_limit=self.recovery_settings.limit.value(),
             restart_backoff=self.recovery_settings.backoff.value(),
+            application_style=self.application_style.currentData(),
         )
         try:
             config.validate()
@@ -290,12 +321,6 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(580, 400)
         self._closing = False
         self.controller = Controller(config, self)
-        self.appearance_menu = self.menuBar().addMenu("Appearance")
-        self.style_menu = self.appearance_menu.addMenu("Application style")
-        self.style_group = QActionGroup(self.style_menu)
-        self.style_group.setExclusive(True)
-        self.style_menu.aboutToShow.connect(self._style_choices)
-        self._style_choices()
         self.mobile = MobileRuntime(self)
         self.mobile.stopped.connect(self._mobile_stopped)
         body = QWidget()
@@ -309,10 +334,11 @@ class MainWindow(QMainWindow):
         header.setColumnStretch(0, 1)
         header.setHorizontalSpacing(10)
         header.setVerticalSpacing(8)
-        title = QLabel("ComfyUI")
-        title.setStyleSheet("font-size: 18px; font-weight: 600;")
-        header.addWidget(title, 0, 0)
-        self.setup_button = QPushButton("Set up ComfyUI…")
+        self.comfy_title = QLabel("ComfyUI")
+        self.comfy_title.setTextFormat(Qt.TextFormat.PlainText)
+        self.comfy_title.setStyleSheet("font-size: 18px; font-weight: 600;")
+        header.addWidget(self.comfy_title, 0, 0)
+        self.setup_button = QPushButton("Set up ComfyUI")
         self.setup_button.clicked.connect(self._first_setup)
         header.addWidget(self.setup_button, 0, 1)
         self.status = QLabel("●  Stopped")
@@ -323,11 +349,11 @@ class MainWindow(QMainWindow):
         self.path_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.path_label.setWordWrap(True)
         header.addWidget(self.path_label, 1, 0)
-        self.create_script_button = QPushButton("Create launch script…")
+        self.create_script_button = QPushButton("Create launch script")
         self.create_script_button.setToolTip("Create a Bash script using your Python environment and selected launch flags.")
         self.create_script_button.clicked.connect(self._create_script)
         header.addWidget(self.create_script_button, 1, 1)
-        self.change_folder = QPushButton("Change folder…")
+        self.change_folder = QPushButton("Change folder")
         self.change_folder.clicked.connect(self._choose_folder)
         header.addWidget(self.change_folder, 1, 2)
         for button in (self.setup_button, self.create_script_button, self.change_folder):
@@ -339,7 +365,7 @@ class MainWindow(QMainWindow):
         header.setColumnMinimumWidth(2, status_width)
         mobile_row = QHBoxLayout()
         mobile_row.setSpacing(12)
-        self.mobile_button = QPushButton(QIcon.fromTheme("smartphone"), "Mobile WebUI…")
+        self.mobile_button = QPushButton(QIcon.fromTheme("smartphone"), "Mobile WebUI")
         self.mobile_button.clicked.connect(self._mobile_settings)
         self.mobile_status = QLabel("Disabled")
         self.mobile_status.setWordWrap(True)
@@ -402,7 +428,7 @@ class MainWindow(QMainWindow):
         left.addLayout(update_row)
         self.output_button = self._button("Open output folder", "folder-open", lambda: self._open_folder("output"))
         self.models_button = self._button("Open models folder", "folder-open", lambda: self._open_folder("models"))
-        self.config_button = self._button("Edit launch configuration…", "configure", self._settings)
+        self.config_button = self._button("Settings", "configure", self._settings)
         right.addWidget(self.output_button)
         right.addWidget(self.models_button)
         right.addWidget(self.config_button)
@@ -432,37 +458,6 @@ class MainWindow(QMainWindow):
         except (ValueError, OSError) as exc:
             self.mobile_status.setText("Check mobile settings")
             self.log.append_output(f"\nMobile WebUI did not start: {exc}\n")
-
-    def _style_choices(self):
-        self.style_menu.clear()
-        selected = self.controller.config.application_style
-        choices = [("System default", ""), *((key, key) for key in sorted(QStyleFactory.keys(), key=str.casefold))]
-        if selected and not any(key.casefold() == selected.casefold() for _, key in choices):
-            choices.append((f"{selected} (unavailable)", selected))
-        for label, key in choices:
-            action = self.style_menu.addAction(label)
-            action.setData(key)
-            action.setCheckable(True)
-            action.setChecked(key.casefold() == selected.casefold())
-            action.setEnabled(not label.endswith(" (unavailable)"))
-            self.style_group.addAction(action)
-            action.triggered.connect(lambda checked=False, name=key: self._select_style(name))
-
-    def _select_style(self, name):
-        config = replace(self.controller.config, application_style=name)
-        try:
-            config.save()
-        except OSError as exc:
-            QMessageBox.warning(self, "Could not save appearance", str(exc))
-            for action in self.style_group.actions():
-                action.setChecked(action.data().casefold() == self.controller.config.application_style.casefold())
-            return
-        # This preference must not cancel recovery or reconfigure the server.
-        self.controller.config = config
-        if not apply_application_style(name):
-            QMessageBox.information(self, "Style unavailable", "This style could not be loaded. Choose System default or another available style.")
-        for action in self.style_group.actions():
-            action.setChecked(action.data().casefold() == name.casefold())
 
     def _mobile_settings(self):
         MobileDialog(self.mobile, self.controller.config, self).exec()
@@ -529,7 +524,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Check ComfyUI folder", str(exc))
             return False
         self._set_config(config)
-        self.log.append_output(f"\nSelected ComfyUI folder: {path}\nLaunch settings reset for this installation. Choose an existing script in Edit launch configuration if needed.\n")
+        self.log.append_output(f"\nSelected ComfyUI folder: {path}\nLaunch settings reset for this installation. Choose an existing script in Settings if needed.\n")
         return True
 
     def _set_config(self, config):
@@ -602,13 +597,21 @@ class MainWindow(QMainWindow):
         self.log.append_output(
             f"\nCreated and selected launch script: {destination}\n"
             "Uses your selected Python environment, the HIP allocator, and your selected flags.\n"
-            "Use Edit launch configuration to change the flag checkboxes before the next start.\n"
+            "Use Settings to change the flag checkboxes before the next start.\n"
         )
 
     def _settings(self):
-        dialog = SettingsDialog(self.controller.config, self)
+        current = self.controller.config
+        locked = self.controller.state not in {'stopped', 'crashed'} or not (current.directory / 'main.py').is_file() or not current.comfy_dir
+        dialog = SettingsDialog(current, self, launch_locked=locked)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            self._set_config(dialog.result_config)
+            config = dialog.result_config
+            if replace(config, application_style=current.application_style) == current:
+                self.controller.config = config
+            else:
+                self._set_config(config)
+            if not apply_application_style(config.application_style):
+                QMessageBox.information(self, "Style unavailable", "This style could not be loaded. Choose System default or another available style.")
 
     def _start_stop(self):
         if self.controller.state in {'stopped','crashed'}:
@@ -631,7 +634,10 @@ class MainWindow(QMainWindow):
         self.restart.setEnabled(((idle and configured) or active) and not self._closing)
         self.update.setEnabled(((idle and configured) or active) and not self._closing)
         self.update_method.setEnabled(((idle and configured) or active) and not self._closing)
-        self.config_button.setEnabled(idle and configured and not self._closing)
+        self.config_button.setEnabled(not self._closing)
+        if state == 'stopped':
+            version = installed_version(self.controller.config.directory) if self.controller.config.comfy_dir else ''
+            self.comfy_title.setText(f"ComfyUI - {version}" if version else "ComfyUI")
         self.change_folder.setEnabled(idle and not self._closing)
         self.create_script_button.setEnabled(idle and configured and not self._closing)
         self.setup_button.setEnabled(idle and not self._closing)
@@ -661,7 +667,7 @@ class MainWindow(QMainWindow):
     def _open_folder(self, kind):
         path = self.controller.config.folder(kind)
         if not path.is_dir():
-            QMessageBox.information(self, "Folder unavailable", f"Folder does not exist:\n{path}\n\nSet a custom folder in Edit launch configuration if needed.")
+            QMessageBox.information(self, "Folder unavailable", f"Folder does not exist:\n{path}\n\nSet a custom folder in Settings if needed.")
         elif not QDesktopServices.openUrl(QUrl.fromLocalFile(str(path))):
             QMessageBox.warning(self, "Could not open folder", f"Could not open {path} in the file manager.")
 

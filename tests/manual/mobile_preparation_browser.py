@@ -1,5 +1,6 @@
 """Cold-start indication, seed defaults/reuse and repeated requests; protocol fixtures only."""
 import asyncio
+import argparse
 import json
 from pathlib import Path
 import sys
@@ -16,7 +17,7 @@ from comfyui_control.mobile.service import MobileService, revision
 from comfyui_control.mobile.settings import MobileSettings
 
 
-async def main():
+async def main(browser_name):
     root=Path(tempfile.mkdtemp(prefix='mobile-preparation-'))
     output=root/'output'; output.mkdir()
     png=(Path(__file__).resolve().parents[2]/'comfyui_control/assets/comfyui-control.png').read_bytes()
@@ -38,7 +39,7 @@ async def main():
     errors=[]
     try:
       async with async_playwright() as p:
-        browser=await p.chromium.launch(headless=True,args=['--no-sandbox'])
+        browser=await getattr(p,browser_name).launch(headless=True,**({'args':['--no-sandbox']} if browser_name=='chromium' else {}))
         context=await browser.new_context(viewport={'width':390,'height':844},is_mobile=True,has_touch=True)
         page=await context.new_page()
         page.on('pageerror',lambda error:errors.append(str(error)))
@@ -47,19 +48,27 @@ async def main():
         await expect(page.locator('#random-seed')).to_be_checked()
         await expect(page.locator('[data-role="seed"]')).to_be_disabled()
         # Older saved drafts adopt the new default without losing unsent edits.
-        legacy={'revision':revision(preset),'values':{'prompt':'Keep this unsent edit','seed':str(fixed)},'randomSeed':False}
+        legacy={'revision':revision(preset),'values':{'prompt':'Keep this unsent edit','seed':str(fixed)},'randomSeed':False,'seedPreferenceVersion':1}
         await page.add_init_script('if (!sessionStorage.getItem("seed-default-migration-check")) {'
             'localStorage.setItem('+json.dumps('comfy-mobile-draft-'+preset['id'])+','+json.dumps(json.dumps(legacy))+');'
             'sessionStorage.setItem("seed-default-migration-check","done");}')
         await page.reload()
         await expect(page.locator('#random-seed')).to_be_checked()
         await expect(page.locator('[data-role="positive"]')).to_have_value('Keep this unsent edit')
+        # Unchecking is the explicit fixed-seed choice, and survives refresh.
+        await page.locator('#settings-card').evaluate('(el)=>el.open=true')
+        await page.locator('#random-seed').uncheck()
+        await expect(page.locator('[data-role="seed"]')).to_be_enabled()
+        await page.reload()
+        await expect(page.locator('#random-seed')).not_to_be_checked()
+        await page.locator('#settings-card').evaluate('(el)=>el.open=true')
+        await page.locator('#random-seed').check()
 
         async def submit(expected):
             await page.locator('#generate').click()
             await expect(page.locator('#job-title')).to_have_text('In the queue')
             assert len(stub.submissions)==expected
-            assert await page.locator('#progress').evaluate('(el)=>el.matches(":indeterminate")')
+            await expect(page.locator('#progress:indeterminate')).to_have_count(1)
             job=list(service.jobs.values())[-1]
             stub.running,stub.pending=stub.pending,[]
             await stub.emit('execution_start',{'prompt_id':job['prompt_id']})
@@ -123,4 +132,7 @@ async def main():
         await service.stop(); await runner.cleanup(); await upstream.close()
 
 
-asyncio.run(main())
+if __name__=='__main__':
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--browser',choices=('chromium','webkit'),default='chromium')
+    asyncio.run(main(parser.parse_args().browser))

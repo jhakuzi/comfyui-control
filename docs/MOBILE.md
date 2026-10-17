@@ -31,7 +31,7 @@ return to your stable RPM.
 
 *Current UI at phone width using an example workflow; model inference is not shown.*
 
-1. Open **Mobile WebUI…** in the desktop window.
+1. Open **Mobile WebUI** in the desktop window.
 2. Enable the feature. It listens on `0.0.0.0` for IPv4 LAN/VPN access and
    automatically advertises the detected local address in the URL and QR code.
    **Use LAN / VPN** restores this automatic setup. You can still enter a
@@ -64,7 +64,7 @@ intentional localhost-only choice stays unchanged.
 
 ## Choose a workflow on the PC or from ComfyUI
 
-In the desktop **Mobile WebUI…** dialog, **Default workflow** automatically lists
+In the desktop **Mobile WebUI** dialog, **Default workflow** automatically lists
 JSON files in your selected installation's `user/default/workflows/`, including
 subfolders. Reopening the picker refreshes the list. Select a file, wait for it
 to import, then click **Apply**. Existing mobile presets are listed too.
@@ -221,8 +221,9 @@ value. Randomization affects mapped seeds only. A preset without a seed mapping
 keeps its original behaviour.
 
 **Randomize seed for each generation** is on by default.
-Older drafts adopt this default once without losing prompts or settings; your
-subsequent choice is remembered. **Same seed** explicitly switches to a fixed
+Older drafts adopt this default once without losing prompts or stored seed values.
+Uncheck it to keep the seed fixed; your subsequent choice is remembered.
+**Same seed** explicitly switches to a fixed
 seed; **New variation** enables randomization. If a fixed seed and every other
 input stay unchanged, ComfyUI may return its cached image immediately and log
 `Prompt executed in 0.00 seconds`. Change the seed or enable randomization for

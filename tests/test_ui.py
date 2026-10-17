@@ -33,7 +33,13 @@ def test_control_states_and_native_folder_open(app, tmp_path):
     assert window.start_stop.text() == "Stop"
     assert not window.change_folder.isEnabled()
     assert not window.create_script_button.isEnabled()
-    assert not window.config_button.isEnabled()
+    assert window.config_button.isEnabled()
+    assert window.config_button.text() == 'Settings'
+    assert window.mobile_button.text() == 'Mobile WebUI'
+    assert window.setup_button.text() == 'Set up ComfyUI'
+    assert window.change_folder.text() == 'Change folder'
+    assert window.create_script_button.text() == 'Create launch script'
+    assert window.menuWidget() is None
     window._state_changed("updating")
     assert not window.start_stop.isEnabled()
     with patch("comfyui_control.app.QDesktopServices.openUrl", return_value=True) as opened:
@@ -47,6 +53,7 @@ def test_change_folder_resets_and_persists_settings(app, tmp_path, monkeypatch):
     new = tmp_path / "new install"
     new.mkdir()
     (new / "main.py").touch()
+    (new / 'comfyui_version.py').write_text('__version__ = "0.45.1"')
     window = MainWindow(Config(script="/old/script.sh", mode="script", arguments="--old-flag", application_style="Fusion"))
     with patch("comfyui_control.app.QFileDialog.getExistingDirectory", return_value=str(new)):
         assert window._choose_folder()
@@ -55,6 +62,7 @@ def test_change_folder_resets_and_persists_settings(app, tmp_path, monkeypatch):
     assert window.controller.config.arguments == ""
     assert Config.load().comfy_dir == str(new)
     assert Config.load().application_style == "Fusion"
+    assert window.comfy_title.text() == 'ComfyUI - 0.45.1'
     window.close()
 
 
@@ -64,12 +72,18 @@ def test_application_style_persists_without_touching_server_or_recovery(app, tmp
     default = app.property('comfyuiDefaultStyle')
     selected = next(key for key in QStyleFactory.keys() if key.casefold() != default.casefold())
     try:
-        # The Appearance menu remains available while launch settings are locked.
+        # Appearance remains available in Settings while launch fields are locked.
         window.controller.state = 'running'
         window._state_changed('running')
+        def save_style(dialog):
+            assert dialog.windowTitle() == 'Settings'
+            assert not dialog.launch_contents.isEnabled()
+            dialog.folder.setText('/ignored-while-running')
+            dialog.application_style.setCurrentIndex(dialog.application_style.findData(selected))
+            dialog._save()
+            return dialog.result()
         with patch.object(window.controller, 'set_config') as configure, patch.object(window.controller, 'start') as start, patch.object(window.controller, 'shutdown') as stop, patch.object(window.mobile, 'update_desktop') as mobile:
-            action = next(action for action in window.style_menu.actions() if action.data() == selected)
-            action.trigger()
+            with patch.object(SettingsDialog, 'exec', save_style): window._settings()
             assert app.style().objectName().casefold() == selected.casefold()
             assert Config.load().application_style == selected
             assert Config.load().arguments == '--port 9123' and Config.load().auto_restart
@@ -82,12 +96,14 @@ def test_application_style_persists_without_touching_server_or_recovery(app, tmp
         window.close()
         reopened = MainWindow(Config.load())
         assert app.style().objectName().casefold() == selected.casefold()
-        reopened._select_style('')
+        def save_default(dialog):
+            dialog.application_style.setCurrentIndex(0)
+            dialog._save()
+            return dialog.result()
+        with patch.object(SettingsDialog, 'exec', save_default): reopened._settings()
         assert app.style().objectName().casefold() == default.casefold()
         assert Config.load().application_style == ''
-        # Reopening the menu must not accumulate actions or duplicate signals.
-        for _ in range(3): reopened._style_choices()
-        assert len(reopened.style_group.actions()) == len(QStyleFactory.keys()) + 1
+        assert reopened.menuWidget() is None
         reopened.close()
     finally:
         window.controller.state = 'stopped'
@@ -102,8 +118,10 @@ def test_missing_style_falls_back_without_losing_saved_choice(app, tmp_path, mon
     window = MainWindow(config)
     assert app.style().objectName().casefold() == app.property('comfyuiDefaultStyle').casefold()
     assert Config.load().application_style == config.application_style
-    unavailable = next(action for action in window.style_menu.actions() if action.data() == config.application_style)
-    assert unavailable.isChecked() and not unavailable.isEnabled()
+    dialog = SettingsDialog(config)
+    unavailable = dialog.application_style.currentIndex()
+    assert dialog.application_style.currentData() == config.application_style
+    assert not dialog.application_style.model().item(unavailable).isEnabled()
     assert 'unavailable; using the system default' in window.log.toPlainText()
     window.close()
 
@@ -115,12 +133,31 @@ def test_failed_style_save_keeps_current_style_and_settings(app, tmp_path, monke
     window = MainWindow(original)
     before = app.style().objectName()
     selected = next(key for key in QStyleFactory.keys() if key.casefold() != before.casefold())
+    def failed_save(dialog):
+        dialog.application_style.setCurrentIndex(dialog.application_style.findData(selected))
+        dialog._save()
+        return dialog.result()
     with patch.object(Config, 'save', side_effect=OSError('Read-only config directory')), patch('comfyui_control.app.QMessageBox.warning') as warning:
-        next(action for action in window.style_menu.actions() if action.data() == selected).trigger()
+        with patch.object(SettingsDialog, 'exec', failed_save): window._settings()
     warning.assert_called_once()
     assert window.controller.config == original and Config.load() == original
     assert app.style().objectName() == before
-    assert next(action for action in window.style_menu.actions() if action.data() == '').isChecked()
+    window.close()
+
+
+def test_comfy_heading_uses_install_version_and_refreshes_after_update(app, tmp_path):
+    (tmp_path / 'main.py').touch()
+    version = tmp_path / 'comfyui_version.py'
+    version.write_text('__version__ = "0.40.0"\n')
+    window = MainWindow(Config(comfy_dir=str(tmp_path)))
+    assert window.comfy_title.text() == 'ComfyUI - 0.40.0'
+    window._state_changed('updating')
+    version.write_text('__version__ = "0.41.0"\n')
+    window._state_changed('stopped')
+    assert window.comfy_title.text() == 'ComfyUI - 0.41.0'
+    version.unlink()
+    window._state_changed('stopped')
+    assert window.comfy_title.text() == 'ComfyUI'
     window.close()
 
 
@@ -128,6 +165,7 @@ def test_settings_validate_and_save(app, tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "settings"))
     (tmp_path / "main.py").touch()
     dialog = SettingsDialog(Config(comfy_dir=str(tmp_path)))
+    assert dialog.launch_contents.isEnabled()
     dialog.arguments.setPlainText('--port 9999 --name "quoted value"')
     dialog._save()
     assert dialog.result() == QDialog.DialogCode.Accepted

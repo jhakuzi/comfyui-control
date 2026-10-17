@@ -3,7 +3,7 @@ import sys
 
 import pytest
 
-from comfyui_control.config import Config
+from comfyui_control.config import Config, installed_version
 
 
 def test_atomic_round_trip_and_quoted_flags(tmp_path):
@@ -15,6 +15,23 @@ def test_atomic_round_trip_and_quoted_flags(tmp_path):
     config.save(path)
     assert Config.load(path) == config
     assert list(path.parent.iterdir()) == [path]
+
+
+def test_version_metadata_is_read_without_executing_installation_code(tmp_path):
+    marker = tmp_path / 'must-not-execute'
+    (tmp_path / 'comfyui_version.py').write_text(f'raise RuntimeError("Do not import")\n__version__ = "0.40.0"\nopen({str(marker)!r}, "w").close()')
+    assert installed_version(tmp_path) == '0.40.0'
+    assert not marker.exists()
+    (tmp_path / 'comfyui_version.py').write_text('__version__ = get_version()')
+    (tmp_path / 'pyproject.toml').write_text('[project]\nversion = "0.41.0-rc.1"')
+    assert installed_version(tmp_path) == '0.41.0-rc.1'
+
+
+@pytest.mark.parametrize('contents', ['__version__ = "<b>wrong</b>"', '__version__ = 123', '__version__ = "first\\nsecond"', '!' * 65537, 'not python at all'])
+def test_missing_or_invalid_install_version_is_not_invented(tmp_path, contents):
+    assert installed_version(tmp_path) == ''
+    (tmp_path / 'comfyui_version.py').write_text(contents)
+    assert installed_version(tmp_path) == ''
 
 
 def test_detect_venv_and_script_arguments(tmp_path):
