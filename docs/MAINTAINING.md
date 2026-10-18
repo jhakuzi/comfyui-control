@@ -12,7 +12,9 @@ python3 -m venv .venv
 QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest
 ```
 
-Version `0.11.1` has 202 automated tests covering desktop behaviour, appearance, hardware/timing, recovery, workflow imports, prompt history and gallery metadata. The feature browser check passed in Chromium and Linux WebKit at phone/tablet widths, including app restarts and simulated connection loss. This is not a physical iPhone Safari or VPN test. See [mobile verification notes](MOBILE_ARCHITECTURE.md) and the [feature guide](FEATURES.md) for scope and limitations. Real CPU installation, server controls, and update integration were verified on Fedora 44 with Python 3.14.8. CLI dependency isolation was checked with a disposable checkout and test package. GPU/ROCm, model inference, and KDE Wayland remain untested.
+The `1.0.0rc1` suite has 337 automated tests covering desktop behaviour, appearance, hardware/timing, recovery, workflow imports, prompt history and gallery metadata. The feature browser check passed in Chromium and Linux WebKit at phone/tablet widths, including app restarts and simulated connection loss. This is not a physical iPhone Safari or VPN test. See [mobile verification notes](MOBILE_ARCHITECTURE.md) and the [feature guide](FEATURES.md) for scope and limitations. Real CPU installation, server controls, and update integration were verified on Fedora 44 with Python 3.14.8. CLI dependency isolation was checked with a disposable checkout and test package. These automated checks do not validate GPU inference or native KDE Wayland.
+The user has separately confirmed NFS setup/removal, mobile gallery access and
+recovery after connection loss on their actual installation.
 
 [Current Fedora desktop screenshot](screenshots/desktop-0.10.2.png)
 
@@ -39,6 +41,10 @@ For an app release:
 5. For GitHub release assets, create a release draft for the tag, then run
    **Publish release downloads** from `main` with that tag and the successful
    build run ID. It attaches the verified packages and publishes the draft.
+
+For release candidates, use Python `1.0.0rc1`, RPM `1.0.0~rc1-1`, and tag
+`v1.0.0rc1`. The workflows permit RC COPR builds and publish GitHub prereleases
+without replacing the latest stable release. `.dev` builds remain blocked.
 
 For documentation-only changes, update the guides and commit to `main` without
 creating a release tag. If `packaging/APP_README.md` changes, rebuild the app ZIP

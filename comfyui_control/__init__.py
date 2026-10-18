@@ -1,3 +1,3 @@
 """Qt desktop controls for ComfyUI."""
 
-__version__ = "0.11.2.dev10"
+__version__ = "1.0.0rc1"

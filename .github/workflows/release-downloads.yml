@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Stable version tag with an existing GitHub release draft
+        description: Stable or release candidate tag with an existing GitHub release draft
         required: true
         type: string
       build_run:
@@ -30,13 +30,13 @@ jobs:
       RELEASE_TAG: ${{ inputs.tag }}
       BUILD_RUN_ID: ${{ inputs.build_run }}
     steps:
-      - name: Verify successful stable build and matching tag
+      - name: Verify successful release build and matching tag
         run: |
           python3 - <<'PY'
           import json, os, re, subprocess
           repo, tag, run_id = (os.environ[k] for k in ('GH_REPO', 'RELEASE_TAG', 'BUILD_RUN_ID'))
-          if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+', tag) or not run_id.isdecimal():
-              raise SystemExit('Choose a stable version tag and numeric build run ID.')
+          if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+(?:rc[1-9][0-9]*)?', tag) or not run_id.isdecimal():
+              raise SystemExit('Choose a stable or release candidate tag and numeric build run ID.')
           def api(path):
               return json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo}/{path}']))
           run = api(f'actions/runs/{run_id}')
@@ -68,13 +68,15 @@ jobs:
       - name: Attach packages and publish the release
         run: |
           python3 - <<'PY'
-          import base64, io, json, os, subprocess, zipfile
+          import base64, io, json, os, re, subprocess, zipfile
           from pathlib import Path
           repo, tag = os.environ['GH_REPO'], os.environ['RELEASE_TAG']
           files = sorted(Path('release-downloads').iterdir())
           version = tag.removeprefix('v')
+          candidate = re.fullmatch(r'([0-9]+\.[0-9]+\.[0-9]+)rc([1-9][0-9]*)', version)
+          rpm_version = f'{candidate[1]}~rc{candidate[2]}' if candidate else version
           if len(files) != 3 or not all(p.is_file() and (
-                  p.name == 'comfyui-control.zip' or p.name.startswith(f'comfyui-control-{version}-')
+                  p.name == 'comfyui-control.zip' or p.name.startswith(f'comfyui-control-{rpm_version}-')
                   and p.name.endswith(('.src.rpm', '.noarch.rpm'))) for p in files):
               raise SystemExit('Expected only the matching app ZIP, source RPM and binary RPM.')
           tracked = json.loads(subprocess.check_output([
@@ -91,5 +93,6 @@ jobs:
                       raise SystemExit(f'The build ZIP differs from the release tag: {name}')
           print('ZIP contents and permissions match the release tag.')
           subprocess.run(['gh', 'release', 'upload', tag, *map(str, files), '--clobber'], check=True)
-          subprocess.run(['gh', 'release', 'edit', tag, '--draft=false', '--latest'], check=True)
+          flags = ['--prerelease', '--latest=false'] if candidate else ['--prerelease=false', '--latest']
+          subprocess.run(['gh', 'release', 'edit', tag, '--draft=false', *flags], check=True)
           PY

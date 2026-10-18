@@ -21,10 +21,10 @@ def main():
     version = tomllib.loads((root / "pyproject.toml").read_text())["project"]["version"]
     spec = root / "packaging/comfyui-control.spec"
     spec_version = next(line.split(":", 1)[1].strip() for line in spec.read_text().splitlines() if line.startswith("Version:"))
-    if version != spec_version and not re.fullmatch(re.escape(spec_version) + r"\.dev[0-9]+", version):
+    if version != spec_version.replace('~rc', 'rc') and not re.fullmatch(re.escape(spec_version) + r"\.dev[0-9]+", version):
         parser.error("pyproject.toml and RPM spec versions must match")
-    # Development Python versions use RPM Release 0.x so the final 1.x release
-    # upgrades them naturally. The source archive follows RPM's Version.
+    # Development versions use RPM Release 0.x; release candidates use ~rc in
+    # RPM Version so the final version upgrades them. Archives follow RPM Version.
     version = spec_version
     if not shutil.which("rpmbuild"):
         parser.error("Install RPM build tools first: sudo dnf install rpm-build")

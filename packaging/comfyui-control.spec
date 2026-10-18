@@ -1,6 +1,6 @@
 Name:           comfyui-control
-Version:        0.11.2
-Release:        0.10.dev10%{?dist}
+Version:        1.0.0~rc1
+Release:        1%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
 License:        MIT
@@ -62,6 +62,12 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Sun Oct 18 2026 ComfyUI Control contributors - 1.0.0~rc1-1
+- First 1.0 release candidate: tray lifecycle and remembered close behavior.
+- Expandable mobile prompt editor and integrated NFS output with local fallback.
+- App-triggered mounts, scoped start permission and guarded removal/migration.
+- Safe launch-script updates, clearer setup and local crash timestamps.
+
 * Sun Oct 18 2026 ComfyUI Control contributors - 0.11.2-0.10.dev10
 - Start NFS only from the app; migrate and remove the old boot-enabled automount.
 - Grant only the setup user permission to start the specific static mount unit.

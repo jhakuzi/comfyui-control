@@ -1,4 +1,4 @@
-# Network output (testing 0.11.2.dev10)
+# Network output (1.0.0rc1)
 
 [Back to features](FEATURES.md)
 

@@ -1,9 +1,9 @@
 # Fedora RPM and COPR
 
-Version `0.11.1` fixes iPhone comparison controls and synchronizes deleted or
-replaced gallery images. Fedora packaging is `0.11.1-1`; see the
-[feature guide](../docs/FEATURES.md) and [mobile setup guide](../docs/MOBILE.md).
-Development versions remain blocked from stable COPR publishing.
+Version **1.0.0rc1** is the first 1.0 release candidate. RPM version
+`1.0.0~rc1-1` upgrades 0.11.x and sorts below final `1.0.0-1`.
+See the [release notes](../docs/releases/1.0.0rc1.md). Development versions remain
+blocked from COPR; stable releases and explicitly numbered RCs can be published.
 
 ## App ZIP download
 
@@ -40,7 +40,7 @@ On Fedora, install the build tools:
 sudo dnf install python3 rpm-build dnf5-plugins
 sudo dnf builddep packaging/comfyui-control.spec
 python3 packaging/make_srpm.py --outdir dist
-rpmbuild --rebuild dist/comfyui-control-0.11.1-1*.src.rpm
+rpmbuild --rebuild dist/comfyui-control-1.0.0~rc1-1*.src.rpm
 ```
 
 For a clean build environment, `mock` can build the generated SRPM instead.
@@ -51,7 +51,7 @@ Fedora's Python minor version and installation paths can change between releases
 Install the RPM built for your Fedora release:
 
 ```bash
-sudo dnf install ./comfyui-control-0.11.1-1.fc44.noarch.rpm
+sudo dnf install ./comfyui-control-1.0.0~rc1-1.fc44.noarch.rpm
 ```
 
 The first RPM was built and installed in an isolated Fedora 44 container with
@@ -131,6 +131,11 @@ The existing `v0.8.0` tag predates this workflow: use the manual run for the fir
 build. For packaging-only changes, keep the app version, increment the spec's
 `Release`, and use a manual publishing run. Do not move existing release tags.
 
+Release candidates use Python version `1.0.0rc1`, RPM Version `1.0.0~rc1`,
+Release `1`, and tag `v1.0.0rc1`. The tilde ensures a normal upgrade to final
+1.0.0. Tag pushes also submit RCs to this COPR project, so existing subscribers
+receive them. Development `.dev` versions remain blocked.
+
 ### GitHub release downloads
 
 After a successful tag/COPR build, create a GitHub release draft for that tag.
@@ -138,7 +143,8 @@ Run **Actions → Publish release downloads** from `main`, entering the tag and
 the successful build's Actions run ID. A packaging-only rebuild can use a manual
 COPR run from `main` descending from that tag. It must have published successfully
 to COPR, and the app ZIP must still match the tag's contents and permissions.
-The workflow attaches the verified ZIP and RPMs, then publishes the draft.
+The workflow attaches the verified ZIP and RPMs, then publishes the draft. RC tags stay marked as prereleases and do not replace
+the latest stable GitHub release.
 It uses GitHub Actions' repository token; no extra personal token is needed.
 
 ### Install after the first successful build
