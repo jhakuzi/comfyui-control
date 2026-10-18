@@ -1,4 +1,4 @@
-"""NFS automount definition and isolated filesystem worker (standard library only).
+"""NFS mount definition and isolated filesystem worker (standard library only).
 
 Only the explicit desktop setup action runs `setup` as administrator. Normal
 probes, gallery scans and image reads always run as the desktop user.
@@ -8,6 +8,7 @@ import hashlib
 import ipaddress
 import json
 import os
+import pwd
 from pathlib import Path, PurePosixPath
 import re
 import shlex
@@ -21,6 +22,7 @@ import tempfile
 MAX_IMAGE = 100 * 1024 * 1024
 MARKER = '# Managed by comfyui-control NFS output\n'
 UNIT_DIRECTORY = Path('/etc/systemd/system')
+POLICY_DIRECTORY = Path('/etc/polkit-1/rules.d')
 OTHER_UNIT_DIRECTORIES = tuple(Path(path) for path in (
     '/run/systemd/system', '/run/systemd/generator', '/run/systemd/generator.early',
     '/run/systemd/generator.late', '/usr/local/lib/systemd/system',
@@ -58,17 +60,19 @@ def specification(server, export):
     return {'server': server, 'export': export, 'source': f'{server}:{export}', 'where': where, 'unit': unit}
 
 
-def units(spec):
-    return {
+def units(spec, legacy=False):
+    definitions = {
         spec['unit'] + '.mount': MARKER + (
             '[Unit]\nDescription=ComfyUI network output\n'
             'Wants=network-online.target\nAfter=network-online.target\nJobTimeoutSec=15s\n\n'
             f'[Mount]\nWhat={spec["source"]}\nWhere={spec["where"]}\nType=nfs\n'
             'Options=rw,_netdev,nosuid,nodev,noexec\nTimeoutSec=10s\n'),
-        spec['unit'] + '.automount': MARKER + (
-            '[Unit]\nDescription=ComfyUI output automount\n\n'
-            f'[Automount]\nWhere={spec["where"]}\n\n[Install]\nWantedBy=multi-user.target\n'),
     }
+    if legacy:
+        definitions[spec['unit'] + '.automount'] = MARKER + (
+            '[Unit]\nDescription=ComfyUI output automount\n\n'
+            f'[Automount]\nWhere={spec["where"]}\n\n[Install]\nWantedBy=multi-user.target\n')
+    return definitions
 
 
 def _system_command(command, action, timeout):
@@ -82,10 +86,43 @@ def _system_command(command, action, timeout):
         raise ValueError(f'{action} timed out after {timeout} seconds. Check the system mount status before retrying.') from exc
 
 
+def mount_permission(spec):
+    uid = os.getuid()
+    if os.geteuid() == 0:
+        value = os.environ.get('PKEXEC_UID', os.environ.get('SUDO_UID', str(uid)))
+        if not value.isdecimal():
+            raise ValueError('Run mount setup/removal through the app or sudo from your normal desktop account.')
+        uid = int(value)
+    try:
+        username = pwd.getpwuid(uid).pw_name
+    except KeyError:
+        raise ValueError('The desktop user account could not be identified.') from None
+    name = '49-comfyui-control-' + spec['where'].rsplit('-', 1)[1] + '.rules'
+    text = ('// Managed by comfyui-control NFS output\n'
+            'polkit.addRule(function(action, subject) {\n'
+            '    if (action.id === "org.freedesktop.systemd1.manage-units" &&\n'
+            f'        subject.user === {json.dumps(username)} &&\n'
+            f'        action.lookup("unit") === {json.dumps(spec["unit"] + ".mount")} &&\n'
+            '        action.lookup("verb") === "start") {\n'
+            '        return polkit.Result.YES;\n'
+            '    }\n});\n')
+    return POLICY_DIRECTORY / name, text
+
+
+def check_permission_file(path, contents):
+    if path.is_symlink():
+        raise ValueError('Refusing to change a symlinked mount permission file.')
+    if path.exists():
+        info = path.stat()
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022 or
+                path.read_text() != contents):
+            raise ValueError('The mount permission file is edited, foreign or belongs to another user. Nothing was changed.')
+
+
 def managed_unit_files(spec, required=False):
     """Refuse collisions, edits and overrides before any systemd mutation."""
     paths = []
-    for name, contents in units(spec).items():
+    for name, contents in units(spec, legacy=True).items():
         path = UNIT_DIRECTORY / name
         for directory in (UNIT_DIRECTORY, *OTHER_UNIT_DIRECTORIES):
             candidate = directory / name
@@ -100,7 +137,7 @@ def managed_unit_files(spec, required=False):
                     path.read_text() != contents):
                 raise ValueError(f'Refusing to change a foreign or edited system mount definition: {name}')
             paths.append(path)
-        elif required:
+        elif required and name.endswith('.mount'):
             raise ValueError(f'The managed mount definition is missing: {name}. Refusing to remove an incomplete setup.')
     return paths
 
@@ -124,7 +161,16 @@ def install_mount(spec):
     target = Path(spec['where'])
     # Never chmod/chown an already mounted export or unmount someone else's work.
     existing = managed_unit_files(spec)
-    record = check_mount_location(spec, len(existing) == 2)
+    record = check_mount_location(spec, bool(existing))
+    permission, permission_text = mount_permission(spec)
+    check_permission_file(permission, permission_text)
+    if POLICY_DIRECTORY.exists():
+        info = POLICY_DIRECTORY.stat()
+        if POLICY_DIRECTORY.is_symlink() or info.st_uid != 0 or info.st_mode & 0o022:
+            raise ValueError('The mount permission directory must be root-owned and not writable by other users.')
+    if any(path.suffix == '.automount' for path in existing):
+        remove_mount(spec)
+        record = None
     if not record:
         if target.is_symlink():
             raise ValueError('The mount location must not be a symlink.')
@@ -147,9 +193,19 @@ def install_mount(spec):
     restorecon = next((program for program in ('/usr/sbin/restorecon', '/sbin/restorecon') if Path(program).is_file()), None)
     if restorecon:
         _system_command([restorecon, *[str(directory / name) for name in definitions]], 'Restoring SELinux labels for the mount definitions', 10)
-    for args, action in ((['daemon-reload'], 'Reloading systemd mount definitions'),
-                         (['enable', '--now', spec['unit'] + '.automount'], 'Enabling the NFS automount')):
-        _system_command(['/usr/bin/systemctl', *args], action, 25)
+    POLICY_DIRECTORY.mkdir(mode=0o755, parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix='.comfyui-permission-', dir=POLICY_DIRECTORY)
+    try:
+        with os.fdopen(fd, 'w') as stream:
+            os.fchmod(stream.fileno(), 0o644)
+            stream.write(permission_text)
+        os.replace(temporary, permission)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+    if restorecon:
+        _system_command([restorecon, str(permission)], 'Restoring SELinux labels for the mount permission', 10)
+    _system_command(['/usr/bin/systemctl', 'daemon-reload'], 'Reloading systemd mount definitions', 25)
 
 
 def remove_mount(spec):
@@ -157,6 +213,8 @@ def remove_mount(spec):
         raise ValueError('Mount removal requires administrator authorization.')
     paths = managed_unit_files(spec, required=True)
     check_mount_location(spec, True)
+    permission, permission_text = mount_permission(spec)
+    check_permission_file(permission, permission_text)
     # systemd stop can propagate to nested mount units. Refuse those rather than
     # allowing removal of our mount to stop somebody else's child mount.
     prefix = spec['where'].rstrip('/') + '/'
@@ -164,7 +222,7 @@ def remove_mount(spec):
         fields = line.partition(' - ')[0].split()
         if len(fields) > 4 and unescape_mount(fields[4]).startswith(prefix):
             raise ValueError('Another filesystem is mounted inside this output folder. Remove that nested mount yourself first; nothing was changed.')
-    names = {spec['unit'] + '.automount', spec['unit'] + '.mount'}
+    names = {path.name for path in paths}
     dependencies = _system_command(
         ['/usr/bin/systemctl', 'show', '--property=RequiredBy,RequisiteOf,BoundBy,ConsistsOf,PropagatesStopTo', *sorted(names)],
         'Checking whether other system units would be stopped with this mount', 5)
@@ -174,8 +232,9 @@ def remove_mount(spec):
     if dependents:
         raise ValueError('Other system units depend on this mount: ' + ', '.join(sorted(dependents)) +
                          '. Nothing was changed. Remove those dependencies yourself first.')
-    _system_command(['/usr/bin/systemctl', 'disable', '--now', spec['unit'] + '.automount'],
-                    'Disabling the managed NFS automount', 25)
+    if spec['unit'] + '.automount' in names:
+        _system_command(['/usr/bin/systemctl', 'disable', '--now', spec['unit'] + '.automount'],
+                        'Disabling the old managed NFS automount', 25)
     _system_command(['/usr/bin/systemctl', 'stop', spec['unit'] + '.mount'],
                     'Unmounting the managed NFS output (close programs using this folder and retry if it is busy)', 25)
     if mount_record(spec['where']):
@@ -183,6 +242,8 @@ def remove_mount(spec):
     managed_unit_files(spec, required=True)
     for path in paths:
         path.unlink()
+    if permission.exists():
+        permission.unlink()
     _system_command(['/usr/bin/systemctl', 'daemon-reload'], 'Reloading systemd mount definitions', 25)
     # Leave the empty local mountpoint alone: never traverse/delete NAS files.
 
@@ -213,10 +274,15 @@ def mounted(spec):
 
 
 def probe(spec):
-    auto = Path('/etc/systemd/system') / (spec['unit'] + '.automount')
-    if not auto.is_file() and not mounted(spec):
+    mount_file = UNIT_DIRECTORY / (spec['unit'] + '.mount')
+    if (UNIT_DIRECTORY / (spec['unit'] + '.automount')).is_file():
+        raise ValueError('An older boot-enabled automount setup was found. Stop ComfyUI, then use Set up mount once to replace it with app-triggered mounting.')
+    if not mount_file.is_file() and not mounted(spec):
         raise ValueError('Mount setup is not installed. Open Settings → Network output (NFS) and click Save and set up mount. '
                          'You can also use Set up mount beside the network status in the main window.')
+    record = mount_record(spec['where'])
+    if record and record not in {('nfs', spec['source']), ('nfs4', spec['source'])}:
+        raise ValueError('Another filesystem is using the output mount location. No mount was started; inspect it before retrying setup.')
     # Fail quickly for an unreachable NAS before touching its filesystem.
     try:
         with socket.create_connection((spec['server'].strip('[]'), 2049), timeout=2):
@@ -226,19 +292,18 @@ def probe(spec):
                          'Check that the NAS is online, NFS is enabled, and the LAN/VPN route and firewall allow the connection.') from exc
     root = Path(spec['where'])
     status_command = 'systemctl status ' + shlex.quote(spec['unit'] + '.mount')
-    try:
-        # stat() of the automount root can return autofs metadata without
-        # activating it. Opening the directory triggers the real mount, even
-        # for an empty export. Keep this potentially blocking I/O in the worker.
-        with os.scandir(root):
-            pass
-    except OSError as exc:
-        raise ValueError(f'Linux could not activate the NFS mount for {spec["source"]}: {exc}. '
-                         f'Check the export path and the NAS client-access rules. For system details, run: {status_command}') from exc
+    if not mounted(spec):
+        try:
+            _system_command(['/usr/bin/systemctl', '--no-ask-password', 'start', spec['unit'] + '.mount'],
+                            'Starting the NFS mount', 12)
+        except ValueError as exc:
+            raise ValueError(f'{exc} Check the export path and NAS access rules. '
+                             'For an authorization error, use Set up mount once to install the permission for your user. '
+                             f'For system details, run: {status_command}') from exc
     if not mounted(spec):
         raise ValueError(f'Linux did not mount {spec["source"]} at {spec["where"]}. '
-                         'The directory opened, but the expected NFS filesystem is not active; '
-                         'no write was attempted. Use Set up mount to enable the automount again. '
+                         'The start request completed, but the expected NFS filesystem is not active; '
+                         'no write was attempted. Check the mount status and use Set up mount if needed. '
                          f'For system details, run: {status_command}')
     try:
         fd, path = tempfile.mkstemp(prefix='.comfyui-write-check-', dir=root)

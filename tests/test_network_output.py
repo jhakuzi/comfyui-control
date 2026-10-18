@@ -45,7 +45,8 @@ def network_config(tmp_path, **kwargs):
 def test_mount_names_and_unit_definitions_are_data_only(tmp_path, server, export):
     spec = specification(server, export)
     assert spec['where'].startswith('/mnt/comfyui-nfs-')
-    assert len(units(spec)) == 2
+    assert len(units(spec)) == 1
+    assert not any("[Install]" in value or "[Automount]" in value for value in units(spec).values())
     escaped = subprocess.check_output(['systemd-escape', '--path', spec['where']], text=True).strip() if shutil.which('systemd-escape') else spec['unit']
     assert spec['unit'] == escaped
     for name, contents in units(spec).items():
@@ -77,14 +78,14 @@ def test_setup_reports_system_command_error_instead_of_hiding_stderr():
 
 
 def test_connection_error_identifies_server_and_nfs_port():
-    with patch.object(Path, 'is_file', return_value=True), patch('comfyui_control.network_output.socket.create_connection', side_effect=OSError('Connection refused')):
+    with patch.object(Path, 'is_file', autospec=True, side_effect=lambda path: path.suffix == '.mount'), patch('comfyui_control.network_output.socket.create_connection', side_effect=OSError('Connection refused')):
         with pytest.raises(ValueError, match='nas.*TCP port 2049.*Connection refused'):
             probe(specification('nas', '/images'))
 
 
 def test_mounted_but_unwritable_export_is_distinguished_from_connection_failure():
     from contextlib import nullcontext
-    with patch.object(Path, 'is_file', return_value=True), \
+    with patch.object(Path, 'is_file', autospec=True, side_effect=lambda path: path.suffix == '.mount'), \
          patch('comfyui_control.network_output.os.scandir'), \
          patch('comfyui_control.network_output.socket.create_connection', return_value=nullcontext()), \
          patch('comfyui_control.network_output.mounted', return_value=True), \
@@ -229,7 +230,7 @@ def test_settings_mount_button_saves_and_opens_setup_for_the_new_configuration(a
         with patch.object(SettingsDialog, 'exec', save_and_setup), patch.object(window.network_output, 'setup') as setup:
             window._settings()
             QTest.qWait(30)
-            setup.assert_called_once_with(window)
+            setup.assert_called_once_with(window, in_use=False)
         saved = Config.load()
         assert saved.nfs_enabled and saved.nfs_server == 'nas' and saved.nfs_export == '/images'
         assert window.network_output.spec == specification('nas', '/images')

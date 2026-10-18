@@ -50,7 +50,7 @@ scheme, and the Mobile WebUI keeps its own appearance.
 The isolated Python environment and Fedora's native RPM may find different Qt
 style plugins. The app does not bundle or install Breeze itself.
 
-## Network output (testing 0.11.2.dev9)
+## Network output (testing 0.11.2.dev10)
 
 **Settings → Network output (NFS)** accepts a NAS address and export path.
 Click **Save and set up mount** in that section for the one-time setup, then

@@ -29,37 +29,30 @@ def test_mount_stack_uses_parent_relationship_not_line_order(reverse, cover):
         assert nfs.mounted(spec) is not cover
 
 
-def test_probe_opens_empty_directory_to_activate_mount_before_any_write(tmp_path):
+def test_probe_starts_mount_without_auth_prompt_before_any_write(tmp_path):
     spec = dict(nfs.specification('nas', '/images'), where=str(tmp_path))
     activated = False
-    actual_scandir = os.scandir
-
-    def open_directory(path):
+    def start(command, action, timeout):
         nonlocal activated
-        assert Path(path) == tmp_path
+        assert command == ['/usr/bin/systemctl', '--no-ask-password', 'start', spec['unit'] + '.mount']
         activated = True
-        return actual_scandir(path)
-
-    def mounted(_):
-        return activated
-
-    with patch.object(Path, 'is_file', return_value=True), \
+    with patch.object(Path, 'is_file', autospec=True, side_effect=lambda path: path.suffix == '.mount'), \
          patch.object(nfs.socket, 'create_connection', return_value=nullcontext()), \
-         patch.object(nfs, 'mounted', mounted), patch.object(nfs.os, 'scandir', open_directory):
+         patch.object(nfs, 'mounted', side_effect=lambda _: activated), patch.object(nfs, '_system_command', start):
         nfs.probe(spec)
-    assert activated and list(tmp_path.iterdir()) == []  # Write probe removed.
+    assert activated and list(tmp_path.iterdir()) == []
 
 
-@pytest.mark.parametrize('activation_error', [None, PermissionError('Access denied by server')])
+@pytest.mark.parametrize('activation_error', [None, ValueError('Access denied by server')])
 def test_failed_activation_never_writes_to_underlying_local_directory(activation_error):
-    with patch.object(Path, 'is_file', return_value=True), \
+    with patch.object(Path, 'is_file', autospec=True, side_effect=lambda path: path.suffix == '.mount'), \
          patch.object(nfs.socket, 'create_connection', return_value=nullcontext()), \
-         patch.object(nfs.os, 'scandir', side_effect=activation_error) as opened, \
+         patch.object(nfs, '_system_command', side_effect=activation_error) as started, \
          patch.object(nfs, 'mounted', return_value=False), \
          patch.object(nfs.tempfile, 'mkstemp') as write:
         with pytest.raises(ValueError, match='Access denied by server' if activation_error else 'no write was attempted'):
             nfs.probe(nfs.specification('nas', '/images'))
-        opened.assert_called_once()
+        started.assert_called_once()
         write.assert_not_called()
 
 
@@ -70,17 +63,25 @@ def managed(tmp_path, monkeypatch):
     other = tmp_path / 'other-units'
     other.mkdir()
     spec = nfs.specification('nas', '/images')
+    spec['where'] = str(tmp_path / ('mountpoint-' + spec['where'].rsplit('-', 1)[1]))
     for name, contents in nfs.units(spec).items():
         (directory / name).write_text(contents)
         (directory / name).chmod(0o644)
     monkeypatch.setattr(nfs, 'UNIT_DIRECTORY', directory)
+    policy = tmp_path / 'policy'
+    policy.mkdir()
+    monkeypatch.setattr(nfs, 'POLICY_DIRECTORY', policy)
+    monkeypatch.setenv('SUDO_UID', '1000')
+    monkeypatch.delenv('PKEXEC_UID', raising=False)
+    from types import SimpleNamespace
+    monkeypatch.setattr(nfs.pwd, 'getpwuid', lambda uid: SimpleNamespace(pw_name='tester'))
     monkeypatch.setattr(nfs, 'OTHER_UNIT_DIRECTORIES', (other,))
     monkeypatch.setattr(nfs.os, 'geteuid', lambda: 0)
     # Simulate root ownership of fixtures, retaining real file type/mode.
     original = Path.stat
     def root_owned(path, **kwargs):
         info = original(path, **kwargs)
-        if path.parent == directory or str(path) == '/mnt':
+        if path.parent in {directory, policy} or path in {policy, Path(spec['where'])} or str(path) == '/mnt':
             values = list(info)
             values[4] = 0
             if str(path) == '/mnt':
@@ -102,8 +103,7 @@ def test_removal_only_targets_exact_managed_units_and_preserves_other_files(mana
         nfs.remove_mount(spec)
     assert [call.args[0] for call in commands.call_args_list] == [
         ['/usr/bin/systemctl', 'show', '--property=RequiredBy,RequisiteOf,BoundBy,ConsistsOf,PropagatesStopTo',
-         spec['unit'] + '.automount', spec['unit'] + '.mount'],
-        ['/usr/bin/systemctl', 'disable', '--now', spec['unit'] + '.automount'],
+         spec['unit'] + '.mount'],
         ['/usr/bin/systemctl', 'stop', spec['unit'] + '.mount'],
         ['/usr/bin/systemctl', 'daemon-reload']]
     assert list(directory.iterdir()) == [unrelated]
@@ -204,6 +204,87 @@ def test_removal_requires_administrator(monkeypatch):
     monkeypatch.setattr(nfs.os, 'geteuid', lambda: 1000)
     with pytest.raises(ValueError, match='administrator'):
         nfs.remove_mount(nfs.specification('nas', '/images'))
+
+
+def test_setup_installs_only_static_mount_and_scoped_start_permission(managed):
+    spec, directory, _ = managed
+    with patch.object(nfs, 'mount_record', return_value=None), \
+         patch.object(nfs, 'nfs_client_available', return_value=True), \
+         patch.object(nfs, '_system_command', return_value='') as commands:
+        nfs.install_mount(spec)
+    assert {p.name for p in directory.iterdir()} == {spec['unit'] + '.mount'}
+    assert all('enable' not in call.args[0] and 'start' not in call.args[0] for call in commands.call_args_list)
+    permission, text = nfs.mount_permission(spec)
+    assert permission.read_text() == text
+    assert 'subject.user === "tester"' in text
+    assert 'action.lookup("verb") === "start"' in text
+    assert __import__('json').dumps(spec['unit'] + '.mount') in text
+    assert permission.stat().st_mode & 0o777 == 0o644
+    with patch.object(nfs, 'mount_record', return_value=None), patch.object(nfs, '_system_command', return_value=''):
+        nfs.remove_mount(spec)
+    assert not permission.exists() and not list(directory.iterdir())
+
+
+def test_setup_migrates_old_boot_automount_without_enabling_new_units(managed):
+    spec, directory, _ = managed
+    (directory / (spec['unit'] + '.automount')).write_text(nfs.units(spec, legacy=True)[spec['unit'] + '.automount'])
+    with patch.object(nfs, 'mount_record', side_effect=[('autofs', 'systemd-1'), ('autofs', 'systemd-1'), None]), \
+         patch.object(nfs, 'nfs_client_available', return_value=True), \
+         patch.object(nfs, '_system_command', return_value='') as commands:
+        nfs.install_mount(spec)
+    assert not (directory / (spec['unit'] + '.automount')).exists()
+    assert (directory / (spec['unit'] + '.mount')).exists()
+    assert any(call.args[0][1:3] == ['disable', '--now'] for call in commands.call_args_list)
+    assert all('enable' not in call.args[0] for call in commands.call_args_list)
+
+
+@pytest.mark.parametrize('kind', ['tmpfs', 'autofs'])
+def test_startup_cannot_mount_over_a_foreign_filesystem(kind):
+    with patch.object(Path, 'is_file', autospec=True, side_effect=lambda path: path.suffix == '.mount'), \
+         patch.object(nfs, 'mount_record', return_value=(kind, 'foreign')), patch.object(nfs, '_system_command') as start:
+        with pytest.raises(ValueError, match='Another filesystem'):
+            nfs.probe(nfs.specification('nas', '/images'))
+        start.assert_not_called()
+
+
+def test_legacy_startup_requests_explicit_migration_without_activating_autofs():
+    with patch.object(Path, 'is_file', return_value=True), patch.object(nfs, '_system_command') as start:
+        with pytest.raises(ValueError, match='older boot-enabled.*Set up mount'):
+            nfs.probe(nfs.specification('nas', '/images'))
+        start.assert_not_called()
+
+
+def test_foreign_permission_is_not_overwritten_or_removed(managed):
+    spec, _, _ = managed
+    permission, _ = nfs.mount_permission(spec)
+    permission.write_text('Different permission policy\n')
+    with patch.object(nfs, 'mount_record', return_value=None), \
+         patch.object(nfs, 'nfs_client_available', return_value=True), patch.object(nfs, '_system_command') as commands:
+        with pytest.raises(ValueError, match='permission file is edited'):
+            nfs.install_mount(spec)
+        with pytest.raises(ValueError, match='permission file is edited'):
+            nfs.remove_mount(spec)
+        commands.assert_not_called()
+    assert permission.read_text() == 'Different permission policy\n'
+
+
+def test_polkit_rule_allows_only_this_user_to_start_this_mount(managed):
+    import json
+    import shutil
+    import subprocess
+    spec, _, _ = managed
+    _, rule = nfs.mount_permission(spec)
+    if not shutil.which('node'):
+        pytest.skip('JavaScript runtime unavailable')
+    script = ('let grant; const polkit={Result:{YES:true},addRule:fn=>grant=fn};\n' + rule + '\n' +
+              'const unit=' + json.dumps(spec['unit'] + '.mount') + ';\n' +
+              'function allowed(user,id,name,verb){return grant({id,lookup:key=>key==="unit"?name:verb},{user})===true;}\n' +
+              'if(!allowed("tester","org.freedesktop.systemd1.manage-units",unit,"start"))process.exit(1);\n' +
+              'for(const value of [["other","org.freedesktop.systemd1.manage-units",unit,"start"],\n' +
+              '["tester","different.action",unit,"start"],["tester","org.freedesktop.systemd1.manage-units","other.mount","start"],\n' +
+              '["tester","org.freedesktop.systemd1.manage-units",unit,"stop"],["tester","org.freedesktop.systemd1.manage-units",unit,"restart"]])\n' +
+              'if(allowed(...value))process.exit(2);')
+    subprocess.run(['node', '-'], input=script, text=True, check=True, timeout=5)
 
 
 def test_removal_ui_is_blocked_during_generation_and_cancel_preserves_ready_state(app, tmp_path):

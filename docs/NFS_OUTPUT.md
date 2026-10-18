@@ -1,4 +1,4 @@
-# Network output (testing 0.11.2.dev9)
+# Network output (testing 0.11.2.dev10)
 
 [Back to features](FEATURES.md)
 
@@ -24,21 +24,31 @@ Save ComfyUI images to an NFS export, with the selected installation's
 5. Setup checks the connection. When ready, start ComfyUI. Use **Retry network**
    after changing NAS availability or permissions.
 
-Setup creates a root-owned mountpoint under `/mnt` and two systemd units under
-`/etc/systemd/system`. It enables an on-demand automount. Subsequent app launches
-run unprivileged checks without an administrator prompt. The desktop app remains
-unprivileged. The setup button needs systemd and a polkit authentication agent.
+Setup creates a root-owned mountpoint under `/mnt` and one static `.mount`
+unit under `/etc/systemd/system`. Nothing is enabled at boot, `/etc/fstab` is
+untouched, and accessing the folder does not automatically mount it. The app
+requests mounting in a background worker when it launches (if Connect at startup
+is checked) or when you choose Retry network.
 
-Connection errors identify the NFS server/port, mount activation, or an already
-mounted export that is not writable by your UID/GID. Failed systemd/SELinux setup
-commands include their actual error output rather than only an exit-code message.
+One-time administrator setup installs a narrowly scoped rule under
+`/etc/polkit-1/rules.d`: only your account may **start this exact mount unit**
+without another prompt. It does not grant permission to stop/restart units,
+change unit files or manage other mounts. Setup/removal still requires
+administrator authorization. The desktop app stays unprivileged.
 
-The connection check opens the mount directory to activate the on-demand mount,
-then verifies its NFS type and source before attempting a write. An active
-`.automount` with an inactive `.mount` only means the filesystem has not been
-mounted yet; it does not by itself identify a NAS error. Earlier testing versions
-could leave it inactive by only reading directory metadata. Update to dev9 and
-use **Retry network**; the existing setup does not need recreating for that fix.
+**Upgrading from dev9 or earlier:** stop ComfyUI and close programs using the
+share, then click **Set up mount** once. Migration validates and disables the
+old app-managed boot automount, removes its definition and installs the new
+setup. Busy/foreign/nested mounts and stop dependencies retain the existing
+safeguards. Startup detects the old setup and asks for migration rather than
+silently continuing to use it.
+
+Connection errors identify the NFS server/port, mount activation or write access.
+A start authorization error asks you to rerun setup for your current account.
+The mount's actual source/type is verified before writing any probe file.
+Failed system commands include their error output rather than only an exit code.
+Closing the app leaves a successfully mounted share available; use Remove mount
+for explicit cleanup rather than interrupting another program using it.
 
 The package check detects `mount.nfs`, including in system sbin folders outside
 your user PATH. Declining installation leaves local fallback available.
@@ -56,7 +66,7 @@ containing spaces are unsupported.
 
 ## Fallback and switching
 
-- Startup checks run in the background with a 12-second app deadline. The desktop
+- Startup checks run in the background with a 18-second app deadline. The desktop
   opens immediately. Starting ComfyUI before the check finishes selects local
   output for that run.
 - Missing setup, an unreachable NAS, a timeout or denied write access produces a
@@ -140,8 +150,9 @@ not remove the OS mount setup. To remove that setup:
    was disabled, enable the existing server/export in Settings to show that row.
 3. Review the exact units and authorize removal as administrator.
 
-Removal disables/stops only this mount's two generated units and removes those
-unit files after confirming unmount. NAS files, other mount definitions and
+Removal stops this mount and removes its definition and scoped start permission
+after confirming unmount. It also cleans up an existing legacy automount.
+NAS files, other mount definitions and
 `/etc/fstab` are untouched. The empty local mountpoint is kept. Busy mounts fail
 without forced/lazy unmount, and keep their definitions for retry. Edited/foreign
 unit files, overrides, foreign filesystems and nested mounts are refused.
@@ -166,9 +177,11 @@ deleting unrelated system definitions to bypass the safeguard.
 
 Tests use disposable directories/processes and validate generated systemd units
 where the validator is available. They cover fallback, output writes, timeouts,
-script forwarding, worker limits, image reads, privacy and deletion. Automatic
-mount activation tests require a directory open before writing, and stacked mount
-tests vary mountinfo order. Removal tests cover foreign/edited/symlinked units,
+script forwarding, worker limits, image reads, privacy and deletion. Mount
+activation tests require an explicit non-interactive systemd start before
+writing, and stacked mount tests vary mountinfo order. Tests also cover legacy
+migration and the permission rule’s exact user/unit/start restrictions. Removal
+tests cover foreign/edited/symlinked units,
 unit overrides, nested mounts, busy failures, preservation of unrelated files,
 authorization/cancellation and desktop/mobile fallback after completion. Automatic
 script edits cover the reported multiline Bash script, exact backups, idempotent

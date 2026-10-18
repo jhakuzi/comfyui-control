@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QCheckBox, QFormLayout, QGroupBox, QLabel, QLineEd
 
 from .background_process import BackgroundProcess
 from .config import config_path
-from .network_output import nfs_client_available, specification, units
+from .network_output import mount_permission, nfs_client_available, specification, units
 from .setup import terminal_command
 
 WORKER = str(Path(__file__).with_name('network_output.py'))
@@ -187,9 +187,12 @@ class NetworkOutput(QObject):
     def retry(self):
         if self.stopped or not self.spec or self.job or self.setup_open or self.removing:
             return
-        self._start('probe', worker_command('probe', self.spec['server'], self.spec['export']), 12)
+        self._start('probe', worker_command('probe', self.spec['server'], self.spec['export']), 18)
 
-    def setup(self, parent):
+    def setup(self, parent, in_use=False):
+        if in_use:
+            QMessageBox.information(parent, 'Stop ComfyUI first', 'Stop ComfyUI before setting up or migrating its network output mount.')
+            return
         if not self.spec or self.stopped or self.setup_open or self.removing or (self.job and self.operation != 'probe'):
             return
         self.setup_open = True
@@ -217,9 +220,13 @@ class NetworkOutput(QObject):
             return
         box = QMessageBox(parent)
         box.setWindowTitle('Set up NFS output')
-        box.setText(f'Install an on-demand mount for {self.spec["source"]}?')
-        box.setInformativeText(f'Administrator authorization is required once. Linux will mount it at {self.spec["where"]}. This does not move images or modify your launch script.')
-        box.setDetailedText('\n\n'.join(name + '\n' + text for name, text in units(self.spec).items()))
+        box.setText(f'Set up app-triggered mounting for {self.spec["source"]}?')
+        box.setInformativeText(f'Administrator authorization is required once. The app will mount it at {self.spec["where"]} when launched. '
+                               'A narrow permission lets your user start only this mount without further prompts. Nothing is enabled at boot and /etc/fstab is untouched. '
+                               'An older app-managed automount will be disabled and removed. Close other programs using this mount before migrating.')
+        permission, text = mount_permission(self.spec)
+        box.setDetailedText('\n\n'.join(name + '\n' + text for name, text in units(self.spec).items()) +
+                            '\n\n' + str(permission) + '\n' + text)
         box.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
         box.setDefaultButton(QMessageBox.StandardButton.Cancel)
         if box.exec() == QMessageBox.StandardButton.Ok:
@@ -248,7 +255,7 @@ class NetworkOutput(QObject):
         box.setWindowTitle('Remove NFS output mount')
         box.setText(f'Remove this app’s mount for {self.spec["source"]}?')
         box.setInformativeText('Administrator authorization is required. Close file managers and other programs using this folder first. '
-                               'Only this app’s two generated units will be disabled and removed. NAS files, other mounts and /etc/fstab are left unchanged. '
+                               'Only this app’s mount definition, start permission and any legacy automount will be removed. NAS files, other mounts and /etc/fstab are left unchanged. '
                                'Local fallback remains available. The empty local mount folder is kept.')
         box.setDetailedText('\n\n'.join(name + '\n' + text for name, text in units(self.spec).items()))
         box.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)

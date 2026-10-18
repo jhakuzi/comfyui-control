@@ -492,7 +492,7 @@ class MainWindow(QMainWindow):
         self.network_retry = QPushButton('Retry network')
         self.network_retry.clicked.connect(self.network_output.retry)
         self.network_setup = QPushButton('Set up mount')
-        self.network_setup.clicked.connect(lambda: self.network_output.setup(self))
+        self.network_setup.clicked.connect(self._setup_network_mount)
         self.network_remove = QPushButton('Remove mount')
         self.network_remove.clicked.connect(self._remove_network_mount)
         network_layout.addWidget(self.network_status, 1)
@@ -585,6 +585,10 @@ class MainWindow(QMainWindow):
         in_use = self.controller.process is not None or self.controller.state not in {'stopped', 'crashed'}
         self.network_output.remove(self, in_use=in_use)
 
+    def _setup_network_mount(self):
+        in_use = self.controller.process is not None or self.controller.state not in {'stopped', 'crashed'}
+        self.network_output.setup(self, in_use=in_use)
+
     def _network_status(self):
         config = self.controller.config
         self.network_row.setVisible(config.nfs_enabled)
@@ -596,6 +600,7 @@ class MainWindow(QMainWindow):
         # Explicit setup can replace an in-progress startup probe.
         self.network_setup.setEnabled(not self._closing and not self.network_output.setup_open and
                                       not self.network_output.removing and
+                                      self.controller.process is None and self.controller.state in {'stopped', 'crashed'} and
                                       (self.network_output.job is None or self.network_output.operation == 'probe'))
         self.network_remove.setEnabled(self.network_setup.isEnabled() and self.controller.process is None and
                                        self.controller.state in {'stopped', 'crashed'})
@@ -782,7 +787,7 @@ class MainWindow(QMainWindow):
             if not apply_application_style(config.application_style):
                 QMessageBox.information(self, "Style unavailable", "This style could not be loaded. Choose System default or another available style.")
             if dialog.setup_mount_requested:
-                QTimer.singleShot(0, lambda: None if self._closing else self.network_output.setup(self))
+                QTimer.singleShot(0, lambda: None if self._closing else self._setup_network_mount())
 
     def _start_stop(self):
         if self.controller.state in {'stopped','crashed'}:
