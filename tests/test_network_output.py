@@ -25,7 +25,7 @@ from comfyui_control.launch_script import create_launch_script
 from comfyui_control.mobile.server import MobileHTTP
 from comfyui_control.mobile.service import MobileService
 from comfyui_control.mobile.settings import MobileSettings
-from comfyui_control.network_output import specification, units, read_image, install_mount
+from comfyui_control.network_output import specification, units, read_image, install_mount, _system_command, probe
 from comfyui_control.network_output_widgets import NetworkOutput, worker_command
 
 
@@ -70,6 +70,28 @@ def test_setup_is_never_run_without_administrator_authorization(monkeypatch):
         install_mount(specification('nas', '/images'))
 
 
+def test_setup_reports_system_command_error_instead_of_hiding_stderr():
+    with pytest.raises(ValueError, match='Enabling the NFS automount failed.*permission denied by systemd'):
+        _system_command([sys.executable, '-c', 'import sys; print("permission denied by systemd",file=sys.stderr);sys.exit(2)'],
+                        'Enabling the NFS automount', 2)
+
+
+def test_connection_error_identifies_server_and_nfs_port():
+    with patch.object(Path, 'is_file', return_value=True), patch('comfyui_control.network_output.socket.create_connection', side_effect=OSError('Connection refused')):
+        with pytest.raises(ValueError, match='nas.*TCP port 2049.*Connection refused'):
+            probe(specification('nas', '/images'))
+
+
+def test_mounted_but_unwritable_export_is_distinguished_from_connection_failure():
+    from contextlib import nullcontext
+    with patch.object(Path, 'is_file', return_value=True), patch.object(Path, 'stat'), \
+         patch('comfyui_control.network_output.socket.create_connection', return_value=nullcontext()), \
+         patch('comfyui_control.network_output.mounted', return_value=True), \
+         patch('comfyui_control.network_output.tempfile.mkstemp', side_effect=PermissionError('Permission denied')):
+        with pytest.raises(ValueError, match='nas:/images is mounted.*UID.*GID.*Permission denied'):
+            probe(specification('nas', '/images'))
+
+
 def test_runtime_output_never_persists_and_disabled_nfs_preserves_old_behavior(tmp_path):
     config = network_config(tmp_path, arguments='--output-directory "/old path" --port 8188', output_dir='/old-browser-folder')
     assert config.folder('output') == tmp_path / 'output'
@@ -81,7 +103,7 @@ def test_runtime_output_never_persists_and_disabled_nfs_preserves_old_behavior(t
     assert Config.load(path).folder('output') == tmp_path / 'output'
     local = replace(config, nfs_enabled=False)
     assert local.folder('output') == Path('/old-browser-folder')
-    assert local.command()[-4:] == ['--output-directory', '/old path', '--port', '8188']
+    assert local.command()[-4:] == ['--port', '8188', '--output-directory', '/old-browser-folder']
 
 
 def test_script_output_routing_requires_forwarding_and_preserves_source(tmp_path):
@@ -89,10 +111,10 @@ def test_script_output_routing_requires_forwarding_and_preserves_source(tmp_path
     script = tmp_path / 'start.sh'
     config = network_config(tmp_path, mode='script', script=str(script))
     script.write_text('exec python main.py\n')
-    with pytest.raises(ValueError, match='forwards'):
+    with pytest.raises(ValueError, match='does not accept'):
         config.validate()
     script.write_text('exec python main.py --output-directory /wrong "$@"\n')
-    with pytest.raises(ValueError, match='forwards'):
+    with pytest.raises(ValueError, match='hardcodes'):
         config.validate()
     script.write_text('exec python main.py "$@"\n')
     config.validate()

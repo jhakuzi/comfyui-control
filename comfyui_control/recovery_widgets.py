@@ -1,6 +1,8 @@
 """Native settings and a redacted, user-initiated crash diagnostics viewer."""
 import os
 
+from .diagnostics import local_timestamp
+
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
     QFileDialog, QFormLayout, QHBoxLayout, QLabel, QMessageBox, QPlainTextEdit, QPushButton,
     QSpinBox, QVBoxLayout, QWidget)
@@ -41,7 +43,7 @@ class CrashDialog(QDialog):
         layout=QVBoxLayout(self)
         self.entries=QComboBox()
         for entry in history.entries:
-            self.entries.addItem(f"{entry.get('timestamp','Unknown time')} · exit {entry.get('exit_code','--')}")
+            self.entries.addItem(f"{local_timestamp(entry.get('timestamp'))} · exit {entry.get('exit_code','--')}")
         layout.addWidget(self.entries)
         self.text=QPlainTextEdit()
         self.text.setReadOnly(True)
@@ -64,7 +66,7 @@ class CrashDialog(QDialog):
         self._selected(self.entries.currentIndex())
 
     def _selected(self,index):
-        self.text.setPlainText(self.history.text(index) if self.history.entries else 'No crash diagnostics recorded.')
+        self.text.setPlainText(self.history.text(index, local_time=True) if self.history.entries else 'No crash diagnostics recorded.')
 
     def _export(self):
         path,_=QFileDialog.getSaveFileName(self,'Export crash diagnostics','comfyui-crash.txt','Text files (*.txt)')

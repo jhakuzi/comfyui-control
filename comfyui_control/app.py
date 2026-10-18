@@ -14,9 +14,9 @@ from PySide6.QtWidgets import (
     QMenu, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QStyleFactory, QSystemTrayIcon, QToolButton, QVBoxLayout, QWidget,
 )
 
-from .config import Config, config_path, expand, installed_version
+from .config import Config, OutputScriptError, config_path, expand, installed_version
 from .controller import Controller
-from .launch_script import create_launch_script
+from .launch_script import create_launch_script, prepare_script_update
 from .script_flags import inspect_script
 from .flag_widgets import LaunchFlags, LaunchScriptDialog
 from .setup import InstallDialog, WelcomeDialog
@@ -61,6 +61,9 @@ class SettingsDialog(QDialog):
         self.resize(680, 520)
         self.original_config = config
         self.result_config = None
+        self.script_changes = ()
+        self.script_backup = None
+        self.output_script_warning = ''
         self.launch_locked = launch_locked
         layout = QVBoxLayout(self)
         appearance = QFormLayout()
@@ -95,6 +98,7 @@ class SettingsDialog(QDialog):
         self.arguments = self.launch_options.extra_arguments
         self.output_dir = QLineEdit(config.output_dir)
         self.output_dir.setPlaceholderText("Default: ComfyUI/output")
+        self.output_dir.setToolTip('ComfyUI will save to this folder on the next start or restart. Simple launch scripts are updated automatically with a backup when you save.')
         self.models_dir = QLineEdit(config.models_dir)
         self.models_dir.setPlaceholderText("Default: ComfyUI/models")
         form.addRow("ComfyUI folder", self._path_row(self.folder, directory=True))
@@ -271,14 +275,70 @@ class SettingsDialog(QDialog):
             application_style=self.application_style.currentData(),
             **self.network_fields.values(),
         )
+        update, pending, applied = None, None, False
         try:
-            config.validate()
+            try:
+                config.validate()
+            except OutputScriptError as exc:
+                pending = exc
+            if config.routes_output and config.mode == 'script' and not config.managed_script:
+                try:
+                    update = prepare_script_update(expand(config.script))
+                except (ValueError, OSError, UnicodeError) as exc:
+                    if pending is None:
+                        raise ValueError('Could not safely update the launch script: ' + str(exc)) from exc
+                    if not self._output_script_problem(config, pending, str(exc)):
+                        return
+                    self.output_script_warning = str(pending)
+                else:
+                    pending = None
+            if update:
+                self.script_backup = update.apply()
+                applied = True
+            if pending is None:
+                config.validate()
             config.save()
         except (ValueError, OSError) as exc:
-            QMessageBox.warning(self, "Check configuration", str(exc))
+            message = str(exc)
+            if applied:
+                try:
+                    update.rollback()
+                    message += '\n\nThe launch-script update was rolled back because settings could not be saved.'
+                except (ValueError, OSError) as rollback_error:
+                    message += '\n\nThe script update could not be rolled back: ' + str(rollback_error)
+                message += '\nOriginal script backup: ' + str(self.script_backup)
+                self.script_backup = None
+            QMessageBox.warning(self, "Could not save configuration", message)
             return
+        if update:
+            self.script_changes = update.changes
         self.result_config = config
         self.accept()
+
+    def _output_script_problem(self, config, problem, edit_error):
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle('Launch script needs an update')
+        box.setText(problem.summary)
+        explanation = ('This launch-script check runs before any NAS connection attempt. '
+                       'You can save these settings and set up the NAS mount now, but fix the script before starting ComfyUI.'
+                       if config.nfs_enabled else
+                       'You can save these settings, but fix the script before starting ComfyUI with the selected output folder.')
+        box.setInformativeText('Automatic update was not possible: ' + edit_error + '\n\n' + explanation)
+        box.setDetailedText(str(problem) + '\n\nFor a simple launch, append "$@" after your existing flags, '
+                            'for example: exec python main.py "$@". Keep your current Python path, environment setup and flags. '
+                            'For a multiline command, add a backslash before the newline preceding "$@". '
+                            'Alternatively, use Create launch script or select Python — launch main.py in Settings.')
+        save = box.addButton('Save settings for mount setup' if config.nfs_enabled else 'Save settings', QMessageBox.ButtonRole.AcceptRole)
+        edit = box.addButton('Edit script file', QMessageBox.ButtonRole.ActionRole)
+        cancel = box.addButton(QMessageBox.StandardButton.Cancel)
+        box.setDefaultButton(cancel)
+        box.exec()
+        clicked = box.clickedButton()
+        box.deleteLater()
+        if clicked == edit:
+            self._edit_script()
+        return clicked == save
 
 
 class LogView(QPlainTextEdit):
@@ -682,6 +742,13 @@ class MainWindow(QMainWindow):
                 self.controller.config = config
             else:
                 self._set_config(config)
+            if dialog.script_changes:
+                self.log.append_output('\n[ComfyUI Control] Updated launch script: ' + config.script + '\n' +
+                                       '\n'.join(dialog.script_changes) + '\nOriginal backup: ' + str(dialog.script_backup) +
+                                       '\nChanges apply on the next ComfyUI start or restart.\n')
+            if dialog.output_script_warning:
+                self.log.append_output('\n[ComfyUI Control] Saved output settings for setup; launch script still needs attention.\n' +
+                                       dialog.output_script_warning + '\n')
             if not apply_application_style(config.application_style):
                 QMessageBox.information(self, "Style unavailable", "This style could not be loaded. Choose System default or another available style.")
 

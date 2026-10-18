@@ -1,6 +1,6 @@
 # Mobile WebUI architecture and verification
 
-## 0.11.2.dev5 network output
+## 0.11.2.dev7 network output
 
 `network_output.py` is a standalone standard-library worker for validated systemd
 unit generation, explicit privileged setup, user write probes and isolated file
@@ -19,8 +19,18 @@ launches without installing anything on the test host.
 Runtime-only Config fields pin the selected output path for each manual server
 start. They are excluded from saved settings. Controller recovery retains that
 selection, while new manual starts/restarts can adopt a successful connection.
-Only the output argument is replaced; stored flags and original scripts remain
-unchanged. The normal output behavior is preserved with NFS disabled.
+Only the output argument is replaced at launch; stored flags are retained.
+The regular Output folder setting also supplies the actual save destination,
+instead of changing only the app's folder/gallery lookup.
+
+For an existing simple script, saving settings can add quoted argument forwarding,
+remove a script output override and correct simple Bash error guards. The updater
+uses bounded static inspection and token spans without executing the source;
+it retains environment setup, other flags, comments and permissions. It writes
+an exclusive exact backup, checks for concurrent edits, atomically replaces the
+file and rolls back if saving configuration fails. Complex scripts remain
+unchanged. Their connection settings can still be saved for mount setup, while
+Controller validation prevents launching to an unverified output destination.
 
 MobileRuntime uses lexical paths for network output; filesystem resolution,
 gallery scans, image reads and PNG parsing never dereference NFS on the HTTP
@@ -36,7 +46,11 @@ names the fallback folder, reports mount errors and requests manual upload.
 Warnings never change the active output scope or restart a generation. A failed
 retry while a server targets NFS asks for a manual restart to use fallback.
 
-All 254 automated checks passed locally and on Fedora 44. Generated mount units
+Crash timestamps are stored as aware UTC values and converted only for the viewer,
+copy and export. Conversion uses the system timezone for the crash's date, with
+explicit offset and DST; legacy entries are not rewritten.
+
+All 286 automated checks passed locally and on Fedora 44. Generated mount units
 passed systemd validation where available. Chromium generation/recovery and
 WebKit prompt/history/metadata/GGUF/LoRA checks passed. Mount/write tests use
 ordinary directory fixtures and subprocesses, not a real NAS; administrator

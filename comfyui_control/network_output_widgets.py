@@ -79,7 +79,7 @@ class NetworkFields(QGroupBox):
         form.addRow('Exported folder', self.export)
         form.addRow('Local mount', self.location)
         form.addRow(self.automatic)
-        note = QLabel('Fallback: this installation’s ComfyUI/output. Save settings, then use Set up mount for the one-time administrator setup. Folder changes apply on the next ComfyUI start.')
+        note = QLabel('Fallback: this installation’s ComfyUI/output. Save settings, then use Set up mount for the one-time administrator setup. Simple launch scripts are updated with a backup when saving. Folder changes apply on the next ComfyUI start.')
         note.setWordWrap(True)
         form.addRow(note)
         self.server.textChanged.connect(self._preview)

@@ -82,13 +82,22 @@ Open **Settings** while stopped. Flags start collapsed: expand **Edit script fla
 | **ComfyUI Python** | Enter an environment folder or its `bin/python`, or leave blank for auto-detection. |
 | **Launch method** | Run `main.py` directly or select an existing Bash script. |
 | **Launch flags** | Search checkboxes, set **Reserve VRAM**, or enter values such as `--port 8188` under **Other arguments**. |
-| **Output / Models folder** | Change the folder shortcuts if your files are stored elsewhere. |
+| **Output folder** | Set ComfyUI's save destination and the app/mobile gallery folder on the next start/restart. A locally mounted NAS folder can be selected here. |
+| **Models folder** | Change the folder shortcut if your models are stored elsewhere. |
 
 ![Launch settings with flags collapsed](../settings-preview.png)
 
 **Create launch script** saves a new executable `.sh` with your environment, selected flags, and HIP allocator setting. Existing scripts are never overwritten. App-created scripts follow your current checkbox selections; hardcoded flags in custom scripts need manual editing. Custom scripts should forward `"$@"` and use `exec` to launch Python.
 
 Selecting an existing script reads its literal flags and VRAM value into the controls. Locked options come from the file; app-added arguments remain editable and are saved separately. Scripts are never executed for inspection. Variables or complex shell logic may prevent reliable detection.
+
+When an output folder or integrated NFS output is configured, **Save** automatically
+adapts a simple existing script to receive the app's output argument. It preserves
+your Python/environment and flags, keeps an exact backup beside the script, and
+logs the changes. Simple Fish-style `; or exit 1` guards in a Bash script are also
+corrected. Ambiguous or unwritable scripts show the specific reason and an editor
+option; NAS connection settings can still be saved for mount setup. See
+[network output](NFS_OUTPUT.md) for details.
 
 [Detected options from an existing script](../script-flags-preview.png)
 
@@ -138,7 +147,7 @@ image comparison](FEATURES.md) for controls and measurement limits.
 | Folder unavailable | Mount the drive or use **Change folder**. |
 | CLI or setup terminal missing | Select/install `comfy-cli`; for setup, install Konsole, GNOME Terminal, or xterm. |
 | Script editor missing | Install Kate or KWrite, or edit the script manually. |
-| Bash reports `or: command not found` | Replace Fish-style `; or exit 1` with Bash `\|\| exit 1` in the launch script. |
+| Bash reports `or: command not found` | With output routing configured, saving Settings fixes simple `; or exit 1` guards automatically and keeps a backup. Otherwise replace them with Bash `\|\| exit 1`. |
 | CLI cannot save configuration | Ensure `~/.config/comfy-cli` is writable. |
 
 For an **xcb plugin error on Fedora**:

@@ -50,11 +50,14 @@ scheme, and the Mobile WebUI keeps its own appearance.
 The isolated Python environment and Fedora's native RPM may find different Qt
 style plugins. The app does not bundle or install Breeze itself.
 
-## Network output (testing 0.11.2.dev5)
+## Network output (testing 0.11.2.dev7)
 
 **Settings → Network output (NFS)** accepts a NAS address and export path.
 Use **Set up mount** once, then the app connects in the background on startup.
 Missing NFS client tools trigger an optional package-install offer in your terminal.
+Saving output settings automatically adapts simple existing launch scripts with
+an exact backup; complex scripts show a specific explanation and still allow NAS
+connection settings to be saved for mount setup.
 Failures select the installation's local `ComfyUI/output` folder and display an
 error. Desktop and mobile warn that fallback images need uploading manually;
 the mobile gallery follows that local folder. A successful retry takes effect on
@@ -113,6 +116,10 @@ No new runtime dependencies or ComfyUI extensions are required.
 Unexpected nonzero/signal exits show **Crashed**, the exit code and **View crash
 log**. Normal exit code zero, Stop, Restart, Update and app shutdown do not
 schedule crash recovery. Only app-owned processes are supervised.
+
+Crash entries and the diagnostics viewer show your system's local time with its
+timezone and UTC offset, including daylight saving time. Stored timestamps stay
+unchanged; copied/exported diagnostics also retain the original timestamp.
 
 In **Settings → Crash recovery**, enable automatic restart if
 wanted. It is **off by default**. Choose 1–20 attempts (default 3) and an initial

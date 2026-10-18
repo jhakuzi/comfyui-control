@@ -1,8 +1,12 @@
 import json
+import os
+import time
+
+import pytest
 
 from PySide6.QtWidgets import QApplication, QFileDialog, QPushButton
 
-from comfyui_control.diagnostics import CrashHistory, redact
+from comfyui_control.diagnostics import CrashHistory, local_timestamp, redact
 from comfyui_control.recovery_widgets import CrashDialog, RecoverySettings
 from comfyui_control.config import Config
 
@@ -63,3 +67,40 @@ def test_diagnostics_copy_export_and_recovery_safe_defaults(app,tmp_path,monkeyp
     assert not preferences.enabled.isChecked() and not preferences.limit.isEnabled()
     preferences.enabled.setChecked(True)
     assert preferences.limit.isEnabled() and preferences.backoff.isEnabled()
+
+
+@pytest.mark.parametrize('stamp,expected', [
+    ('2026-10-18T12:34:56+00:00', '2026-10-18 14:34:56 CEST (UTC+02:00)'),
+    ('2026-01-18T12:34:56+00:00', '2026-01-18 13:34:56 CET (UTC+01:00)'),
+    ('2026-10-25T00:30:00Z', '2026-10-25 02:30:00 CEST (UTC+02:00)'),
+    ('2026-10-25T01:30:00Z', '2026-10-25 02:30:00 CET (UTC+01:00)'),
+])
+def test_crash_view_uses_system_timezone_for_old_entries_without_changing_storage(app, tmp_path, monkeypatch, stamp, expected):
+    original_tz = os.environ.get('TZ')
+    monkeypatch.setenv('TZ', 'Europe/Berlin')
+    time.tzset()
+    try:
+        history = CrashHistory(tmp_path / 'history.json')
+        history.entries = [dict(timestamp=stamp, exit_code=7, diagnostic=stamp + '\nOriginal failure\nTOKEN=hide-me')]
+        history.save()
+        stored = history.path.read_bytes()
+        assert local_timestamp(stamp) == expected
+        dialog = CrashDialog(history)
+        assert expected in dialog.entries.currentText()
+        assert dialog.text.toPlainText().startswith('Local time: ' + expected)
+        assert 'Recorded timestamp: ' + stamp in dialog.text.toPlainText()
+        assert 'hide-me' not in dialog.text.toPlainText()
+        assert history.path.read_bytes() == stored
+        assert history.text().startswith(stamp + '\n')
+    finally:
+        if original_tz is None:
+            monkeypatch.delenv('TZ', raising=False)
+        else:
+            monkeypatch.setenv('TZ', original_tz)
+        time.tzset()
+
+
+def test_unknown_or_legacy_timestamp_is_not_given_an_invented_timezone():
+    assert local_timestamp(None) == 'Unknown time'
+    assert local_timestamp('bad timestamp') == 'bad timestamp'
+    assert local_timestamp('2026-10-18T12:00:00') == '2026-10-18T12:00:00 (timezone unknown)'

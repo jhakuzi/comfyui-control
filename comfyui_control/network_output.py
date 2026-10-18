@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+import shlex
 import shutil
 import socket
 import stat
@@ -65,6 +66,17 @@ def units(spec):
     }
 
 
+def _system_command(command, action, timeout):
+    try:
+        subprocess.run(command, check=True, capture_output=True, text=True, timeout=timeout)
+    except subprocess.CalledProcessError as exc:
+        details = (exc.stderr or exc.stdout or '').strip()[-1600:]
+        raise ValueError(f'{action} failed (exit {exc.returncode}). ' +
+                         (details or 'No explanation was returned by the system command.')) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise ValueError(f'{action} timed out after {timeout} seconds. Check the system mount status before retrying.') from exc
+
+
 def install_mount(spec):
     if os.geteuid() != 0:
         raise ValueError('Mount setup requires administrator authorization.')
@@ -103,10 +115,10 @@ def install_mount(spec):
                 os.unlink(temporary)
     restorecon = next((program for program in ('/usr/sbin/restorecon', '/sbin/restorecon') if Path(program).is_file()), None)
     if restorecon:
-        subprocess.run([restorecon, *[str(directory / name) for name in definitions]], check=True,
-                       capture_output=True, timeout=10)
-    for args in (['daemon-reload'], ['enable', '--now', spec['unit'] + '.automount']):
-        subprocess.run(['/usr/bin/systemctl', *args], check=True, capture_output=True, timeout=25)
+        _system_command([restorecon, *[str(directory / name) for name in definitions]], 'Restoring SELinux labels for the mount definitions', 10)
+    for args, action in ((['daemon-reload'], 'Reloading systemd mount definitions'),
+                         (['enable', '--now', spec['unit'] + '.automount'], 'Enabling the NFS automount')):
+        _system_command(['/usr/bin/systemctl', *args], action, 25)
 
 
 def mount_record(where):
@@ -133,13 +145,28 @@ def probe(spec):
     if not auto.is_file() and not mounted(spec):
         raise ValueError('Mount setup is not installed. Use Set up mount first.')
     # Fail quickly for an unreachable NAS before touching its filesystem.
-    with socket.create_connection((spec['server'].strip('[]'), 2049), timeout=2):
-        pass
+    try:
+        with socket.create_connection((spec['server'].strip('[]'), 2049), timeout=2):
+            pass
+    except OSError as exc:
+        raise ValueError(f'Cannot reach NFS server {spec["server"]} on TCP port 2049: {exc}. '
+                         'Check that the NAS is online, NFS is enabled, and the LAN/VPN route and firewall allow the connection.') from exc
     root = Path(spec['where'])
-    root.stat()  # Trigger the OS-managed automount, in this disposable worker.
+    status_command = 'systemctl status ' + shlex.quote(spec['unit'] + '.mount')
+    try:
+        root.stat()  # Trigger the OS-managed automount, in this disposable worker.
+    except OSError as exc:
+        raise ValueError(f'Linux could not activate the NFS mount for {spec["source"]}: {exc}. '
+                         f'Check the export path and the NAS client-access rules. For system details, run: {status_command}') from exc
     if not mounted(spec):
-        raise ValueError('The requested NFS export is not mounted at the expected location.')
-    fd, path = tempfile.mkstemp(prefix='.comfyui-write-check-', dir=root)
+        raise ValueError(f'Linux did not mount {spec["source"]} at {spec["where"]}. '
+                         f'For the mount error, run: {status_command}')
+    try:
+        fd, path = tempfile.mkstemp(prefix='.comfyui-write-check-', dir=root)
+    except OSError as exc:
+        raise ValueError(f'The export {spec["source"]} is mounted, but the write check failed for your user '
+                         f'(UID {os.getuid()}, GID {os.getgid()}): {exc}. '
+                         'Check the NAS folder permissions, UID/GID mapping and whether the export allows writes.') from exc
     try:
         with os.fdopen(fd, 'wb') as stream:
             stream.write(b'comfyui-control\n')

@@ -10,6 +10,7 @@ class ScriptFlags:
     arguments: tuple[str, ...] = ()
     message: str = ""
     forwards_arguments: bool = False
+    recognized: bool = False
 
 
 def inspect_script(path: Path) -> ScriptFlags:
@@ -18,6 +19,11 @@ def inspect_script(path: Path) -> ScriptFlags:
             source = stream.read(262_145)
     except (OSError, UnicodeError) as exc:
         return ScriptFlags(message=f"Could not read script: {exc}")
+    return inspect_source(source)
+
+
+def inspect_source(source: str) -> ScriptFlags:
+    """Inspect an in-memory candidate with the same rules as a saved script."""
     if len(source) > 262_144:
         return ScriptFlags(message="Script is too large to inspect. Use Edit script file to review its flags.")
     source = source.replace("\\\r\n", "").replace("\\\n", "")
@@ -59,4 +65,4 @@ def inspect_script(path: Path) -> ScriptFlags:
     arguments = [token for token in [*defaults, *launches[0]] if token not in ("$@", "${@}")]
     dynamic = any("$" in token or "`" in token for token in arguments)
     return ScriptFlags(tuple(arguments), "Variable-based arguments are shown literally; the script was not executed." if dynamic else "",
-                       any(token in ('$@', '${@}') for token in launches[0]))
+                       any(token in ('$@', '${@}') for token in launches[0]), recognized=True)

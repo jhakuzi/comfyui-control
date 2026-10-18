@@ -9,6 +9,21 @@ import tempfile
 from .config import config_path
 
 
+def local_timestamp(value):
+    """Display stored aware timestamps in the OS timezone, including its DST."""
+    if not isinstance(value, str) or not value:
+        return 'Unknown time'
+    try:
+        when = datetime.fromisoformat(value[:-1] + '+00:00' if value.endswith('Z') else value)
+        if when.tzinfo is None:
+            return value + ' (timezone unknown)'
+        local = when.astimezone()
+        offset = local.strftime('%z')
+        return local.strftime('%Y-%m-%d %H:%M:%S %Z') + f' (UTC{offset[:3]}:{offset[3:]})'
+    except (ValueError, OverflowError, OSError):
+        return value
+
+
 def redact(text):
     text = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', text)
     text = re.sub(r'(?i)(https?://)[^\s/@:]+:[^\s/@]+@', r'\1[redacted]@', text)
@@ -55,7 +70,12 @@ class CrashHistory:
         finally:
             if os.path.exists(temporary): os.unlink(temporary)
 
-    def text(self, index=-1):
+    def text(self, index=-1, *, local_time=False):
         if not self.entries:
             return 'No crash diagnostics have been recorded.'
-        return redact(str(self.entries[index].get('diagnostic','')))[:40000]
+        entry = self.entries[index]
+        text = str(entry.get('diagnostic',''))
+        timestamp = entry.get('timestamp')
+        if local_time and isinstance(timestamp, str) and text.startswith(timestamp + '\n'):
+            text = 'Local time: ' + local_timestamp(timestamp) + '\nRecorded timestamp: ' + timestamp + text[len(timestamp):]
+        return redact(text)[:40000]

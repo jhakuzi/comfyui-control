@@ -21,6 +21,13 @@ def expand(value: str) -> Path:
     return Path(os.path.expandvars(value)).expanduser().absolute()
 
 
+class OutputScriptError(ValueError):
+    """An output setting is valid, but the selected script needs an update."""
+    def __init__(self, summary, reason, script):
+        self.summary, self.reason, self.script = summary, reason, script
+        super().__init__(summary + '\n\n' + reason + '\n\nScript: ' + str(script))
+
+
 def installed_version(directory: Path) -> str:
     """Read ComfyUI's version metadata without importing or executing its code."""
     def small_text(name):
@@ -140,7 +147,7 @@ class Config:
 
     def command(self) -> list[str]:
         args = shlex.split(self.arguments)
-        if self.nfs_enabled:
+        if self.routes_output:
             # Replace only the output option; preserve all other launch flags.
             filtered, index = [], 0
             while index < len(args):
@@ -157,6 +164,10 @@ class Config:
             marker = ["--comfyui-control-args"] if self.managed_script else []
             return ["/bin/bash", str(expand(self.script)), *marker, *args]
         return [self.interpreter(), "-u", "main.py", *args]
+
+    @property
+    def routes_output(self):
+        return self.nfs_enabled or bool(self.output_dir.strip())
 
     def folder(self, kind: str) -> Path:
         if kind == 'output' and self.nfs_enabled:
@@ -203,11 +214,22 @@ class Config:
         if self.mode == "script":
             if not self.script.strip() or not expand(self.script).is_file():
                 raise ValueError("Choose an existing Bash launch script.")
-            if self.nfs_enabled and not self.managed_script:
+            if self.routes_output and not self.managed_script:
                 from .script_flags import inspect_script
                 flags = inspect_script(expand(self.script))
-                if not flags.forwards_arguments or any(arg == '--output-directory' or arg.startswith('--output-directory=') for arg in flags.arguments):
-                    raise ValueError('For network output, use a generated launch script or a simple main.py script that forwards "$@" to Python.')
+                if not flags.recognized:
+                    raise OutputScriptError('The app cannot identify how this script starts ComfyUI.',
+                        flags.message + '\nThe selected output folder cannot be applied safely. '
+                        'Open Settings and save to review the script, or choose Python — launch main.py with your ComfyUI environment.', expand(self.script))
+                if any(arg == '--output-directory' or arg.startswith('--output-directory=') for arg in flags.arguments):
+                    raise OutputScriptError('The launch script hardcodes a different output folder.',
+                        'Its --output-directory option conflicts with the folder selected in the app. '
+                        'Open Settings and save: the app can remove that option from a simple script, keep a backup and supply the chosen folder at launch.', expand(self.script))
+                if not flags.forwards_arguments:
+                    raise OutputScriptError('The launch script does not accept the app’s output folder.',
+                        'It starts main.py without forwarding "$@" (the arguments supplied by the app), so --output-directory would be ignored. '
+                        'Open Settings and save: the app can add argument forwarding to a simple script and keep a backup. '
+                        'Your Python environment and existing launch flags are preserved.', expand(self.script))
         else:
             interpreter = self.interpreter()
             if not shutil.which(interpreter):

@@ -1,4 +1,4 @@
-# Network output (testing 0.11.2.dev5)
+# Network output (testing 0.11.2.dev7)
 
 [Back to features](FEATURES.md)
 
@@ -25,6 +25,10 @@ Setup creates a root-owned mountpoint under `/mnt` and two systemd units under
 `/etc/systemd/system`. It enables an on-demand automount. Subsequent app launches
 run unprivileged checks without an administrator prompt. The desktop app remains
 unprivileged. The setup button needs systemd and a polkit authentication agent.
+
+Connection errors identify the NFS server/port, mount activation, or an already
+mounted export that is not writable by your UID/GID. Failed systemd/SELinux setup
+commands include their actual error output rather than only an exit-code message.
 
 The package check detects `mount.nfs`, including in system sbin folders outside
 your user PATH. Declining installation leaves local fallback available.
@@ -60,11 +64,30 @@ containing spaces are unsupported.
   Bounded disposable workers isolate NFS scans/reads from the Qt and HTTP loops.
 
 The app supplies ComfyUI's `--output-directory` option at launch, replacing a
-conflicting output option for this run only. Generated launch scripts support
-this automatically. Existing scripts need a simple `main.py` command forwarding
-`"$@"`, without a hardcoded output-directory option; incompatible scripts show
-an error. A custom save node with its own absolute destination can still override
+conflicting app-supplied output option for this run only. Generated launch scripts
+support this automatically. When saving settings, the app updates a recognizable
+existing `main.py` script as needed: it adds quoted `"$@"` forwarding, removes a
+script-level output-directory override, and corrects simple Bash `; or exit 1`
+guards to `|| exit 1`. Your Python/environment setup, other flags and comments
+are preserved. The exact original is saved beside it as `script.sh.bak-TIME-ID`;
+the desktop log lists the changes and backup path. Repeated saves do not rewrite
+an already compatible script. Changes apply on the next start/restart.
+
+Complex, ambiguous, symlinked or unwritable scripts are not rewritten. The dialog
+explains the specific blocker and offers to save settings for mount setup or
+open the script editor. This script check happens before a NAS connection test;
+you can configure the mount independently, while starting ComfyUI stays blocked
+until its output argument can be applied. You can also use **Python — launch
+main.py** with your environment or **Create launch script**.
+
+A custom save node with its own absolute destination can still override
 ComfyUI's default. This setting applies to servers launched by this application.
+
+If the export is already mounted by your system, leave **Network output (NFS)**
+disabled and select that local mount path in **Output folder** instead. This now
+sets ComfyUI's actual save destination as well as the app/gallery folder. The
+integrated mount checks and automatic local fallback apply only to mounts managed
+through the Network output feature; system-managed mounts follow your OS setup.
 
 Fallback is selected before starting a server. A NAS disappearing during a save
 can make that save fail or wait for recovery. Linux's default NFS hard-mount
@@ -116,7 +139,10 @@ inside a mounted export during cleanup.
 
 Tests use disposable directories/processes and validate generated systemd units
 where the validator is available. They cover fallback, output writes, timeouts,
-script forwarding, worker limits, image reads, privacy and deletion. Embedded
+script forwarding, worker limits, image reads, privacy and deletion. Automatic
+script edits cover the reported multiline Bash script, exact backups, idempotent
+saves, existing output overrides, refusal of complex/changed/unwritable scripts,
+rollback on settings-save failure and actual child-process output writes. Embedded
 HTTP/SSE checks cover mount error delivery, fallback gallery reads, live warning
 updates and listener restarts. Browser checks cover persistent warnings on
 Create/Gallery without interrupting generation progress or prompt recovery. Real NAS

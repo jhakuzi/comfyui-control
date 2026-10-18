@@ -1,6 +1,6 @@
 Name:           comfyui-control
 Version:        0.11.2
-Release:        0.6.dev6%{?dist}
+Release:        0.7.dev7%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
 License:        MIT
@@ -62,6 +62,11 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Sun Oct 18 2026 ComfyUI Control contributors - 0.11.2-0.7.dev7
+- Testing: repair simple output launch scripts with backups and actionable diagnostics.
+- Apply the regular output-folder selection to the actual ComfyUI save destination.
+- Display crash diagnostics in the system timezone, including daylight saving time.
+
 * Sun Oct 18 2026 ComfyUI Control contributors - 0.11.2-0.6.dev6
 - Testing: remove trailing ellipses from desktop and mobile button labels.
 

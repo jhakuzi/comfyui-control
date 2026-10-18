@@ -202,7 +202,7 @@ def test_create_script_selects_preset_and_persists_config(app, tmp_path, monkeyp
     assert saved.managed_script
     assert saved.output_dir == "/custom/output"
     assert window.controller.config == saved
-    assert saved.command() == ["/bin/bash", str(script), "--comfyui-control-args", "--reserve-vram", "7"]
+    assert saved.command() == ["/bin/bash", str(script), "--comfyui-control-args", "--reserve-vram", "7", "--output-directory", "/custom/output"]
     window.close()
 
 
