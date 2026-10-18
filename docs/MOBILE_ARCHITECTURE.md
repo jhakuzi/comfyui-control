@@ -1,5 +1,22 @@
 # Mobile WebUI architecture and verification
 
+## 0.11.2.dev2 desktop tray lifecycle
+
+The main window owns a native `QSystemTrayIcon` using the existing application
+icon. Its Show window/activation actions restore the existing window; Quit
+reuses the owned-process and mobile-runtime shutdown path. The close dialog
+offers tray/quit/cancel only when Qt reports an available tray host. Hiding
+leaves shutdown/recovery state untouched and retains the enabled mobile server.
+A lightweight timer runs only while hidden to restore access if the host vanishes.
+
+The application explicitly quits after shutdown completes, including from a
+hidden window; Qt's last-visible-window behaviour alone is insufficient here.
+Tests cover all close choices, tray restoration/host loss, cancellation, updates,
+a real owned process and child alongside the embedded HTTP listener, and the
+actual entry point's event-loop exit. Offscreen tests simulate tray availability;
+all 214 automated checks passed locally and on Fedora 44. Native Plasma/Wayland
+icon placement remains a user check.
+
 ## 0.11.2.dev1 prompt editor
 
 The existing mapped positive-text control now starts at 288px rather than 144px.

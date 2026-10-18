@@ -50,6 +50,21 @@ scheme, and the Mobile WebUI keeps its own appearance.
 The isolated Python environment and Fedora's native RPM may find different Qt
 style plugins. The app does not bundle or install Breeze itself.
 
+## System tray (testing 0.11.2.dev2)
+
+Closing the desktop window offers **Keep in tray**, **Quit**, or **Cancel**.
+Keeping it in the tray hides only the window: ComfyUI, generation and the Mobile
+WebUI continue running. Click the tray icon or choose **Show window** from its
+menu to restore it. The tooltip shows the current ComfyUI process state.
+
+**Quit** uses the normal shutdown path, stops the owned server and its children,
+and closes the Mobile WebUI. Quitting during an update cancels it. There is no
+change to launch settings, mobile sessions, workflow mappings or crash recovery.
+
+KDE Plasma supports Qt tray icons. Desktops without a tray host use the normal
+close behaviour; GNOME may need a tray extension. If the tray host disappears
+while the window is hidden, the app restores the window automatically.
+
 ## Compare images on your phone
 
 <img src="screenshots/mobile-comparison-0.10.1.png" alt="Mobile image comparison with a reveal divider and highlighted parameter differences" width="360">

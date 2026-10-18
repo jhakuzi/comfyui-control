@@ -6,12 +6,12 @@ import shlex
 import shutil
 import sys
 
-from PySide6.QtCore import QCoreApplication, QEvent, QLockFile, QProcess, QTimer, Qt, QUrl
+from PySide6.QtCore import QCoreApplication, QEvent, QLockFile, QProcess, QTimer, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QFontDatabase, QIcon, QTextCursor
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
     QFileDialog, QFormLayout, QGridLayout, QHBoxLayout, QLabel, QLayout, QLineEdit, QMainWindow,
-    QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QStyleFactory, QToolButton, QVBoxLayout, QWidget,
+    QMenu, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QStyleFactory, QSystemTrayIcon, QToolButton, QVBoxLayout, QWidget,
 )
 
 from .config import Config, config_path, expand, installed_version
@@ -312,6 +312,8 @@ class LogView(QPlainTextEdit):
 
 
 class MainWindow(QMainWindow):
+    closed = Signal()
+
     def __init__(self, config, first_run=False, load_error=""):
         super().__init__()
         style_available = apply_application_style(config.application_style)
@@ -320,6 +322,21 @@ class MainWindow(QMainWindow):
         self.resize(920, 740)
         self.setMinimumSize(580, 400)
         self._closing = False
+        self._tray_quit_requested = False
+        self.tray = QSystemTrayIcon(self.windowIcon(), self)
+        self.tray_menu = QMenu(self)
+        self.tray_open = self.tray_menu.addAction("Show window")
+        self.tray_open.triggered.connect(self._restore_window)
+        self.tray_menu.addSeparator()
+        self.tray_quit = self.tray_menu.addAction("Quit")
+        self.tray_quit.triggered.connect(self._quit_from_tray)
+        self.tray.setContextMenu(self.tray_menu)
+        self.tray.activated.connect(self._tray_activated)
+        self.tray_watch = QTimer(self)
+        self.tray_watch.setInterval(3000)
+        self.tray_watch.timeout.connect(self._check_tray)
+        if QSystemTrayIcon.isSystemTrayAvailable():
+            self.tray.show()
         self.controller = Controller(config, self)
         self.mobile = MobileRuntime(self)
         self.mobile.stopped.connect(self._mobile_stopped)
@@ -623,6 +640,9 @@ class MainWindow(QMainWindow):
         self.mobile.update_desktop(self.controller.config, state)
         labels = {"stopped": "Stopped", "starting": "Starting…", "running": "Process running", "stopping": "Stopping…", "updating": "Updating…", 'crashed':'Crashed', 'restarting':'Restarting…'}
         self.status.setText("●  " + labels[state])
+        self.tray.setToolTip("ComfyUI Control — " + ("Closing…" if self._closing else labels[state]))
+        self.tray_open.setEnabled(not self._closing)
+        self.tray_quit.setEnabled(not self._closing)
         color = {"stopped": "#8795a5", "running": "#48a878", 'crashed':'#d36c6c'}.get(state, "#d69c42")
         self.status.setStyleSheet(f"color: {color};")
         active = state in ("starting", "running")
@@ -693,7 +713,68 @@ class MainWindow(QMainWindow):
         if event.type() == QEvent.Type.WindowStateChange and hasattr(self, 'monitor'):
             self.monitor._activity()
 
+    def _restore_window(self):
+        if self._closing:
+            return
+        self.tray_watch.stop()
+        self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
+    def _tray_activated(self, reason):
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
+            self._restore_window()
+
+    def _check_tray(self):
+        # The tray host may disappear (for example when Plasma restarts).
+        # Check only while hidden, so the app never becomes inaccessible.
+        if self.isVisible():
+            self.tray_watch.stop()
+        elif not QSystemTrayIcon.isSystemTrayAvailable():
+            self._restore_window()
+
+    def _close_choice(self):
+        choice = QMessageBox(self)
+        choice.setWindowTitle("Close ComfyUI Control")
+        choice.setIcon(QMessageBox.Icon.Question)
+        choice.setText("Keep ComfyUI Control running in the tray, or quit?")
+        warning = "ComfyUI and the Mobile WebUI keep running in the tray. Quitting stops both."
+        if self.controller.state == 'updating':
+            warning += " Quitting also cancels the update. If packages are being installed, rerun the update before starting ComfyUI."
+        choice.setInformativeText(warning)
+        keep = choice.addButton("Keep in tray", QMessageBox.ButtonRole.AcceptRole)
+        quit_button = choice.addButton("Quit", QMessageBox.ButtonRole.DestructiveRole)
+        cancel = choice.addButton(QMessageBox.StandardButton.Cancel)
+        choice.setDefaultButton(keep)
+        choice.setEscapeButton(cancel)
+        choice.exec()
+        clicked = choice.clickedButton()
+        result = 'tray' if clicked == keep else 'quit' if clicked == quit_button else 'cancel'
+        choice.deleteLater()
+        return result
+
+    def _quit_from_tray(self):
+        self._tray_quit_requested = True
+        self.close()
+        if not self._closing:
+            self._tray_quit_requested = False
+
     def closeEvent(self, event):
+        quit_confirmed = False
+        if not self._closing and not self._tray_quit_requested and QSystemTrayIcon.isSystemTrayAvailable():
+            choice = self._close_choice()
+            if choice == 'tray':
+                if QSystemTrayIcon.isSystemTrayAvailable():
+                    self.tray.show()
+                    self.hide()
+                    self.tray_watch.start()
+                event.ignore()
+                return
+            if choice != 'quit':
+                event.ignore()
+                return
+            quit_confirmed = True
         if self.controller.state in {'stopped','crashed','restarting'} and self.controller.process is None:
             self._closing = True
             self.controller.shutdown()
@@ -706,13 +787,17 @@ class MainWindow(QMainWindow):
                 return
             event.accept()
             self.monitor.stop()
+            self.tray_watch.stop()
+            self.tray.hide()
+            self.closed.emit()
             return
         if not self._closing:
             question = "Stop ComfyUI and close the window?" if self.controller.state != "updating" else "Cancel the update and close? If packages are being installed, rerun the update before starting ComfyUI."
-            if QMessageBox.question(self, "Close ComfyUI Control", question, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            if not quit_confirmed and QMessageBox.question(self, "Close ComfyUI Control", question, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
                 event.ignore()
                 return
             self._closing = True
+            self.tray_watch.stop()
             self.monitor.stop()
             self.mobile.stop()
             self.controller.shutdown()
@@ -722,6 +807,7 @@ class MainWindow(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)
     app.setApplicationName("ComfyUI Control")
     app.setApplicationVersion(__version__)
     app.setDesktopFileName("comfyui-control")
@@ -747,6 +833,7 @@ def main():
         config, load_error = Config(), str(exc)
     configured = bool(config.comfy_dir.strip()) and (config.directory / "main.py").is_file()
     window = MainWindow(config, first_run=not configured, load_error=load_error)
+    window.closed.connect(app.quit)
     window.show()
     result = app.exec()
     window.deleteLater()

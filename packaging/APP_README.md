@@ -2,8 +2,8 @@
 
 A small Qt desktop app for starting, stopping, and updating ComfyUI on Linux.
 
-Testing version **0.11.2.dev1** doubles the mobile prompt box height
-and adds an Expand/Collapse button.
+Testing version **0.11.2.dev2** adds a desktop tray icon and close-window
+choices, alongside the larger expandable mobile prompt box.
 See the [feature guide](https://github.com/jhakuzi/comfyui-control/blob/main/docs/FEATURES.md).
 Use **Mobile WebUI** to enable the embedded listener, configure your LAN/VPN
 address and password, and scan the QR. It is disabled by default.

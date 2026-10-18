@@ -1,6 +1,6 @@
 Name:           comfyui-control
 Version:        0.11.2
-Release:        0.1.dev1%{?dist}
+Release:        0.2.dev2%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
 License:        MIT
@@ -62,6 +62,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Sun Oct 18 2026 ComfyUI Control contributors - 0.11.2-0.2.dev2
+- Testing: add a tray icon, close-window choices, restore action and graceful tray quit.
+
 * Sat Oct 17 2026 ComfyUI Control contributors - 0.11.2-0.1.dev1
 - Testing: double the mobile prompt editor height and add a saved expand/collapse control.
 
