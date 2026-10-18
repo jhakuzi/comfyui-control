@@ -2,6 +2,7 @@
 import asyncio
 from dataclasses import replace
 import json
+import os
 from pathlib import Path
 import shutil
 import socket
@@ -52,9 +53,22 @@ def test_mount_names_and_unit_definitions_are_data_only(tmp_path, server, export
     for name, contents in units(spec).items():
         (tmp_path / name).write_text(contents)
         assert 'ExecStart=' not in contents
-    if shutil.which('systemd-analyze'):
-        result = subprocess.run(['systemd-analyze', 'verify', *map(str, tmp_path.iterdir())], capture_output=True, text=True)
-        assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize('server,export', [('nas.example', '/images'), ('192.0.2.10', '/images/'), ('2001:db8::1', '/images')])
+def test_generated_mounts_pass_native_systemd_validation(tmp_path, server, export):
+    if not shutil.which('systemd-analyze'):
+        pytest.skip('systemd-analyze is not installed')
+    # Even --root/--generators=no needs the host runtime directory. COPR's
+    # unprivileged mockbuild cannot create it in a fresh build root. Keep these
+    # optional native checks separate from the always-run content checks above;
+    # our Fedora container and Actions validate the real units as root.
+    if not Path('/run/systemd').is_dir() and os.geteuid() != 0:
+        pytest.skip('Native systemd validation requires /run/systemd, absent in this unprivileged build root')
+    for name, contents in units(specification(server, export)).items():
+        (tmp_path / name).write_text(contents)
+    result = subprocess.run(['systemd-analyze', 'verify', *map(str, tmp_path.iterdir())], capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 @pytest.mark.parametrize('server,export', [('https://nas', '/images'), ('nas;reboot', '/images'), ('-bad', '/images'),

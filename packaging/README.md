@@ -1,7 +1,7 @@
 # Fedora RPM and COPR
 
 Version **1.0.0rc1** is the first 1.0 release candidate. RPM version
-`1.0.0~rc1-1` upgrades 0.11.x and sorts below final `1.0.0-1`.
+`1.0.0~rc1-2` upgrades 0.11.x and sorts below final `1.0.0-1`.
 See the [release notes](../docs/releases/1.0.0rc1.md). Development versions remain
 blocked from COPR; stable releases and explicitly numbered RCs can be published.
 
@@ -40,7 +40,7 @@ On Fedora, install the build tools:
 sudo dnf install python3 rpm-build dnf5-plugins
 sudo dnf builddep packaging/comfyui-control.spec
 python3 packaging/make_srpm.py --outdir dist
-rpmbuild --rebuild dist/comfyui-control-1.0.0~rc1-1*.src.rpm
+rpmbuild --rebuild dist/comfyui-control-1.0.0~rc1-2*.src.rpm
 ```
 
 For a clean build environment, `mock` can build the generated SRPM instead.
@@ -51,7 +51,7 @@ Fedora's Python minor version and installation paths can change between releases
 Install the RPM built for your Fedora release:
 
 ```bash
-sudo dnf install ./comfyui-control-1.0.0~rc1-1.fc44.noarch.rpm
+sudo dnf install ./comfyui-control-1.0.0~rc1-2.fc44.noarch.rpm
 ```
 
 The first RPM was built and installed in an isolated Fedora 44 container with
