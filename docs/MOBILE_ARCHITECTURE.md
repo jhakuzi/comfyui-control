@@ -1,6 +1,6 @@
 # Mobile WebUI architecture and verification
 
-## 0.11.2.dev8 network output
+## 0.11.2.dev9 network output
 
 `network_output.py` is a standalone standard-library worker for validated systemd
 unit generation, explicit privileged setup, user write probes and isolated file
@@ -8,6 +8,23 @@ access. `NetworkOutput` uses Qt timers to poll disposable subprocesses; no mount
 or filesystem operation runs on the Qt thread. A shared four-slot worker budget,
 deadlines and non-blocking cancellation bound stalled NFS work. Setup is a desktop
 action authorized through polkit; startup never requests elevated privileges.
+
+The probe opens the mount directory to trigger autofs; stat of the automount root
+alone is insufficient. It checks the mounted source/type before the user write
+probe. Stacked filesystem detection uses mount IDs and parents rather than
+assuming mountinfo line order.
+
+Removal reuses the privileged, bounded worker. Both unit files must match the
+root-owned, non-writable generated definitions exactly; collisions, overrides,
+foreign filesystems and nested mounts are refused before systemd mutation.
+A read-only systemd preflight also refuses stop dependencies on other units,
+including mounts and services located elsewhere. Only
+the named automount and mount are stopped, without force or lazy unmount. Busy
+failures preserve definitions. Unit files are removed only after mountinfo confirms
+unmount. Neither /etc/fstab nor NAS files nor other mount units are edited. The
+empty local mountpoint remains. Desktop removal is blocked while ComfyUI is active;
+starting/reconfiguring is disabled during removal. Successful removal publishes
+local fallback to the same desktop/mobile gallery and warning infrastructure.
 
 The NFS settings section has a **Save and set up mount** action. It validates
 and saves the edited configuration before opening the existing setup flow.
@@ -55,7 +72,7 @@ Crash timestamps are stored as aware UTC values and converted only for the viewe
 copy and export. Conversion uses the system timezone for the crash's date, with
 explicit offset and DST; legacy entries are not rewritten.
 
-All 300 automated checks passed locally and on Fedora 44. Generated mount units
+All 330 automated checks passed locally and on Fedora 44. Generated mount units
 passed systemd validation where available. Chromium generation/recovery and
 WebKit prompt/history/metadata/GGUF/LoRA checks passed. Mount/write tests use
 ordinary directory fixtures and subprocesses, not a real NAS; administrator

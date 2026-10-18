@@ -123,6 +123,7 @@ class NetworkOutput(QObject):
         self.operation = None
         self.stopped = True
         self.setup_open = False
+        self.removing = False
         self.timer = QTimer(self)
         self.timer.setInterval(50)
         self.timer.timeout.connect(self._poll)
@@ -184,12 +185,12 @@ class NetworkOutput(QObject):
                     connection=self.message, error=self.error)
 
     def retry(self):
-        if self.stopped or not self.spec or self.job or self.setup_open:
+        if self.stopped or not self.spec or self.job or self.setup_open or self.removing:
             return
         self._start('probe', worker_command('probe', self.spec['server'], self.spec['export']), 12)
 
     def setup(self, parent):
-        if not self.spec or self.stopped or self.setup_open or (self.job and self.operation != 'probe'):
+        if not self.spec or self.stopped or self.setup_open or self.removing or (self.job and self.operation != 'probe'):
             return
         self.setup_open = True
         try:
@@ -227,6 +228,44 @@ class NetworkOutput(QObject):
         else:
             self.message = 'Mount setup cancelled.'
         box.deleteLater()
+
+    def remove(self, parent, in_use=False):
+        if in_use:
+            QMessageBox.information(parent, 'Stop ComfyUI first', 'Stop ComfyUI before removing its network output mount.')
+            return
+        if not self.spec or self.stopped or self.setup_open or self.removing or (self.job and self.operation != 'probe'):
+            return
+        if not shutil.which('pkexec') or not Path('/usr/bin/python3').is_file():
+            self.notification.emit('Mount removal needs polkit/pkexec and system Python. See the NFS setup guide for a terminal alternative.')
+            return
+        self.setup_open = self.removing = True
+        if self.job:
+            self.job.cancel()
+            self.job = None
+            self.timer.stop()
+        self.changed.emit()
+        box = QMessageBox(parent)
+        box.setWindowTitle('Remove NFS output mount')
+        box.setText(f'Remove this app’s mount for {self.spec["source"]}?')
+        box.setInformativeText('Administrator authorization is required. Close file managers and other programs using this folder first. '
+                               'Only this app’s two generated units will be disabled and removed. NAS files, other mounts and /etc/fstab are left unchanged. '
+                               'Local fallback remains available. The empty local mount folder is kept.')
+        box.setDetailedText('\n\n'.join(name + '\n' + text for name, text in units(self.spec).items()))
+        box.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
+        box.button(QMessageBox.StandardButton.Ok).setText('Remove mount')
+        box.setDefaultButton(QMessageBox.StandardButton.Cancel)
+        try:
+            if box.exec() == QMessageBox.StandardButton.Ok:
+                self._start('remove', [shutil.which('pkexec'), '/usr/bin/python3', '-I', '-S', WORKER,
+                                       'remove', self.spec['server'], self.spec['export']], 120)
+            else:
+                self.message = 'Mount removal cancelled.'
+        finally:
+            box.deleteLater()
+            self.setup_open = False
+            if self.job is None:
+                self.removing = False
+            self.changed.emit()
 
     def _offer_client_install(self, parent):
         try:
@@ -271,7 +310,10 @@ class NetworkOutput(QObject):
     def _start(self, operation, command, timeout):
         self.operation = operation
         self.error = ''
-        self.message = 'Checking network output…' if operation == 'probe' else 'Waiting for mount setup / authorization…'
+        self.message = {'probe': 'Checking network output…', 'setup': 'Waiting for mount setup / authorization…',
+                        'remove': 'Waiting for mount removal / authorization…'}[operation]
+        if operation == 'remove':
+            self.ready = False
         try:
             self.job = BackgroundProcess(command, timeout=timeout)
             self.timer.start()
@@ -294,6 +336,13 @@ class NetworkOutput(QObject):
             if self.operation == 'setup':
                 self.retry()
                 return
+            if self.operation == 'remove':
+                self.removing = self.ready = False
+                self.error = ''
+                self.message = 'Managed NFS mount removed. Using local fallback. Use Set up mount to reconnect.'
+                self.changed.emit()
+                self.notification.emit(self.message)
+                return
             self.ready = True
             self.error = ''
             self.message = 'Network output ready'
@@ -305,13 +354,15 @@ class NetworkOutput(QObject):
         self.job = None
         self.timer.stop()
         self.ready = False
+        self.removing = False
         self.error = str(error)
-        self.message = f'Network mount failed: {error}'
+        self.message = f'{"Mount removal" if self.operation == "remove" else "Network mount"} failed: {error}'
         self.changed.emit()
         self.notification.emit(self.message)
 
     def stop(self):
         self.stopped = True
+        self.removing = False
         self.timer.stop()
         if self.job:
             self.job.cancel()

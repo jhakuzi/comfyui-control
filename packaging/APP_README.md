@@ -2,13 +2,15 @@
 
 A small Qt desktop app for starting, stopping, and updating ComfyUI on Linux.
 
-Testing version **0.11.2.dev8** adds optional NFS output with local fallback,
+Testing version **0.11.2.dev9** adds optional NFS output with local fallback,
 alongside the tray icon and expandable mobile prompt box. See Settings → Network
 output and the [NFS guide](https://github.com/jhakuzi/comfyui-control/blob/testing/nfs-output/docs/NFS_OUTPUT.md).
 Desktop and mobile warn when output is local; upload fallback images manually.
 Set up mount offers to install missing NFS client tools in your terminal.
 Use Save and set up mount in Settings to start setup directly. Settings also
-lets you change the remembered close-button action.
+lets you change the remembered close-button action. Stop ComfyUI and use
+Remove mount in the main window to remove this app’s mount setup, preserving
+NAS images and other system mounts.
 Saving output settings adapts simple launch scripts automatically with a backup.
 See the [feature guide](https://github.com/jhakuzi/comfyui-control/blob/main/docs/FEATURES.md).
 Use **Mobile WebUI** to enable the embedded listener, configure your LAN/VPN

@@ -50,12 +50,14 @@ scheme, and the Mobile WebUI keeps its own appearance.
 The isolated Python environment and Fedora's native RPM may find different Qt
 style plugins. The app does not bundle or install Breeze itself.
 
-## Network output (testing 0.11.2.dev8)
+## Network output (testing 0.11.2.dev9)
 
 **Settings → Network output (NFS)** accepts a NAS address and export path.
 Click **Save and set up mount** in that section for the one-time setup, then
 the app connects in the background on startup. The main window also has
-**Set up mount** beside its network status.
+**Set up mount** beside its network status. **Remove mount** removes only the
+app’s unchanged generated mount units after ComfyUI is stopped. Other mounts,
+`/etc/fstab` and NAS files are left alone; busy, nested or foreign mounts are refused.
 Missing NFS client tools trigger an optional package-install offer in your terminal.
 Saving output settings automatically adapts simple existing launch scripts with
 an exact backup; complex scripts show a specific explanation and still allow NAS

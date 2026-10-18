@@ -493,9 +493,12 @@ class MainWindow(QMainWindow):
         self.network_retry.clicked.connect(self.network_output.retry)
         self.network_setup = QPushButton('Set up mount')
         self.network_setup.clicked.connect(lambda: self.network_output.setup(self))
+        self.network_remove = QPushButton('Remove mount')
+        self.network_remove.clicked.connect(self._remove_network_mount)
         network_layout.addWidget(self.network_status, 1)
         network_layout.addWidget(self.network_retry)
         network_layout.addWidget(self.network_setup)
+        network_layout.addWidget(self.network_remove)
         self.network_row.setVisible(config.nfs_enabled)
         layout.addWidget(self.network_row)
         self.monitor = MonitorPanel(self.controller, config, self)
@@ -576,7 +579,11 @@ class MainWindow(QMainWindow):
         if self.controller.state in {'stopped', 'crashed'} and self.controller.process is None:
             self.controller.config = self.network_output.select(self.controller.config)
             self.mobile.update_desktop(self.controller.config, self.controller.state)
-        self._network_status()
+        self._state_changed(self.controller.state)
+
+    def _remove_network_mount(self):
+        in_use = self.controller.process is not None or self.controller.state not in {'stopped', 'crashed'}
+        self.network_output.remove(self, in_use=in_use)
 
     def _network_status(self):
         config = self.controller.config
@@ -588,7 +595,10 @@ class MainWindow(QMainWindow):
         self.network_retry.setEnabled(not self._closing and self.network_output.job is None and not self.network_output.setup_open)
         # Explicit setup can replace an in-progress startup probe.
         self.network_setup.setEnabled(not self._closing and not self.network_output.setup_open and
+                                      not self.network_output.removing and
                                       (self.network_output.job is None or self.network_output.operation == 'probe'))
+        self.network_remove.setEnabled(self.network_setup.isEnabled() and self.controller.process is None and
+                                       self.controller.state in {'stopped', 'crashed'})
 
     def _network_notice(self, message):
         if self._closing:
@@ -795,18 +805,19 @@ class MainWindow(QMainWindow):
         configured = bool(self.controller.config.comfy_dir.strip()) and (self.controller.config.directory / "main.py").is_file()
         self.start_stop.setText("Stop" if active else "Start")
         self.start_stop.setIcon(QIcon.fromTheme("media-playback-stop" if active else "media-playback-start"))
-        self.start_stop.setEnabled(((idle and configured) or active) and not self._closing)
-        self.restart.setEnabled(((idle and configured) or active) and not self._closing)
-        self.update.setEnabled(((idle and configured) or active) and not self._closing)
-        self.update_method.setEnabled(((idle and configured) or active) and not self._closing)
-        self.config_button.setEnabled(not self._closing)
+        mount_busy = self.network_output.removing
+        self.start_stop.setEnabled(((idle and configured) or active) and not self._closing and not mount_busy)
+        self.restart.setEnabled(((idle and configured) or active) and not self._closing and not mount_busy)
+        self.update.setEnabled(((idle and configured) or active) and not self._closing and not mount_busy)
+        self.update_method.setEnabled(((idle and configured) or active) and not self._closing and not mount_busy)
+        self.config_button.setEnabled(not self._closing and not mount_busy)
         if state == 'stopped':
             version = installed_version(self.controller.config.directory) if self.controller.config.comfy_dir else ''
             self.comfy_title.setText(f"ComfyUI - {version}" if version else "ComfyUI")
-        self.change_folder.setEnabled(idle and not self._closing)
-        self.create_script_button.setEnabled(idle and configured and not self._closing)
-        self.setup_button.setEnabled(idle and not self._closing)
-        self.output_button.setEnabled(configured and not self._closing)
+        self.change_folder.setEnabled(idle and not self._closing and not mount_busy)
+        self.create_script_button.setEnabled(idle and configured and not self._closing and not mount_busy)
+        self.setup_button.setEnabled(idle and not self._closing and not mount_busy)
+        self.output_button.setEnabled(configured and not self._closing and not mount_busy)
         self.models_button.setEnabled(configured and not self._closing)
         self.cancel_recovery.setVisible(state == 'restarting')
         self.crash_notice.setVisible(bool(self.crash_summary.text()) or state == 'restarting')

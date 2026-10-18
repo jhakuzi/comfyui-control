@@ -84,7 +84,8 @@ def test_connection_error_identifies_server_and_nfs_port():
 
 def test_mounted_but_unwritable_export_is_distinguished_from_connection_failure():
     from contextlib import nullcontext
-    with patch.object(Path, 'is_file', return_value=True), patch.object(Path, 'stat'), \
+    with patch.object(Path, 'is_file', return_value=True), \
+         patch('comfyui_control.network_output.os.scandir'), \
          patch('comfyui_control.network_output.socket.create_connection', return_value=nullcontext()), \
          patch('comfyui_control.network_output.mounted', return_value=True), \
          patch('comfyui_control.network_output.tempfile.mkstemp', side_effect=PermissionError('Permission denied')):

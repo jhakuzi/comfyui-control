@@ -20,6 +20,11 @@ import tempfile
 
 MAX_IMAGE = 100 * 1024 * 1024
 MARKER = '# Managed by comfyui-control NFS output\n'
+UNIT_DIRECTORY = Path('/etc/systemd/system')
+OTHER_UNIT_DIRECTORIES = tuple(Path(path) for path in (
+    '/run/systemd/system', '/run/systemd/generator', '/run/systemd/generator.early',
+    '/run/systemd/generator.late', '/usr/local/lib/systemd/system',
+    '/usr/lib/systemd/system', '/lib/systemd/system'))
 
 
 def nfs_client_available():
@@ -68,13 +73,44 @@ def units(spec):
 
 def _system_command(command, action, timeout):
     try:
-        subprocess.run(command, check=True, capture_output=True, text=True, timeout=timeout)
+        return subprocess.run(command, check=True, capture_output=True, text=True, timeout=timeout).stdout
     except subprocess.CalledProcessError as exc:
         details = (exc.stderr or exc.stdout or '').strip()[-1600:]
         raise ValueError(f'{action} failed (exit {exc.returncode}). ' +
                          (details or 'No explanation was returned by the system command.')) from exc
     except subprocess.TimeoutExpired as exc:
         raise ValueError(f'{action} timed out after {timeout} seconds. Check the system mount status before retrying.') from exc
+
+
+def managed_unit_files(spec, required=False):
+    """Refuse collisions, edits and overrides before any systemd mutation."""
+    paths = []
+    for name, contents in units(spec).items():
+        path = UNIT_DIRECTORY / name
+        for directory in (UNIT_DIRECTORY, *OTHER_UNIT_DIRECTORIES):
+            candidate = directory / name
+            if (directory != UNIT_DIRECTORY and (candidate.exists() or candidate.is_symlink()) or
+                    (directory / (name + '.d')).exists()):
+                raise ValueError(f'Refusing to change a mount with another system definition or override: {candidate}')
+        if path.is_symlink():
+            raise ValueError(f'Refusing to change a symlinked system mount definition: {name}')
+        if path.exists():
+            info = path.stat()
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022 or
+                    path.read_text() != contents):
+                raise ValueError(f'Refusing to change a foreign or edited system mount definition: {name}')
+            paths.append(path)
+        elif required:
+            raise ValueError(f'The managed mount definition is missing: {name}. Refusing to remove an incomplete setup.')
+    return paths
+
+
+def check_mount_location(spec, owned):
+    record = mount_record(spec['where'])
+    if record and (not owned or record not in {
+            ('nfs', spec['source']), ('nfs4', spec['source']), ('autofs', 'systemd-1')}):
+        raise ValueError('The mount location is used by another filesystem or a mount not managed by this app. Nothing was changed.')
+    return record
 
 
 def install_mount(spec):
@@ -87,9 +123,8 @@ def install_mount(spec):
         raise ValueError('/mnt must be a root-owned directory without write access for other users.')
     target = Path(spec['where'])
     # Never chmod/chown an already mounted export or unmount someone else's work.
-    record = mount_record(spec['where'])
-    if record and record != ('nfs', spec['source']) and record != ('nfs4', spec['source']) and record[0] != 'autofs':
-        raise ValueError('The mount location is already used by another filesystem.')
+    existing = managed_unit_files(spec)
+    record = check_mount_location(spec, len(existing) == 2)
     if not record:
         if target.is_symlink():
             raise ValueError('The mount location must not be a symlink.')
@@ -97,12 +132,8 @@ def install_mount(spec):
         info = target.stat()
         if info.st_uid != 0 or info.st_mode & 0o022 or any(target.iterdir()):
             raise ValueError('The unmounted mount location must be empty, root-owned and not writable by other users.')
-    directory = Path('/etc/systemd/system')
+    directory = UNIT_DIRECTORY
     definitions = units(spec)
-    for name, contents in definitions.items():
-        path = directory / name
-        if path.is_symlink() or path.exists() and (path.stat().st_uid != 0 or not path.read_text().startswith(MARKER)):
-            raise ValueError(f'Refusing to replace an existing system mount definition: {name}')
     for name, contents in definitions.items():
         fd, temporary = tempfile.mkstemp(prefix='.comfyui-nfs-', dir=directory)
         try:
@@ -121,19 +152,60 @@ def install_mount(spec):
         _system_command(['/usr/bin/systemctl', *args], action, 25)
 
 
+def remove_mount(spec):
+    if os.geteuid() != 0:
+        raise ValueError('Mount removal requires administrator authorization.')
+    paths = managed_unit_files(spec, required=True)
+    check_mount_location(spec, True)
+    # systemd stop can propagate to nested mount units. Refuse those rather than
+    # allowing removal of our mount to stop somebody else's child mount.
+    prefix = spec['where'].rstrip('/') + '/'
+    for line in Path('/proc/self/mountinfo').read_text().splitlines():
+        fields = line.partition(' - ')[0].split()
+        if len(fields) > 4 and unescape_mount(fields[4]).startswith(prefix):
+            raise ValueError('Another filesystem is mounted inside this output folder. Remove that nested mount yourself first; nothing was changed.')
+    names = {spec['unit'] + '.automount', spec['unit'] + '.mount'}
+    dependencies = _system_command(
+        ['/usr/bin/systemctl', 'show', '--property=RequiredBy,RequisiteOf,BoundBy,ConsistsOf,PropagatesStopTo', *sorted(names)],
+        'Checking whether other system units would be stopped with this mount', 5)
+    # A mount/service elsewhere can depend on this mount too. Refuse rather than
+    # letting a systemd stop transaction propagate beyond our two units.
+    dependents = {unit for line in (dependencies or '').splitlines() for unit in line.partition('=')[2].split()} - names
+    if dependents:
+        raise ValueError('Other system units depend on this mount: ' + ', '.join(sorted(dependents)) +
+                         '. Nothing was changed. Remove those dependencies yourself first.')
+    _system_command(['/usr/bin/systemctl', 'disable', '--now', spec['unit'] + '.automount'],
+                    'Disabling the managed NFS automount', 25)
+    _system_command(['/usr/bin/systemctl', 'stop', spec['unit'] + '.mount'],
+                    'Unmounting the managed NFS output (close programs using this folder and retry if it is busy)', 25)
+    if mount_record(spec['where']):
+        raise ValueError('The output folder is still mounted. Its definitions were kept; no files were removed.')
+    managed_unit_files(spec, required=True)
+    for path in paths:
+        path.unlink()
+    _system_command(['/usr/bin/systemctl', 'daemon-reload'], 'Reloading systemd mount definitions', 25)
+    # Leave the empty local mountpoint alone: never traverse/delete NAS files.
+
+
+def unescape_mount(value):
+    return re.sub(r'\\([0-7]{3})', lambda m: chr(int(m[1], 8)), value)
+
+
 def mount_record(where):
     # /proc is local even when an NFS server is offline. Never stat the mount
     # to determine whether it is mounted: that can trigger automount/block.
-    def unescape(value):
-        return re.sub(r'\\([0-7]{3})', lambda m: chr(int(m[1], 8)), value)
-    result = None
+    records = []
     for line in Path('/proc/self/mountinfo').read_text().splitlines():
         left, _, right = line.partition(' - ')
         fields, filesystem = left.split(), right.split()
-        if len(fields) > 4 and len(filesystem) > 1 and unescape(fields[4]) == where:
-            # NFS sits over the automount; retain the topmost matching entry.
-            result = (filesystem[0], unescape(filesystem[1]))
-    return result
+        if len(fields) > 4 and len(filesystem) > 1 and unescape_mount(fields[4]) == where:
+            records.append((fields[0], fields[1], filesystem[0], unescape_mount(filesystem[1])))
+    # Stacked mounts refer to the mount beneath them as their parent. mountinfo
+    # line order is not guaranteed, so do not mistake the underlying autofs for
+    # the NFS mounted over it (or accept NFS hidden by another filesystem).
+    parents = {record[1] for record in records}
+    return next(((kind, source) for mount_id, _, kind, source in records
+                 if mount_id not in parents), None)
 
 
 def mounted(spec):
@@ -155,13 +227,19 @@ def probe(spec):
     root = Path(spec['where'])
     status_command = 'systemctl status ' + shlex.quote(spec['unit'] + '.mount')
     try:
-        root.stat()  # Trigger the OS-managed automount, in this disposable worker.
+        # stat() of the automount root can return autofs metadata without
+        # activating it. Opening the directory triggers the real mount, even
+        # for an empty export. Keep this potentially blocking I/O in the worker.
+        with os.scandir(root):
+            pass
     except OSError as exc:
         raise ValueError(f'Linux could not activate the NFS mount for {spec["source"]}: {exc}. '
                          f'Check the export path and the NAS client-access rules. For system details, run: {status_command}') from exc
     if not mounted(spec):
         raise ValueError(f'Linux did not mount {spec["source"]} at {spec["where"]}. '
-                         f'For the mount error, run: {status_command}')
+                         'The directory opened, but the expected NFS filesystem is not active; '
+                         'no write was attempted. Use Set up mount to enable the automount again. '
+                         f'For system details, run: {status_command}')
     try:
         fd, path = tempfile.mkstemp(prefix='.comfyui-write-check-', dir=root)
     except OSError as exc:
@@ -244,14 +322,14 @@ def scan(root, references):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('operation', choices=('setup', 'probe', 'scan', 'read'))
+    parser.add_argument('operation', choices=('setup', 'remove', 'probe', 'scan', 'read'))
     parser.add_argument('first')
     parser.add_argument('second', nargs='?', default='')
     args = parser.parse_args()
     try:
-        if args.operation in ('setup', 'probe'):
+        if args.operation in ('setup', 'remove', 'probe'):
             spec = specification(args.first, args.second)
-            (install_mount if args.operation == 'setup' else probe)(spec)
+            {'setup': install_mount, 'remove': remove_mount, 'probe': probe}[args.operation](spec)
             result = {'ok': True, 'where': spec['where']}
         else:
             root = Path(args.first)

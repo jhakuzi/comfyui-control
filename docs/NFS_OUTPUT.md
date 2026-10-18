@@ -1,4 +1,4 @@
-# Network output (testing 0.11.2.dev8)
+# Network output (testing 0.11.2.dev9)
 
 [Back to features](FEATURES.md)
 
@@ -32,6 +32,13 @@ unprivileged. The setup button needs systemd and a polkit authentication agent.
 Connection errors identify the NFS server/port, mount activation, or an already
 mounted export that is not writable by your UID/GID. Failed systemd/SELinux setup
 commands include their actual error output rather than only an exit-code message.
+
+The connection check opens the mount directory to activate the on-demand mount,
+then verifies its NFS type and source before attempting a write. An active
+`.automount` with an inactive `.mount` only means the filesystem has not been
+mounted yet; it does not by itself identify a NAS error. Earlier testing versions
+could leave it inactive by only reading directory metadata. Update to dev9 and
+use **Retry network**; the existing setup does not need recreating for that fix.
 
 The package check detects `mount.nfs`, including in system sbin folders outside
 your user PATH. Declining installation leaves local fallback available.
@@ -123,26 +130,47 @@ Use the printed path, your actual server and export:
 sudo /usr/bin/python3 -I -S /printed/path/network_output.py setup 192.168.1.50 /export/comfy-output
 ```
 
-Disabling NFS restores normal output settings on the next ComfyUI start; the OS
-mount setup remains available. To remove it, first stop ComfyUI and other users
-of the share. Replace `UNIT` below with the exact unit base name from
-**Set up mount → Show Details**:
+## Remove the managed mount
+
+Disabling NFS restores normal output settings on the next ComfyUI start; it does
+not remove the OS mount setup. To remove that setup:
+
+1. Stop ComfyUI and close file managers/other programs using the share.
+2. Click **Remove mount** beside the network status in the main window. If NFS
+   was disabled, enable the existing server/export in Settings to show that row.
+3. Review the exact units and authorize removal as administrator.
+
+Removal disables/stops only this mount's two generated units and removes those
+unit files after confirming unmount. NAS files, other mount definitions and
+`/etc/fstab` are untouched. The empty local mountpoint is kept. Busy mounts fail
+without forced/lazy unmount, and keep their definitions for retry. Edited/foreign
+unit files, overrides, foreign filesystems and nested mounts are refused.
+Removal also refuses other systemd units that would be stopped through a mount
+dependency, including mounts/services elsewhere on the system.
+Setup applies the same ownership/collision checks before changing anything.
+The app does not adopt or remove a mount configured outside its generated units.
+
+Local fallback and its mobile gallery remain available after removal. No new
+mount is created unless you explicitly choose **Set up mount** again. Settings
+retain the server/export for that purpose. For a terminal alternative using the
+worker path found above:
 
 ```bash
-sudo systemctl disable --now 'UNIT.automount'
-sudo systemctl stop 'UNIT.mount'
-sudo rm -- '/etc/systemd/system/UNIT.automount' '/etc/systemd/system/UNIT.mount'
-sudo systemctl daemon-reload
+sudo /usr/bin/python3 -I -S /printed/path/network_output.py remove 192.168.1.50 /export/comfy-output
 ```
 
-Remove the empty mountpoint with `rmdir` afterward if desired. Do not remove files
-inside a mounted export during cleanup.
+If you have customized the generated units, inspect them manually rather than
+deleting unrelated system definitions to bypass the safeguard.
 
 ## Verification
 
 Tests use disposable directories/processes and validate generated systemd units
 where the validator is available. They cover fallback, output writes, timeouts,
 script forwarding, worker limits, image reads, privacy and deletion. Automatic
+mount activation tests require a directory open before writing, and stacked mount
+tests vary mountinfo order. Removal tests cover foreign/edited/symlinked units,
+unit overrides, nested mounts, busy failures, preservation of unrelated files,
+authorization/cancellation and desktop/mobile fallback after completion. Automatic
 script edits cover the reported multiline Bash script, exact backups, idempotent
 saves, existing output overrides, refusal of complex/changed/unwritable scripts,
 rollback on settings-save failure and actual child-process output writes. Embedded
