@@ -164,7 +164,7 @@ class InstallDialog(QDialog):
         self.commands.setReadOnly(True)
         layout.addWidget(self.commands, 1)
         row = QHBoxLayout()
-        self.open_terminal = QPushButton("Open setup terminal…")
+        self.open_terminal = QPushButton("Install ComfyUI")
         self.copy_commands = QPushButton("Copy setup commands")
         self.open_terminal.clicked.connect(self._open_terminal)
         self.copy_commands.clicked.connect(lambda: QApplication.clipboard().setText(self.commands.toPlainText()))
