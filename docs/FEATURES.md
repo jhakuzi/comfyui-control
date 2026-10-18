@@ -50,10 +50,12 @@ scheme, and the Mobile WebUI keeps its own appearance.
 The isolated Python environment and Fedora's native RPM may find different Qt
 style plugins. The app does not bundle or install Breeze itself.
 
-## Network output (testing 0.11.2.dev7)
+## Network output (testing 0.11.2.dev8)
 
 **Settings → Network output (NFS)** accepts a NAS address and export path.
-Use **Set up mount** once, then the app connects in the background on startup.
+Click **Save and set up mount** in that section for the one-time setup, then
+the app connects in the background on startup. The main window also has
+**Set up mount** beside its network status.
 Missing NFS client tools trigger an optional package-install offer in your terminal.
 Saving output settings automatically adapts simple existing launch scripts with
 an exact backup; complex scripts show a specific explanation and still allow NAS
@@ -64,9 +66,13 @@ the mobile gallery follows that local folder. A successful retry takes effect on
 the next ComfyUI start; existing files stay where they were saved.
 See [NFS setup and limits](NFS_OUTPUT.md).
 
-## System tray (testing 0.11.2.dev2)
+## System tray (testing 0.11.2.dev8)
 
 Closing the desktop window offers **Keep in tray**, **Quit**, or **Cancel**.
+**Remember this choice** is checked by default. Change it later in
+**Settings → Close button action**: **Ask me**, **Keep running in tray**, or
+**Quit application**. Uncheck Remember this choice to keep asking; Cancel
+does not save a choice. This preference can be changed while ComfyUI runs.
 Keeping it in the tray hides only the window: ComfyUI, generation and the Mobile
 WebUI continue running. Click the tray icon or choose **Show window** from its
 menu to restore it. The tooltip shows the current ComfyUI process state.

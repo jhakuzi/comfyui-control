@@ -9,7 +9,7 @@ import sys
 import tempfile
 
 from PySide6.QtCore import QObject, QProcess, QTimer, Signal
-from PySide6.QtWidgets import QCheckBox, QFormLayout, QGroupBox, QLabel, QLineEdit, QMessageBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QCheckBox, QFormLayout, QGroupBox, QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
 from .background_process import BackgroundProcess
 from .config import config_path
@@ -59,6 +59,8 @@ def nfs_install_script(command):
 
 
 class NetworkFields(QGroupBox):
+    setup_requested = Signal()
+
     def __init__(self, config, parent=None):
         super().__init__('Network output (NFS)', parent)
         self.setCheckable(True)
@@ -79,7 +81,13 @@ class NetworkFields(QGroupBox):
         form.addRow('Exported folder', self.export)
         form.addRow('Local mount', self.location)
         form.addRow(self.automatic)
-        note = QLabel('Fallback: this installation’s ComfyUI/output. Save settings, then use Set up mount for the one-time administrator setup. Simple launch scripts are updated with a backup when saving. Folder changes apply on the next ComfyUI start.')
+        self.setup_button = QPushButton('Save and set up mount')
+        self.setup_button.clicked.connect(self.setup_requested.emit)
+        form.addRow(self.setup_button)
+        setup_hint = QLabel('Saves settings, closes this window and opens the one-time administrator setup.')
+        setup_hint.setWordWrap(True)
+        form.addRow(setup_hint)
+        note = QLabel('Fallback: this installation’s ComfyUI/output. Simple launch scripts are updated with a backup when saving. Folder changes apply on the next ComfyUI start.')
         note.setWordWrap(True)
         form.addRow(note)
         self.server.textChanged.connect(self._preview)
@@ -93,6 +101,7 @@ class NetworkFields(QGroupBox):
             self.location.setText(specification(self.server.text(), self.export.text())['where'])
         except ValueError:
             self.location.clear()
+        self.setup_button.setEnabled(bool(self.location.text()))
 
     def values(self):
         return dict(nfs_enabled=self.isChecked(), nfs_server=self.server.text().strip(),
@@ -113,6 +122,7 @@ class NetworkOutput(QObject):
         self.job = None
         self.operation = None
         self.stopped = True
+        self.setup_open = False
         self.timer = QTimer(self)
         self.timer.setInterval(50)
         self.timer.timeout.connect(self._poll)
@@ -174,18 +184,35 @@ class NetworkOutput(QObject):
                     connection=self.message, error=self.error)
 
     def retry(self):
-        if self.stopped or not self.spec or self.job:
+        if self.stopped or not self.spec or self.job or self.setup_open:
             return
         self._start('probe', worker_command('probe', self.spec['server'], self.spec['export']), 12)
 
     def setup(self, parent):
-        if not self.spec or self.job:
+        if not self.spec or self.stopped or self.setup_open or (self.job and self.operation != 'probe'):
             return
+        self.setup_open = True
+        try:
+            # A startup probe must not swallow a user's explicit setup action.
+            # Suppress scheduled retries while the authorization dialog is open.
+            if self.job:
+                self.job.cancel()
+                self.job = None
+                self.timer.stop()
+                self.message = 'Network check stopped for mount setup.'
+            self.changed.emit()
+            self._setup(parent)
+        finally:
+            self.setup_open = False
+            self.changed.emit()
+
+    def _setup(self, parent):
         if not nfs_client_available():
             self._offer_client_install(parent)
             return
         if not shutil.which('pkexec') or not Path('/usr/bin/python3').is_file():
-            self.notification.emit('Install polkit/pkexec and system Python to authorize mount setup. See the NFS setup guide for a terminal alternative.')
+            self.message = 'Install polkit/pkexec and system Python to authorize mount setup. See the NFS setup guide for a terminal alternative.'
+            self.notification.emit(self.message)
             return
         box = QMessageBox(parent)
         box.setWindowTitle('Set up NFS output')
@@ -197,6 +224,8 @@ class NetworkOutput(QObject):
         if box.exec() == QMessageBox.StandardButton.Ok:
             self._start('setup', [shutil.which('pkexec'), '/usr/bin/python3', '-I', '-S', WORKER,
                                   'setup', self.spec['server'], self.spec['export']], 120)
+        else:
+            self.message = 'Mount setup cancelled.'
         box.deleteLater()
 
     def _offer_client_install(self, parent):
@@ -206,7 +235,7 @@ class NetworkOutput(QObject):
             box.setWindowTitle('NFS client required')
             box.setText(f'The NFS client tools are missing. Install {package}?')
             box.setInformativeText('Installation opens in your terminal and requires administrator authorization. '
-                                   'When it finishes, click Set up mount again. Local fallback remains available.')
+                                   'When it finishes, click Set up mount again in the main window. Local fallback remains available.')
             box.setDetailedText(shlex.join(command))
             box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel)
             box.button(QMessageBox.StandardButton.Yes).setText('Install ' + package)
@@ -214,6 +243,7 @@ class NetworkOutput(QObject):
             accepted = box.exec() == QMessageBox.StandardButton.Yes
             box.deleteLater()
             if not accepted:
+                self.message = 'NFS client installation cancelled. Install the NFS tools before setting up this mount.'
                 return
             # Match the existing Comfy CLI setup: detached terminal owns the
             # package transaction, so closing the app cannot kill it halfway.
@@ -231,7 +261,7 @@ class NetworkOutput(QObject):
             except (OSError, ValueError) as exc:
                 script.unlink(missing_ok=True)
                 raise ValueError(str(exc) + '\nInstall manually: ' + shlex.join(command)) from exc
-            self.message = 'NFS client installation opened in terminal. When it finishes, click Set up mount again.'
+            self.message = 'NFS client installation opened in terminal. When it finishes, click Set up mount again in the main window.'
             self.error = ''
             self.changed.emit()
         except (OSError, ValueError) as exc:

@@ -1,4 +1,4 @@
-# Network output (testing 0.11.2.dev7)
+# Network output (testing 0.11.2.dev8)
 
 [Back to features](FEATURES.md)
 
@@ -12,10 +12,13 @@ Save ComfyUI images to an NFS export, with the selected installation's
    `/export/comfy-output`. This is an NFS export, not an SMB share name.
 2. Leave **Connect when ComfyUI Control starts** checked for automatic connection.
    The generated local mount location is shown below.
-3. Save Settings. In the main window, click **Set up mount**. If NFS tools are
+3. In the NFS section, click **Save and set up mount**. This saves Settings,
+   closes the window and opens mount setup directly. You can also use
+   **Set up mount** beside the network status in the main window. If NFS tools are
    missing, accept **Install nfs-utils** (Fedora/Arch) or **Install nfs-common**
    (Debian/Ubuntu). Installation opens in your terminal; authorize it and review
-   the package manager's prompts. When finished, click **Set up mount** again.
+   the package manager's prompts. When finished, click **Set up mount** again in
+   the main window.
 4. Review the proposed
    setup (exact units are under Show Details), and authorize it as administrator.
 5. Setup checks the connection. When ready, start ComfyUI. Use **Retry network**

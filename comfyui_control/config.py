@@ -71,6 +71,7 @@ class Config:
     restart_limit: int = 3
     restart_backoff: int = 2
     application_style: str = ""
+    close_behavior: str = 'ask'
     nfs_enabled: bool = False
     nfs_server: str = ""
     nfs_export: str = ""
@@ -96,6 +97,8 @@ class Config:
             raise ValueError("Unknown launch mode.")
         if data.get("update_method", "git") not in ("git", "cli"):
             raise ValueError("Unknown update method.")
+        if data.get('close_behavior', 'ask') not in ('ask', 'tray', 'quit'):
+            raise ValueError('Unknown close button action. Choose ask, tray or quit.')
         if not 1 <= data.get('restart_limit', 3) <= 20 or not 1 <= data.get('restart_backoff', 2) <= 60:
             raise ValueError('Recovery requires 1–20 attempts and a 1–60 second initial delay.')
         result = cls(**data)

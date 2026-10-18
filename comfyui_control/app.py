@@ -58,12 +58,14 @@ class SettingsDialog(QDialog):
     def __init__(self, config, parent=None, *, launch_locked=False):
         super().__init__(parent)
         self.setWindowTitle("Settings")
-        self.resize(680, 520)
+        available = self.screen().availableGeometry()
+        self.resize(min(820, max(400, available.width() - 60)), min(740, max(350, available.height() - 80)))
         self.original_config = config
         self.result_config = None
         self.script_changes = ()
         self.script_backup = None
         self.output_script_warning = ''
+        self.setup_mount_requested = False
         self.launch_locked = launch_locked
         layout = QVBoxLayout(self)
         appearance = QFormLayout()
@@ -79,6 +81,12 @@ class SettingsDialog(QDialog):
             self.application_style.model().item(selected).setEnabled(False)
         self.application_style.setCurrentIndex(selected)
         appearance.addRow("Application style", self.application_style)
+        self.close_behavior = QComboBox()
+        for label, value in (('Ask me', 'ask'), ('Keep running in tray', 'tray'), ('Quit application', 'quit')):
+            self.close_behavior.addItem(label, value)
+        self.close_behavior.setCurrentIndex(self.close_behavior.findData(config.close_behavior))
+        self.close_behavior.setToolTip('Choose what the window’s X button does. Keep in tray leaves ComfyUI and the Mobile WebUI running. Quit stops both and cancels active updates.')
+        appearance.addRow('Close button action', self.close_behavior)
         layout.addLayout(appearance)
         if launch_locked:
             note = QLabel("Stop ComfyUI to change launch settings." if config.comfy_dir else "Select a ComfyUI installation to change launch settings.")
@@ -127,6 +135,7 @@ class SettingsDialog(QDialog):
         self.output_row = self._path_row(self.output_dir, directory=True)
         form.addRow("Output folder", self.output_row)
         self.network_fields = NetworkFields(config)
+        self.network_fields.setup_requested.connect(self._save_and_setup_mount)
         self.network_fields.toggled.connect(lambda enabled: self.output_row.setEnabled(not enabled))
         self.output_row.setEnabled(not config.nfs_enabled)
         form.addRow(self.network_fields)
@@ -244,7 +253,8 @@ class SettingsDialog(QDialog):
 
     def _save(self):
         if self.launch_locked:
-            config = replace(self.original_config, application_style=self.application_style.currentData())
+            config = replace(self.original_config, application_style=self.application_style.currentData(),
+                             close_behavior=self.close_behavior.currentData())
             try:
                 config.save()
             except OSError as exc:
@@ -273,6 +283,7 @@ class SettingsDialog(QDialog):
             restart_limit=self.recovery_settings.limit.value(),
             restart_backoff=self.recovery_settings.backoff.value(),
             application_style=self.application_style.currentData(),
+            close_behavior=self.close_behavior.currentData(),
             **self.network_fields.values(),
         )
         update, pending, applied = None, None, False
@@ -314,6 +325,12 @@ class SettingsDialog(QDialog):
             self.script_changes = update.changes
         self.result_config = config
         self.accept()
+
+    def _save_and_setup_mount(self):
+        self.setup_mount_requested = True
+        self._save()
+        if self.result_config is None:
+            self.setup_mount_requested = False
 
     def _output_script_problem(self, config, problem, edit_error):
         box = QMessageBox(self)
@@ -568,8 +585,10 @@ class MainWindow(QMainWindow):
         self.mobile.update_output_status(status)
         self.network_status.setText('\n'.join(filter(None, (status.get('connection'), status.get('message')))))
         self.network_status.setStyleSheet('color: #e7b86a;' if status.get('level') in {'warning', 'error'} else '')
-        self.network_retry.setEnabled(not self._closing and self.network_output.job is None)
-        self.network_setup.setEnabled(not self._closing and self.network_output.job is None)
+        self.network_retry.setEnabled(not self._closing and self.network_output.job is None and not self.network_output.setup_open)
+        # Explicit setup can replace an in-progress startup probe.
+        self.network_setup.setEnabled(not self._closing and not self.network_output.setup_open and
+                                      (self.network_output.job is None or self.network_output.operation == 'probe'))
 
     def _network_notice(self, message):
         if self._closing:
@@ -631,7 +650,8 @@ class MainWindow(QMainWindow):
         if choice.choice == "existing" and self._choose_folder():
             self._settings()
         elif choice.choice == "install":
-            dialog = InstallDialog(self, application_style=self.controller.config.application_style)
+            dialog = InstallDialog(self, application_style=self.controller.config.application_style,
+                                   close_behavior=self.controller.config.close_behavior)
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 self._set_config(dialog.result_config)
                 self.log.append_output(f"\nComfy CLI setup complete: {dialog.result_config.comfy_dir}\n")
@@ -646,7 +666,7 @@ class MainWindow(QMainWindow):
         config = Config(comfy_dir=path, monitoring_enabled=previous.monitoring_enabled,
                         monitor_expanded=previous.monitor_expanded, auto_restart=previous.auto_restart,
                         restart_limit=previous.restart_limit, restart_backoff=previous.restart_backoff,
-                        application_style=previous.application_style)
+                        application_style=previous.application_style, close_behavior=previous.close_behavior)
         try:
             config.validate()
             config.save()
@@ -738,7 +758,7 @@ class MainWindow(QMainWindow):
         dialog = SettingsDialog(current, self, launch_locked=locked)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             config = dialog.result_config
-            if replace(config, application_style=current.application_style) == current:
+            if replace(config, application_style=current.application_style, close_behavior=current.close_behavior) == current:
                 self.controller.config = config
             else:
                 self._set_config(config)
@@ -751,6 +771,8 @@ class MainWindow(QMainWindow):
                                        dialog.output_script_warning + '\n')
             if not apply_application_style(config.application_style):
                 QMessageBox.information(self, "Style unavailable", "This style could not be loaded. Choose System default or another available style.")
+            if dialog.setup_mount_requested:
+                QTimer.singleShot(0, lambda: None if self._closing else self.network_output.setup(self))
 
     def _start_stop(self):
         if self.controller.state in {'stopped','crashed'}:
@@ -870,7 +892,10 @@ class MainWindow(QMainWindow):
         warning = "ComfyUI and the Mobile WebUI keep running in the tray. Quitting stops both."
         if self.controller.state == 'updating':
             warning += " Quitting also cancels the update. If packages are being installed, rerun the update before starting ComfyUI."
-        choice.setInformativeText(warning)
+        remember = QCheckBox('Remember this choice')
+        remember.setChecked(True)
+        choice.setCheckBox(remember)
+        choice.setInformativeText(warning + '\nChange this later in Settings → Close button action.')
         keep = choice.addButton("Keep in tray", QMessageBox.ButtonRole.AcceptRole)
         quit_button = choice.addButton("Quit", QMessageBox.ButtonRole.DestructiveRole)
         cancel = choice.addButton(QMessageBox.StandardButton.Cancel)
@@ -879,6 +904,14 @@ class MainWindow(QMainWindow):
         choice.exec()
         clicked = choice.clickedButton()
         result = 'tray' if clicked == keep else 'quit' if clicked == quit_button else 'cancel'
+        if result in ('tray', 'quit') and remember.isChecked():
+            config = replace(self.controller.config, close_behavior=result)
+            try:
+                config.save()
+            except OSError as exc:
+                QMessageBox.warning(self, 'Could not remember close action', str(exc) + '\nYour choice will be used this time, but was not saved.')
+            else:
+                self.controller.config = config
         choice.deleteLater()
         return result
 
@@ -889,9 +922,9 @@ class MainWindow(QMainWindow):
             self._tray_quit_requested = False
 
     def closeEvent(self, event):
-        quit_confirmed = False
+        quit_confirmed = not self._tray_quit_requested and self.controller.config.close_behavior == 'quit'
         if not self._closing and not self._tray_quit_requested and QSystemTrayIcon.isSystemTrayAvailable():
-            choice = self._close_choice()
+            choice = self._close_choice() if self.controller.config.close_behavior == 'ask' else self.controller.config.close_behavior
             if choice == 'tray':
                 if QSystemTrayIcon.isSystemTrayAvailable():
                     self.tray.show()

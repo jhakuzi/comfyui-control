@@ -122,9 +122,10 @@ class WelcomeDialog(QDialog):
 
 
 class InstallDialog(QDialog):
-    def __init__(self, parent=None, *, application_style=""):
+    def __init__(self, parent=None, *, application_style="", close_behavior='ask'):
         super().__init__(parent)
         self.application_style = application_style
+        self.close_behavior = close_behavior
         self.setWindowTitle("Install ComfyUI with Comfy CLI")
         self.resize(670, 700)
         self.result_config = None
@@ -259,7 +260,7 @@ class InstallDialog(QDialog):
                 data = json.loads(self.result_path.read_text(encoding="utf-8"))
                 if not isinstance(data, dict) or not all(isinstance(data.get(key), str) for key in ("directory", "python")):
                     return
-                config = Config(comfy_dir=data["directory"], python=data["python"], arguments="--cpu" if self.plan.gpu == "--cpu" else "", update_method="cli", application_style=self.application_style)
+                config = Config(comfy_dir=data["directory"], python=data["python"], arguments="--cpu" if self.plan.gpu == "--cpu" else "", update_method="cli", application_style=self.application_style, close_behavior=self.close_behavior)
                 if config.directory != self.plan.directory or config.interpreter() != str(self.plan.environment / "bin" / "python"):
                     return
                 config.validate()

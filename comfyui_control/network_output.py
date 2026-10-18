@@ -143,7 +143,8 @@ def mounted(spec):
 def probe(spec):
     auto = Path('/etc/systemd/system') / (spec['unit'] + '.automount')
     if not auto.is_file() and not mounted(spec):
-        raise ValueError('Mount setup is not installed. Use Set up mount first.')
+        raise ValueError('Mount setup is not installed. Open Settings → Network output (NFS) and click Save and set up mount. '
+                         'You can also use Set up mount beside the network status in the main window.')
     # Fail quickly for an unreachable NAS before touching its filesystem.
     try:
         with socket.create_connection((spec['server'].strip('[]'), 2049), timeout=2):

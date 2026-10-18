@@ -208,6 +208,62 @@ def test_cancelled_setup_never_starts_a_privileged_command(app, tmp_path):
     with patch('comfyui_control.network_output_widgets.shutil.which', return_value='/usr/bin/pkexec'), patch.object(QMessageBox, 'exec', return_value=QMessageBox.StandardButton.Cancel), patch.object(manager, '_start') as start:
         manager.setup(None)
         start.assert_not_called()
+        assert manager.message == 'Mount setup cancelled.'
+    manager.stop()
+
+
+def test_settings_mount_button_saves_and_opens_setup_for_the_new_configuration(app, tmp_path, monkeypatch):
+    monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path / 'settings'))
+    (tmp_path / 'main.py').touch()
+    window = MainWindow(Config(comfy_dir=str(tmp_path), python=sys.executable, monitoring_enabled=False))
+    def save_and_setup(dialog):
+        dialog.network_fields.setChecked(True)
+        dialog.network_fields.server.setText('nas')
+        dialog.network_fields.export.setText('/images')
+        assert dialog.network_fields.setup_button.isEnabled()
+        dialog.network_fields.setup_button.click()
+        assert dialog.setup_mount_requested
+        return dialog.result()
+    try:
+        with patch.object(SettingsDialog, 'exec', save_and_setup), patch.object(window.network_output, 'setup') as setup:
+            window._settings()
+            QTest.qWait(30)
+            setup.assert_called_once_with(window)
+        saved = Config.load()
+        assert saved.nfs_enabled and saved.nfs_server == 'nas' and saved.nfs_export == '/images'
+        assert window.network_output.spec == specification('nas', '/images')
+    finally:
+        window._closing = True
+        window.close()
+
+
+def test_invalid_settings_cannot_start_mount_setup(app, tmp_path, monkeypatch):
+    monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path / 'settings'))
+    dialog = SettingsDialog(network_config(tmp_path))
+    with patch('comfyui_control.app.QMessageBox.warning') as warning:
+        dialog.network_fields.setup_button.click()
+    assert dialog.result_config is None and not dialog.setup_mount_requested
+    assert 'main.py' in warning.call_args.args[-1]
+
+
+def test_explicit_mount_setup_replaces_probe_and_suppresses_retries_in_dialog(app, tmp_path):
+    from PySide6.QtWidgets import QMessageBox
+    manager = NetworkOutput()
+    manager.configure(network_config(tmp_path))
+    manager._start('probe', [sys.executable, '-c', 'import time;time.sleep(60)'], 12)
+    old_job = manager.job
+    def authorize(dialog):
+        assert manager.setup_open and manager.job is None
+        manager.retry()
+        assert manager.job is None
+        return QMessageBox.StandardButton.Ok
+    with patch('comfyui_control.network_output_widgets.nfs_client_available', return_value=True), \
+         patch('comfyui_control.network_output_widgets.shutil.which', return_value='/usr/bin/pkexec'), \
+         patch.object(QMessageBox, 'exec', authorize), patch.object(manager, '_start') as start:
+        manager.setup(None)
+        assert start.call_args.args[0] == 'setup'
+    assert not manager.setup_open
+    wait(lambda: old_job.process.poll() is not None)
     manager.stop()
 
 

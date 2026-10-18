@@ -1,6 +1,6 @@
 Name:           comfyui-control
 Version:        0.11.2
-Release:        0.7.dev7%{?dist}
+Release:        0.8.dev8%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
 License:        MIT
@@ -62,6 +62,10 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Sun Oct 18 2026 ComfyUI Control contributors - 0.11.2-0.8.dev8
+- Testing: put mount setup in Settings and enlarge the dialog to fit the screen.
+- Remember close choices and allow changing the X button action in Settings.
+
 * Sun Oct 18 2026 ComfyUI Control contributors - 0.11.2-0.7.dev7
 - Testing: repair simple output launch scripts with backups and actionable diagnostics.
 - Apply the regular output-folder selection to the actual ComfyUI save destination.

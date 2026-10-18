@@ -54,7 +54,7 @@ def test_change_folder_resets_and_persists_settings(app, tmp_path, monkeypatch):
     new.mkdir()
     (new / "main.py").touch()
     (new / 'comfyui_version.py').write_text('__version__ = "0.45.1"')
-    window = MainWindow(Config(script="/old/script.sh", mode="script", arguments="--old-flag", application_style="Fusion"))
+    window = MainWindow(Config(script="/old/script.sh", mode="script", arguments="--old-flag", application_style="Fusion", close_behavior='tray'))
     with patch("comfyui_control.app.QFileDialog.getExistingDirectory", return_value=str(new)):
         assert window._choose_folder()
     assert window.controller.config.comfy_dir == str(new)
@@ -62,6 +62,7 @@ def test_change_folder_resets_and_persists_settings(app, tmp_path, monkeypatch):
     assert window.controller.config.arguments == ""
     assert Config.load().comfy_dir == str(new)
     assert Config.load().application_style == "Fusion"
+    assert Config.load().close_behavior == 'tray'
     assert window.comfy_title.text() == 'ComfyUI - 0.45.1'
     window.close()
 

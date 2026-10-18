@@ -59,7 +59,7 @@ def test_detect_venv_and_script_arguments(tmp_path):
 
 
 @pytest.mark.parametrize("data", [[], {"python": 42}, {"install_requirements": "false"}, {"mode": "shell"}, {"update_method": "shell"}, {"comfy_cli": False},
-    {'monitoring_enabled':'false'}, {'auto_restart':1}, {'restart_limit':True}, {'restart_limit':0}, {'restart_limit':21}, {'restart_backoff':0}, {'restart_backoff':61}, {'application_style': False}])
+    {'monitoring_enabled':'false'}, {'auto_restart':1}, {'restart_limit':True}, {'restart_limit':0}, {'restart_limit':21}, {'restart_backoff':0}, {'restart_backoff':61}, {'application_style': False}, {'close_behavior': False}, {'close_behavior':'invalid'}])
 def test_invalid_config_rejected_without_overwriting(tmp_path, data):
     path = tmp_path / "config.json"
     original = json.dumps(data)

@@ -1,6 +1,6 @@
 # Mobile WebUI architecture and verification
 
-## 0.11.2.dev7 network output
+## 0.11.2.dev8 network output
 
 `network_output.py` is a standalone standard-library worker for validated systemd
 unit generation, explicit privileged setup, user write probes and isolated file
@@ -8,6 +8,11 @@ access. `NetworkOutput` uses Qt timers to poll disposable subprocesses; no mount
 or filesystem operation runs on the Qt thread. A shared four-slot worker budget,
 deadlines and non-blocking cancellation bound stalled NFS work. Setup is a desktop
 action authorized through polkit; startup never requests elevated privileges.
+
+The NFS settings section has a **Save and set up mount** action. It validates
+and saves the edited configuration before opening the existing setup flow.
+Explicit setup cancels an in-progress probe and suppresses scheduled retries
+while its dialog is open, so the startup check cannot swallow the setup action.
 
 The desktop setup action checks for `mount.nfs` before requesting mount setup.
 Missing client packages can be installed with the distribution's package manager
@@ -50,13 +55,13 @@ Crash timestamps are stored as aware UTC values and converted only for the viewe
 copy and export. Conversion uses the system timezone for the crash's date, with
 explicit offset and DST; legacy entries are not rewritten.
 
-All 286 automated checks passed locally and on Fedora 44. Generated mount units
+All 300 automated checks passed locally and on Fedora 44. Generated mount units
 passed systemd validation where available. Chromium generation/recovery and
 WebKit prompt/history/metadata/GGUF/LoRA checks passed. Mount/write tests use
 ordinary directory fixtures and subprocesses, not a real NAS; administrator
 authorization, actual NFS mounting and NAS permissions still need a user test.
 
-## 0.11.2.dev2 desktop tray lifecycle
+## 0.11.2.dev8 desktop tray lifecycle
 
 The main window owns a native `QSystemTrayIcon` using the existing application
 icon. Its Show window/activation actions restore the existing window; Quit
@@ -65,13 +70,21 @@ offers tray/quit/cancel only when Qt reports an available tray host. Hiding
 leaves shutdown/recovery state untouched and retains the enabled mobile server.
 A lightweight timer runs only while hidden to restore access if the host vanishes.
 
+The close dialog remembers tray/quit by default; Cancel and an unchecked
+Remember this choice leave the preference unchanged. `Config.close_behavior`
+stores ask/tray/quit and survives installation changes. Settings exposes the
+preference beside Application style even when launch controls are locked.
+Changing it does not reconfigure the controller, restart servers or cancel
+recovery. Tray-menu Quit retains its explicit shutdown flow.
+
 The application explicitly quits after shutdown completes, including from a
 hidden window; Qt's last-visible-window behaviour alone is insufficient here.
 Tests cover all close choices, tray restoration/host loss, cancellation, updates,
 a real owned process and child alongside the embedded HTTP listener, and the
-actual entry point's event-loop exit. Offscreen tests simulate tray availability;
-all 214 automated checks passed locally and on Fedora 44. Native Plasma/Wayland
-icon placement remains a user check.
+actual entry point's event-loop exit. New checks cover remembering/cancelling,
+save failures, saved actions, preference changes during a run and mount-setup
+dispatch during a startup probe. Offscreen tests simulate tray availability;
+native Plasma/Wayland icon placement remains a user check.
 
 ## 0.11.2.dev1 prompt editor
 

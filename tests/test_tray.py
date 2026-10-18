@@ -1,5 +1,6 @@
 """Tray choices and lifecycle checks; the native desktop tray host is simulated."""
 import json
+from dataclasses import replace
 from pathlib import Path
 import socket
 import subprocess
@@ -13,7 +14,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import QMessageBox, QSystemTrayIcon
 
-from comfyui_control.app import MainWindow
+from comfyui_control.app import MainWindow, SettingsDialog
 from comfyui_control.config import Config
 from comfyui_control.mobile.settings import MobileSettings
 
@@ -232,3 +233,85 @@ print('Hidden tray application exited cleanly.')
                             env={**os.environ, 'XDG_CONFIG_HOME': str(tmp_path / 'settings'), 'QT_QPA_PLATFORM': 'offscreen'})
     assert result.returncode == 0, result.stdout + result.stderr
     assert 'Hidden tray application exited cleanly.' in result.stdout
+
+
+@pytest.mark.parametrize('label,behavior', [('Keep in tray', 'tray'), ('Quit', 'quit')])
+def test_close_choice_is_persisted_and_used_on_next_close(window, label, behavior):
+    def choose(dialog):
+        assert dialog.checkBox().isChecked()
+        assert 'Settings → Close button action' in dialog.informativeText()
+        next(button for button in dialog.buttons() if button.text() == label).click()
+    with patch.object(QMessageBox, 'exec', choose):
+        assert window._close_choice() == behavior
+    assert Config.load().close_behavior == behavior
+    assert window.controller.config.close_behavior == behavior
+    with patch.object(window, '_close_choice') as prompt:
+        window.close()
+        prompt.assert_not_called()
+    assert window.isVisible() is False
+    assert window._closing == (behavior == 'quit')
+
+
+@pytest.mark.parametrize('label', ['Keep in tray', 'Quit', 'Cancel'])
+def test_cancel_or_unchecked_remember_does_not_change_close_preference(window, label):
+    window.controller.config.save()
+    original = window.controller.config
+    def choose(dialog):
+        if label != 'Cancel':
+            dialog.checkBox().setChecked(False)
+        next(button for button in dialog.buttons() if button.text() == label).click()
+    with patch.object(QMessageBox, 'exec', choose):
+        window._close_choice()
+    assert window.controller.config == original
+    assert Config.load().close_behavior == 'ask'
+
+
+def test_remember_failure_still_honors_choice_but_explains_it_was_not_saved(window):
+    def choose(dialog):
+        next(button for button in dialog.buttons() if button.text() == 'Keep in tray').click()
+    with patch.object(QMessageBox, 'exec', choose), patch.object(Config, 'save', side_effect=OSError('Disk full')), patch.object(QMessageBox, 'warning') as warning:
+        assert window._close_choice() == 'tray'
+    assert window.controller.config.close_behavior == 'ask'
+    assert 'was not saved' in warning.call_args.args[-1]
+
+
+def test_close_preference_can_change_while_running_without_touching_server(window):
+    window.controller.state = 'running'
+    current = window.controller.config
+    def save(dialog):
+        assert not dialog.launch_contents.isEnabled()
+        assert dialog.close_behavior.isEnabled()
+        dialog.close_behavior.setCurrentIndex(dialog.close_behavior.findData('quit'))
+        dialog.folder.setText('/ignored-during-run')
+        dialog._save()
+        return dialog.result()
+    with patch.object(SettingsDialog, 'exec', save), patch.object(window.controller, 'set_config') as configure, \
+         patch.object(window.controller, 'start') as start, patch.object(window.controller, 'shutdown') as stop, \
+         patch.object(window.mobile, 'update_desktop') as mobile:
+        window._settings()
+        configure.assert_not_called(); start.assert_not_called(); stop.assert_not_called(); mobile.assert_not_called()
+    assert window.controller.config == replace(current, close_behavior='quit')
+    assert Config.load().close_behavior == 'quit'
+    window.controller.state = 'stopped'
+
+
+def test_saved_quit_action_stops_active_server_without_repeating_question(window):
+    window.controller.config = replace(window.controller.config, close_behavior='quit')
+    window.controller.state = 'running'
+    with patch.object(window.controller, 'shutdown') as shutdown, patch.object(QMessageBox, 'question') as question, patch.object(window, '_close_choice') as choice:
+        window.close()
+        shutdown.assert_called_once()
+        question.assert_not_called()
+        choice.assert_not_called()
+    window.controller.state = 'stopped'
+
+
+def test_saved_tray_action_cannot_hide_running_app_without_a_tray_host(window, monkeypatch):
+    window.controller.config = replace(window.controller.config, close_behavior='tray')
+    window.controller.state = 'running'
+    monkeypatch.setattr(QSystemTrayIcon, 'isSystemTrayAvailable', staticmethod(lambda: False))
+    with patch.object(QMessageBox, 'question', return_value=QMessageBox.StandardButton.No), patch.object(window.controller, 'shutdown') as shutdown:
+        window.close()
+        shutdown.assert_not_called()
+    assert window.isVisible() and not window._closing
+    window.controller.state = 'stopped'

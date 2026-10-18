@@ -76,6 +76,9 @@ provides version metadata. It refreshes after switching installations or finishi
 an update. The window title separately shows ComfyUI Control's version.
 
 Open **Settings** while stopped. Flags start collapsed: expand **Edit script flags**, **Script flags and additional arguments**, or **Edit launch flags**, depending on your launch method.
+The larger window fits to the available screen area. Application style and
+**Close button action** remain editable while ComfyUI runs. Close choices are
+remembered by default; use **Ask me** to show the choice dialog again.
 
 | Setting | Use |
 | --- | --- |
