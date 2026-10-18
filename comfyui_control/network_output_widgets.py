@@ -2,20 +2,60 @@
 from dataclasses import replace
 import json
 from pathlib import Path
+import platform
+import shlex
 import shutil
 import sys
+import tempfile
 
-from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtCore import QObject, QProcess, QTimer, Signal
 from PySide6.QtWidgets import QCheckBox, QFormLayout, QGroupBox, QLabel, QLineEdit, QMessageBox, QVBoxLayout, QWidget
 
 from .background_process import BackgroundProcess
-from .network_output import specification, units
+from .config import config_path
+from .network_output import nfs_client_available, specification, units
+from .setup import terminal_command
 
 WORKER = str(Path(__file__).with_name('network_output.py'))
 
 
 def worker_command(operation, *args):
     return [sys.executable, '-I', WORKER, operation, *map(str, args)]
+
+
+def nfs_install_command():
+    """Choose only the distro's NFS client; never upgrade the whole system."""
+    if Path('/run/ostree-booted').exists():
+        raise ValueError('On an image-based Fedora system, install nfs-utils using your system’s package layering tools, reboot if required, then retry Set up mount.')
+    try:
+        release = platform.freedesktop_os_release()
+    except OSError:
+        raise ValueError('Could not detect this distribution. Install its NFS client, then retry Set up mount.') from None
+    families = {release.get('ID', ''), *release.get('ID_LIKE', '').split()}
+    if families & {'fedora', 'rhel', 'centos'}:
+        package, args = 'nfs-utils', ['/usr/bin/dnf', 'install', 'nfs-utils']
+    elif families & {'debian', 'ubuntu'}:
+        package, args = 'nfs-common', ['/usr/bin/apt-get', 'install', 'nfs-common']
+    elif families & {'arch'}:
+        package, args = 'nfs-utils', ['/usr/bin/pacman', '-S', '--needed', 'nfs-utils']
+    else:
+        raise ValueError('Install this distribution’s NFS client manually, then retry Set up mount. Fedora/Arch: nfs-utils; Debian/Ubuntu: nfs-common.')
+    if not Path(args[0]).is_file() or not shutil.which('sudo'):
+        raise ValueError('Run this command as administrator, then retry Set up mount: ' + shlex.join(args))
+    return package, [shutil.which('sudo'), *args]
+
+
+def nfs_install_script(command):
+    return ('#!/usr/bin/env bash\n'
+            'trap \'rm -- "$0"\' EXIT\n'
+            + shlex.join(command) + '\nresult=$?\n'
+            'if [ "$result" -eq 0 ]; then\n'
+            '  echo "Installation finished. Return to ComfyUI Control and click Set up mount again."\n'
+            'else\n'
+            '  echo "Installation failed or was cancelled. Local fallback remains available; check the output above and retry."\n'
+            'fi\n'
+            'read -r -p "Press Enter to close this terminal. " _\n'
+            'exit "$result"\n')
 
 
 class NetworkFields(QGroupBox):
@@ -141,6 +181,9 @@ class NetworkOutput(QObject):
     def setup(self, parent):
         if not self.spec or self.job:
             return
+        if not nfs_client_available():
+            self._offer_client_install(parent)
+            return
         if not shutil.which('pkexec') or not Path('/usr/bin/python3').is_file():
             self.notification.emit('Install polkit/pkexec and system Python to authorize mount setup. See the NFS setup guide for a terminal alternative.')
             return
@@ -155,6 +198,45 @@ class NetworkOutput(QObject):
             self._start('setup', [shutil.which('pkexec'), '/usr/bin/python3', '-I', '-S', WORKER,
                                   'setup', self.spec['server'], self.spec['export']], 120)
         box.deleteLater()
+
+    def _offer_client_install(self, parent):
+        try:
+            package, command = nfs_install_command()
+            box = QMessageBox(parent)
+            box.setWindowTitle('NFS client required')
+            box.setText(f'The NFS client tools are missing. Install {package}?')
+            box.setInformativeText('Installation opens in your terminal and requires administrator authorization. '
+                                   'When it finishes, click Set up mount again. Local fallback remains available.')
+            box.setDetailedText(shlex.join(command))
+            box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel)
+            box.button(QMessageBox.StandardButton.Yes).setText('Install ' + package)
+            box.setDefaultButton(QMessageBox.StandardButton.Cancel)
+            accepted = box.exec() == QMessageBox.StandardButton.Yes
+            box.deleteLater()
+            if not accepted:
+                return
+            # Match the existing Comfy CLI setup: detached terminal owns the
+            # package transaction, so closing the app cannot kill it halfway.
+            directory = config_path().parent
+            directory.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(mode='w', prefix='nfs-client-', suffix='.sh',
+                                             dir=directory, delete=False) as stream:
+                script = Path(stream.name)
+                stream.write(nfs_install_script(command))
+            try:
+                terminal = terminal_command(script)
+                ok, _ = QProcess.startDetached(terminal[0], terminal[1:])
+                if not ok:
+                    raise ValueError('Could not open the installation terminal. Run: ' + shlex.join(command))
+            except (OSError, ValueError) as exc:
+                script.unlink(missing_ok=True)
+                raise ValueError(str(exc) + '\nInstall manually: ' + shlex.join(command)) from exc
+            self.message = 'NFS client installation opened in terminal. When it finishes, click Set up mount again.'
+            self.error = ''
+            self.changed.emit()
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(parent, 'Could not install NFS client', str(exc))
+            self.notification.emit(str(exc))
 
     def _start(self, operation, command, timeout):
         self.operation = operation

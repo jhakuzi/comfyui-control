@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+import shutil
 import socket
 import stat
 import subprocess
@@ -18,6 +19,12 @@ import tempfile
 
 MAX_IMAGE = 100 * 1024 * 1024
 MARKER = '# Managed by comfyui-control NFS output\n'
+
+
+def nfs_client_available():
+    # sbin is often absent from an ordinary desktop user's PATH.
+    return bool(shutil.which('mount.nfs') or any(
+        Path(path).is_file() for path in ('/usr/sbin/mount.nfs', '/sbin/mount.nfs')))
 
 
 def specification(server, export):
@@ -61,7 +68,7 @@ def units(spec):
 def install_mount(spec):
     if os.geteuid() != 0:
         raise ValueError('Mount setup requires administrator authorization.')
-    if not Path('/sbin/mount.nfs').exists() and not Path('/usr/sbin/mount.nfs').exists():
+    if not nfs_client_available():
         raise ValueError('Install the NFS client first: Fedora/Arch nfs-utils; Debian/Ubuntu nfs-common.')
     parent = Path('/mnt')
     if parent.is_symlink() or parent.stat().st_uid != 0 or parent.stat().st_mode & 0o022:

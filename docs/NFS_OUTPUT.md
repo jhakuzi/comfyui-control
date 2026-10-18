@@ -1,4 +1,4 @@
-# Network output (testing 0.11.2.dev4)
+# Network output (testing 0.11.2.dev5)
 
 [Back to features](FEATURES.md)
 
@@ -7,15 +7,16 @@ Save ComfyUI images to an NFS export, with the selected installation's
 
 ## Set up
 
-1. Install the NFS client: **Fedora:** `sudo dnf install nfs-utils`;
-   **Debian/Ubuntu:** `sudo apt install nfs-common`;
-   **Arch:** `sudo pacman -S nfs-utils`.
-2. Stop ComfyUI, open **Settings**, and enable **Network output (NFS)**. Enter
+1. Stop ComfyUI, open **Settings**, and enable **Network output (NFS)**. Enter
    the NAS IP/hostname and its exported path, for example `192.168.1.50` and
    `/export/comfy-output`. This is an NFS export, not an SMB share name.
-3. Leave **Connect when ComfyUI Control starts** checked for automatic connection.
+2. Leave **Connect when ComfyUI Control starts** checked for automatic connection.
    The generated local mount location is shown below.
-4. Save Settings. In the main window, click **Set up mount**, review the proposed
+3. Save Settings. In the main window, click **Set up mount**. If NFS tools are
+   missing, accept **Install nfs-utils** (Fedora/Arch) or **Install nfs-common**
+   (Debian/Ubuntu). Installation opens in your terminal; authorize it and review
+   the package manager's prompts. When finished, click **Set up mount** again.
+4. Review the proposed
    setup (exact units are under Show Details), and authorize it as administrator.
 5. Setup checks the connection. When ready, start ComfyUI. Use **Retry network**
    after changing NAS availability or permissions.
@@ -24,6 +25,14 @@ Setup creates a root-owned mountpoint under `/mnt` and two systemd units under
 `/etc/systemd/system`. It enables an on-demand automount. Subsequent app launches
 run unprivileged checks without an administrator prompt. The desktop app remains
 unprivileged. The setup button needs systemd and a polkit authentication agent.
+
+The package check detects `mount.nfs`, including in system sbin folders outside
+your user PATH. Declining installation leaves local fallback available.
+Installation uses the existing Konsole/GNOME Terminal/xterm support, needs sudo,
+and runs independently of the app. No packages are installed automatically at
+startup. Unsupported or image-based distributions show manual setup guidance.
+Manual alternatives: Fedora `sudo dnf install nfs-utils`, Debian/Ubuntu
+`sudo apt install nfs-common`, Arch `sudo pacman -S --needed nfs-utils`.
 
 The export must allow writes by your Linux UID/GID. The check creates, flushes
 and removes a small temporary file as your user; it does not change NAS permissions.

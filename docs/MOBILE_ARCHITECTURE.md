@@ -1,6 +1,6 @@
 # Mobile WebUI architecture and verification
 
-## 0.11.2.dev4 network output
+## 0.11.2.dev5 network output
 
 `network_output.py` is a standalone standard-library worker for validated systemd
 unit generation, explicit privileged setup, user write probes and isolated file
@@ -8,6 +8,13 @@ access. `NetworkOutput` uses Qt timers to poll disposable subprocesses; no mount
 or filesystem operation runs on the Qt thread. A shared four-slot worker budget,
 deadlines and non-blocking cancellation bound stalled NFS work. Setup is a desktop
 action authorized through polkit; startup never requests elevated privileges.
+
+The desktop setup action checks for `mount.nfs` before requesting mount setup.
+Missing client packages can be installed with the distribution's package manager
+in the same detached terminal used by Comfy CLI setup. The user reviews the
+command, authorizes sudo and returns to Set up mount; closing the app does not
+terminate a package transaction. Tests simulate package commands and terminal
+launches without installing anything on the test host.
 
 Runtime-only Config fields pin the selected output path for each manual server
 start. They are excluded from saved settings. Controller recovery retains that
@@ -29,7 +36,7 @@ names the fallback folder, reports mount errors and requests manual upload.
 Warnings never change the active output scope or restart a generation. A failed
 retry while a server targets NFS asks for a manual restart to use fallback.
 
-All 240 automated checks passed locally and on Fedora 44. Generated mount units
+All 254 automated checks passed locally and on Fedora 44. Generated mount units
 passed systemd validation where available. Chromium generation/recovery and
 WebKit prompt/history/metadata/GGUF/LoRA checks passed. Mount/write tests use
 ordinary directory fixtures and subprocesses, not a real NAS; administrator

@@ -50,10 +50,11 @@ scheme, and the Mobile WebUI keeps its own appearance.
 The isolated Python environment and Fedora's native RPM may find different Qt
 style plugins. The app does not bundle or install Breeze itself.
 
-## Network output (testing 0.11.2.dev4)
+## Network output (testing 0.11.2.dev5)
 
 **Settings → Network output (NFS)** accepts a NAS address and export path.
 Use **Set up mount** once, then the app connects in the background on startup.
+Missing NFS client tools trigger an optional package-install offer in your terminal.
 Failures select the installation's local `ComfyUI/output` folder and display an
 error. Desktop and mobile warn that fallback images need uploading manually;
 the mobile gallery follows that local folder. A successful retry takes effect on
