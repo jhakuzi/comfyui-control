@@ -27,6 +27,7 @@ from .mobile.settings import MobileSettings
 from .mobile_widgets import MobileDialog
 from .monitor_widgets import MonitorPanel
 from .recovery_widgets import RecoverySettings, CrashDialog
+from .network_output_widgets import NetworkFields, NetworkOutput
 
 
 def application_icon():
@@ -119,7 +120,12 @@ class SettingsDialog(QDialog):
         self.edit_script = QPushButton("Edit script file…")
         self.edit_script.clicked.connect(self._edit_script)
         form.addRow(self.edit_script)
-        form.addRow("Output folder", self._path_row(self.output_dir, directory=True))
+        self.output_row = self._path_row(self.output_dir, directory=True)
+        form.addRow("Output folder", self.output_row)
+        self.network_fields = NetworkFields(config)
+        self.network_fields.toggled.connect(lambda enabled: self.output_row.setEnabled(not enabled))
+        self.output_row.setEnabled(not config.nfs_enabled)
+        form.addRow(self.network_fields)
         form.addRow("Models folder", self._path_row(self.models_dir, directory=True))
         self.update_method = QComboBox()
         self.update_method.addItem("Git — fast-forward pull", "git")
@@ -263,6 +269,7 @@ class SettingsDialog(QDialog):
             restart_limit=self.recovery_settings.limit.value(),
             restart_backoff=self.recovery_settings.backoff.value(),
             application_style=self.application_style.currentData(),
+            **self.network_fields.values(),
         )
         try:
             config.validate()
@@ -338,6 +345,8 @@ class MainWindow(QMainWindow):
         if QSystemTrayIcon.isSystemTrayAvailable():
             self.tray.show()
         self.controller = Controller(config, self)
+        self.network_output = NetworkOutput(self)
+        self.controller.output_selector = self.network_output.select
         self.mobile = MobileRuntime(self)
         self.mobile.stopped.connect(self._mobile_stopped)
         body = QWidget()
@@ -397,6 +406,21 @@ class MainWindow(QMainWindow):
         self.crash_log.setVisible(bool(self.controller.history.entries))
         header.addWidget(self.crash_log, 0, 2)
         layout.addLayout(header)
+        self.network_row = QWidget()
+        network_layout = QHBoxLayout(self.network_row)
+        network_layout.setContentsMargins(0, 0, 0, 0)
+        self.network_status = QLabel()
+        self.network_status.setTextFormat(Qt.TextFormat.PlainText)
+        self.network_status.setWordWrap(True)
+        self.network_retry = QPushButton('Retry network')
+        self.network_retry.clicked.connect(self.network_output.retry)
+        self.network_setup = QPushButton('Set up mount')
+        self.network_setup.clicked.connect(lambda: self.network_output.setup(self))
+        network_layout.addWidget(self.network_status, 1)
+        network_layout.addWidget(self.network_retry)
+        network_layout.addWidget(self.network_setup)
+        self.network_row.setVisible(config.nfs_enabled)
+        layout.addWidget(self.network_row)
         self.monitor = MonitorPanel(self.controller, config, self)
         self.monitor.expanded_changed.connect(self._monitor_expanded)
         self.monitor.observation_changed.connect(self._observe_generation)
@@ -464,7 +488,43 @@ class MainWindow(QMainWindow):
             self.log.append_output(f"\nConfiguration could not be loaded: {load_error}\nYour existing file was left untouched.\n")
         if first_run:
             QTimer.singleShot(0, self._first_setup)
+        self.network_output.changed.connect(self._network_changed)
+        self.network_output.notification.connect(self._network_notice)
+        QTimer.singleShot(0, lambda: None if self._closing else self.network_output.configure(self.controller.config))
         QTimer.singleShot(0, self._start_mobile)
+
+    def _network_changed(self):
+        if self._closing:
+            return
+        if self.controller.state in {'stopped', 'crashed'} and self.controller.process is None:
+            self.controller.config = self.network_output.select(self.controller.config)
+            self.mobile.update_desktop(self.controller.config, self.controller.state)
+        self._network_status()
+
+    def _network_status(self):
+        config = self.controller.config
+        self.network_row.setVisible(config.nfs_enabled)
+        message = self.network_output.message
+        if self.network_output.ready and not config.session_network_output:
+            message += ' — applies on next ComfyUI start'
+        elif not self.network_output.ready and config.session_network_output:
+            message += ' — restart ComfyUI to use local fallback'
+        elif not self.network_output.ready:
+            message += ' — using local fallback'
+        self.network_status.setText(message + ('\nOutput: ' + str(config.folder('output')) if config.nfs_enabled else ''))
+        self.network_retry.setEnabled(not self._closing and self.network_output.job is None)
+        self.network_setup.setEnabled(not self._closing and self.network_output.job is None)
+
+    def _network_notice(self, message):
+        if self._closing:
+            return
+        config = self.controller.config
+        suffix = ('The running server still targets NFS; restart ComfyUI to use local fallback.' if config.session_network_output
+                  else f'Saving locally to {config.directory / "output"}.')
+        text = message + '\n' + suffix
+        self.log.append_output('\n[ComfyUI Control] ' + text + '\n')
+        if self.tray.isVisible():
+            self.tray.showMessage('Network output', text, QSystemTrayIcon.MessageIcon.Warning, 6000)
 
     def _start_mobile(self):
         if self._closing:
@@ -546,6 +606,7 @@ class MainWindow(QMainWindow):
 
     def _set_config(self, config):
         self.controller.set_config(config)
+        self.network_output.configure(config)
         self.monitor.configure(config)
         self.mobile.update_desktop(config, self.controller.state)
         blocked = self.update_method.blockSignals(True)
@@ -638,6 +699,7 @@ class MainWindow(QMainWindow):
 
     def _state_changed(self, state):
         self.mobile.update_desktop(self.controller.config, state)
+        self._network_status()
         labels = {"stopped": "Stopped", "starting": "Starting…", "running": "Process running", "stopping": "Stopping…", "updating": "Updating…", 'crashed':'Crashed', 'restarting':'Restarting…'}
         self.status.setText("●  " + labels[state])
         self.tray.setToolTip("ComfyUI Control — " + ("Closing…" if self._closing else labels[state]))
@@ -686,6 +748,11 @@ class MainWindow(QMainWindow):
 
     def _open_folder(self, kind):
         path = self.controller.config.folder(kind)
+        if kind == 'output' and self.controller.config.session_network_output:
+            # The file manager handles network access in its own process.
+            if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(path))):
+                QMessageBox.warning(self, 'Could not open folder', 'Could not open network output in the file manager.')
+            return
         if not path.is_dir():
             QMessageBox.information(self, "Folder unavailable", f"Folder does not exist:\n{path}\n\nSet a custom folder in Settings if needed.")
         elif not QDesktopServices.openUrl(QUrl.fromLocalFile(str(path))):
@@ -777,6 +844,7 @@ class MainWindow(QMainWindow):
             quit_confirmed = True
         if self.controller.state in {'stopped','crashed','restarting'} and self.controller.process is None:
             self._closing = True
+            self.network_output.stop()
             self.controller.shutdown()
             self.monitor.stop()
             if self.mobile.running:
@@ -798,6 +866,7 @@ class MainWindow(QMainWindow):
                 return
             self._closing = True
             self.tray_watch.stop()
+            self.network_output.stop()
             self.monitor.stop()
             self.mobile.stop()
             self.controller.shutdown()

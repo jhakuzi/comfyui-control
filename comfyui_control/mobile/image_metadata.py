@@ -4,6 +4,18 @@ import math
 import re
 
 from PySide6.QtGui import QImageReader
+from PySide6.QtCore import QBuffer, QIODevice
+
+
+def image_reader(source):
+    if isinstance(source, bytes):
+        buffer = QBuffer()
+        buffer.setData(source)
+        buffer.open(QIODevice.OpenModeFlag.ReadOnly)
+        reader = QImageReader(buffer)
+        reader._source_buffer = buffer  # Keep the device alive with the reader.
+        return reader
+    return QImageReader(str(source))
 
 from .workflows import candidates, fields_for, graph_from, suggested_mappings
 
@@ -27,9 +39,14 @@ def parameters(controls, values):
 
 
 def png_graph(path):
-    if path is None or path.suffix.lower() != '.png' or path.stat().st_size > 100 * 1024**2:
+    if path is None:
         return None
-    reader = QImageReader(str(path))
+    if isinstance(path, bytes):
+        if len(path) > 100 * 1024**2 or not path.startswith(b'\x89PNG\r\n\x1a\n'):
+            return None
+    elif path.suffix.lower() != '.png' or path.stat().st_size > 100 * 1024**2:
+        return None
+    reader = image_reader(path)
     text = reader.text('prompt')
     if not text or len(text) > 1024**2:
         return None
@@ -99,9 +116,9 @@ def generation_details(controls, values, graph=None, info=None):
 
 
 def image_size(path):
-    if path is None or path.stat().st_size > 100 * 1024**2:
+    if path is None or (len(path) if isinstance(path, bytes) else path.stat().st_size) > 100 * 1024**2:
         return None
-    size = QImageReader(str(path)).size()
+    size = image_reader(path).size()
     return {'width':size.width(), 'height':size.height()} if size.isValid() else None
 
 

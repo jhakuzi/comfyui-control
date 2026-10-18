@@ -84,7 +84,8 @@ class MobileRuntime(QObject):
         self.loop = asyncio.get_running_loop()
         self.loop.set_default_executor(ThreadPoolExecutor(max_workers=2, thread_name_prefix="comfy-mobile-io"))
         self.stop_event = asyncio.Event()
-        self.service = MobileService(data_dir(), settings, config.folder("output"), state, self._execution, self._monitoring)
+        self.service = MobileService(data_dir(), settings, config.folder("output"), state, self._execution, self._monitoring,
+                                     network_output=config.session_network_output)
         runner = None
         if settings.enabled:
             runner = web.AppRunner(MobileHTTP(self.service).app(), access_log=None, shutdown_timeout=1)
@@ -120,9 +121,11 @@ class MobileRuntime(QObject):
     def update_desktop(self, config, state):
         def update():
             if self.service:
-                output = config.folder("output").resolve()
-                if self.service.output_dir != output:
-                    self.service.change_output(output)
+                output = config.folder("output")
+                if not config.session_network_output:
+                    output = output.resolve()
+                if self.service.output_dir != output or self.service.network_output != config.session_network_output:
+                    self.service.change_output(output, network_output=config.session_network_output)
                 self.service.desktop_state = state
                 self.service.broadcast()
         loop = self.loop

@@ -1,0 +1,175 @@
+"""Desktop NFS settings and non-blocking, user-authorized mount operations."""
+from dataclasses import replace
+import json
+from pathlib import Path
+import shutil
+import sys
+
+from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtWidgets import QCheckBox, QFormLayout, QGroupBox, QLabel, QLineEdit, QMessageBox, QVBoxLayout, QWidget
+
+from .background_process import BackgroundProcess
+from .network_output import specification, units
+
+WORKER = str(Path(__file__).with_name('network_output.py'))
+
+
+def worker_command(operation, *args):
+    return [sys.executable, '-I', WORKER, operation, *map(str, args)]
+
+
+class NetworkFields(QGroupBox):
+    def __init__(self, config, parent=None):
+        super().__init__('Network output (NFS)', parent)
+        self.setCheckable(True)
+        self.setChecked(config.nfs_enabled)
+        outer = QVBoxLayout(self)
+        self.contents = QWidget()
+        outer.addWidget(self.contents)
+        form = QFormLayout(self.contents)
+        self.server = QLineEdit(config.nfs_server)
+        self.server.setPlaceholderText('NAS IP address or hostname')
+        self.export = QLineEdit(config.nfs_export)
+        self.export.setPlaceholderText('/export/comfy-output')
+        self.location = QLineEdit()
+        self.location.setReadOnly(True)
+        self.automatic = QCheckBox('Connect when ComfyUI Control starts')
+        self.automatic.setChecked(config.nfs_auto_connect)
+        form.addRow('Server', self.server)
+        form.addRow('Exported folder', self.export)
+        form.addRow('Local mount', self.location)
+        form.addRow(self.automatic)
+        note = QLabel('Fallback: this installation’s ComfyUI/output. Save settings, then use Set up mount for the one-time administrator setup. Folder changes apply on the next ComfyUI start.')
+        note.setWordWrap(True)
+        form.addRow(note)
+        self.server.textChanged.connect(self._preview)
+        self.export.textChanged.connect(self._preview)
+        self._preview()
+        self.contents.setVisible(self.isChecked())
+        self.toggled.connect(self.contents.setVisible)
+
+    def _preview(self):
+        try:
+            self.location.setText(specification(self.server.text(), self.export.text())['where'])
+        except ValueError:
+            self.location.clear()
+
+    def values(self):
+        return dict(nfs_enabled=self.isChecked(), nfs_server=self.server.text().strip(),
+                    nfs_export=self.export.text().strip(), nfs_auto_connect=self.automatic.isChecked())
+
+
+class NetworkOutput(QObject):
+    changed = Signal()
+    notification = Signal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.config = None
+        self.spec = None
+        self.ready = False
+        self.message = ''
+        self.job = None
+        self.operation = None
+        self.stopped = True
+        self.timer = QTimer(self)
+        self.timer.setInterval(50)
+        self.timer.timeout.connect(self._poll)
+
+    def configure(self, config):
+        identity = (config.nfs_enabled, config.nfs_server, config.nfs_export, config.nfs_auto_connect)
+        previous = None if not self.config else (self.config.nfs_enabled, self.config.nfs_server, self.config.nfs_export, self.config.nfs_auto_connect)
+        self.config = replace(config)
+        if identity == previous:
+            return
+        self.stop()
+        self.stopped = False
+        self.ready = False
+        self.spec = None
+        if config.nfs_enabled:
+            try:
+                self.spec = specification(config.nfs_server, config.nfs_export)
+                self.message = 'Not connected — using local fallback'
+                if config.nfs_auto_connect:
+                    QTimer.singleShot(0, self.retry)
+            except ValueError as exc:
+                self.message = str(exc)
+        else:
+            self.message = ''
+        self.changed.emit()
+
+    def select(self, config):
+        use_network = bool(config.nfs_enabled and self.ready and self.spec and
+                           self.spec == specification(config.nfs_server, config.nfs_export))
+        path = self.spec['where'] if use_network else str(config.directory / 'output')
+        return replace(config, session_output_dir=path if config.nfs_enabled else '',
+                       session_network_output=use_network)
+
+    def retry(self):
+        if self.stopped or not self.spec or self.job:
+            return
+        self._start('probe', worker_command('probe', self.spec['server'], self.spec['export']), 12)
+
+    def setup(self, parent):
+        if not self.spec or self.job:
+            return
+        if not shutil.which('pkexec') or not Path('/usr/bin/python3').is_file():
+            self.notification.emit('Install polkit/pkexec and system Python to authorize mount setup. See the NFS setup guide for a terminal alternative.')
+            return
+        box = QMessageBox(parent)
+        box.setWindowTitle('Set up NFS output')
+        box.setText(f'Install an on-demand mount for {self.spec["source"]}?')
+        box.setInformativeText(f'Administrator authorization is required once. Linux will mount it at {self.spec["where"]}. This does not move images or modify your launch script.')
+        box.setDetailedText('\n\n'.join(name + '\n' + text for name, text in units(self.spec).items()))
+        box.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
+        box.setDefaultButton(QMessageBox.StandardButton.Cancel)
+        if box.exec() == QMessageBox.StandardButton.Ok:
+            self._start('setup', [shutil.which('pkexec'), '/usr/bin/python3', '-I', '-S', WORKER,
+                                  'setup', self.spec['server'], self.spec['export']], 120)
+        box.deleteLater()
+
+    def _start(self, operation, command, timeout):
+        self.operation = operation
+        self.message = 'Checking network output…' if operation == 'probe' else 'Waiting for mount setup / authorization…'
+        try:
+            self.job = BackgroundProcess(command, timeout=timeout)
+            self.timer.start()
+        except OSError as exc:
+            self._failed(exc)
+        self.changed.emit()
+
+    def _poll(self):
+        if self.job is None:
+            return
+        try:
+            result = self.job.poll()
+            if result is None:
+                return
+            self.job = None
+            self.timer.stop()
+            reply = json.loads(result)
+            if not isinstance(reply, dict) or reply.get('ok') is not True:
+                raise ValueError('The network worker returned an unexpected response.')
+            if self.operation == 'setup':
+                self.retry()
+                return
+            self.ready = True
+            self.message = 'Network output ready'
+            self.changed.emit()
+        except (OSError, ValueError) as exc:
+            self._failed(exc)
+
+    def _failed(self, error):
+        self.job = None
+        self.timer.stop()
+        self.ready = False
+        self.message = f'Network unavailable. {error}'
+        self.changed.emit()
+        self.notification.emit(self.message)
+
+    def stop(self):
+        self.stopped = True
+        self.timer.stop()
+        if self.job:
+            self.job.cancel()
+            self.job = None

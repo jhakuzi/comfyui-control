@@ -9,6 +9,7 @@ import shlex
 class ScriptFlags:
     arguments: tuple[str, ...] = ()
     message: str = ""
+    forwards_arguments: bool = False
 
 
 def inspect_script(path: Path) -> ScriptFlags:
@@ -57,4 +58,5 @@ def inspect_script(path: Path) -> ScriptFlags:
         return ScriptFlags(message="Could not identify a single Python main.py command. Script flags were not inferred.")
     arguments = [token for token in [*defaults, *launches[0]] if token not in ("$@", "${@}")]
     dynamic = any("$" in token or "`" in token for token in arguments)
-    return ScriptFlags(tuple(arguments), "Variable-based arguments are shown literally; the script was not executed." if dynamic else "")
+    return ScriptFlags(tuple(arguments), "Variable-based arguments are shown literally; the script was not executed." if dynamic else "",
+                       any(token in ('$@', '${@}') for token in launches[0]))

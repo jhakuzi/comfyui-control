@@ -25,6 +25,7 @@ class Controller(QObject):
     def __init__(self, config: Config, parent=None):
         super().__init__(parent)
         self.config = config
+        self.output_selector = None
         self.state = "stopped"
         self.process = None
         self._pid = 0
@@ -76,6 +77,8 @@ class Controller(QObject):
         if manual:
             self._attempts = 0
         try:
+            if manual and self.output_selector:
+                self.config = self.output_selector(self.config)
             self.config.validate()
         except (ValueError, OSError) as exc:
             self._error(str(exc))

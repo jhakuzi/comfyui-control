@@ -20,6 +20,8 @@ from .workflow_sources import saved_workflows, saved_workflow_graph
 from ..performance import GenerationPerformance
 from .prompt_history import PromptHistory
 from .image_metadata import generation_details
+from ..background_process import run_background
+import sys
 
 
 def revision(preset):
@@ -40,7 +42,7 @@ def json_safe(value):
 
 
 class MobileService:
-    def __init__(self, directory, settings, output_dir, desktop_state="stopped", observer=None, monitoring=None):
+    def __init__(self, directory, settings, output_dir, desktop_state="stopped", observer=None, monitoring=None, network_output=False):
         self.observer = observer
         self.monitoring = monitoring
         self.monitoring_active = False
@@ -50,7 +52,8 @@ class MobileService:
         self.directory = Path(directory)
         self.settings = settings
         self.local_comfy = urlsplit(settings.comfy_url).hostname in {'127.0.0.1', 'localhost', '::1', lan_address(), settings.bind} - {'0.0.0.0', '::'}
-        self.output_dir = Path(output_dir).resolve()
+        self.network_output = network_output
+        self.output_dir = Path(os.path.abspath(output_dir)) if network_output else Path(output_dir).resolve()
         self.output_scope = self.scope_for(self.output_dir)
         self.desktop_state = desktop_state
         self.presets = Presets(self.directory / "presets")
@@ -114,8 +117,9 @@ class MobileService:
     def current_jobs(self):
         return [job for job in self.jobs.values() if job.get("scope", self.output_scope) == self.output_scope]
 
-    def change_output(self, output):
-        self.output_dir = Path(output).resolve()
+    def change_output(self, output, network_output=False):
+        self.network_output = network_output
+        self.output_dir = Path(os.path.abspath(output)) if network_output else Path(output).resolve()
         self.output_scope = self.scope_for(self.output_dir)
         self.images.clear()
         self.unavailable_images.clear()
@@ -630,7 +634,12 @@ class MobileService:
                     except OSError:
                         continue
             return found, valid
-        found, valid = await asyncio.to_thread(scan)
+        if self.network_output:
+            result = json.loads(await self.network_io('scan', list(references.values())))
+            found = [(created, modified, Path(path)) for created, modified, path in result['found']]
+            valid = result['valid']
+        else:
+            found, valid = await asyncio.to_thread(scan)
         if scope != self.output_scope:
             return  # Configuration changed while the worker was scanning.
         for identifier, item in list(self.images.items()):
@@ -669,7 +678,7 @@ class MobileService:
             if owner is not None and job.get('owner') != owner:
                 return []
             return parameters(job.get('controls',[]),job.get('values',{}))
-        path = self.local_image(item)
+        path = await self.network_io('read', item) if self.network_output else self.local_image(item)
         try:
             return await asyncio.to_thread(png_parameters,path,self.info)
         except OSError:
@@ -700,7 +709,7 @@ class MobileService:
         if not self._metadata_allowed(item, owner):
             return {'restricted': True, 'positive': [], 'negative': [], 'parameters': [], 'additional': []}
         job = self.jobs.get(item.get('job'))
-        path = self.local_image(item)
+        path = await self.network_io('read', item) if self.network_output else self.local_image(item)
         try:
             if job:
                 result = deepcopy(job.get('metadata') or generation_details(job.get('controls',[]),job.get('values',{})))
@@ -715,8 +724,12 @@ class MobileService:
         except OSError:
             return {'positive': [], 'negative': [], 'parameters': [], 'additional': [], 'unavailable': True}
 
+    async def network_io(self, operation, data):
+        worker = Path(__file__).parents[1] / 'network_output.py'
+        return await run_background([sys.executable, '-I', str(worker), operation, str(self.output_dir)], data)
+
     def local_image(self, item, root=None):
-        if item.get("type") != "output":
+        if self.network_output or item.get("type") != "output":
             return None
         root = self.output_dir if root is None else root
         path = root / item["subfolder"] / item["filename"]

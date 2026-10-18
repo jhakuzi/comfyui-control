@@ -1,5 +1,33 @@
 # Mobile WebUI architecture and verification
 
+## 0.11.2.dev3 network output
+
+`network_output.py` is a standalone standard-library worker for validated systemd
+unit generation, explicit privileged setup, user write probes and isolated file
+access. `NetworkOutput` uses Qt timers to poll disposable subprocesses; no mount
+or filesystem operation runs on the Qt thread. A shared four-slot worker budget,
+deadlines and non-blocking cancellation bound stalled NFS work. Setup is a desktop
+action authorized through polkit; startup never requests elevated privileges.
+
+Runtime-only Config fields pin the selected output path for each manual server
+start. They are excluded from saved settings. Controller recovery retains that
+selection, while new manual starts/restarts can adopt a successful connection.
+Only the output argument is replaced; stored flags and original scripts remain
+unchanged. The normal output behavior is preserved with NFS disabled.
+
+MobileRuntime uses lexical paths for network output; filesystem resolution,
+gallery scans, image reads and PNG parsing never dereference NFS on the HTTP
+event loop. Scans and reads use the same bounded worker mechanism; metadata and
+thumbnails are processed from bytes with the existing ownership gates. Failed
+scans retain the gallery. Configured NFS and local fallback retain separate
+output scopes without altering workflow/prompt/session storage.
+
+All 238 automated checks passed locally and on Fedora 44. Generated mount units
+passed systemd validation where available. Chromium generation/recovery and
+WebKit prompt/history/metadata/GGUF/LoRA checks passed. Mount/write tests use
+ordinary directory fixtures and subprocesses, not a real NAS; administrator
+authorization, actual NFS mounting and NAS permissions still need a user test.
+
 ## 0.11.2.dev2 desktop tray lifecycle
 
 The main window owns a native `QSystemTrayIcon` using the existing application

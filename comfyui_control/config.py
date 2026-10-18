@@ -1,5 +1,5 @@
 """Configuration and commands, without shell interpolation."""
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, field, fields
 import ast
 import json
 import os
@@ -64,6 +64,12 @@ class Config:
     restart_limit: int = 3
     restart_backoff: int = 2
     application_style: str = ""
+    nfs_enabled: bool = False
+    nfs_server: str = ""
+    nfs_export: str = ""
+    nfs_auto_connect: bool = True
+    session_output_dir: str = field(default='', metadata={'runtime': True})
+    session_network_output: bool = field(default=False, metadata={'runtime': True})
 
     @classmethod
     def load(cls, path: Path | None = None) -> "Config":
@@ -73,10 +79,10 @@ class Config:
         data = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
             raise ValueError("Configuration must be a JSON object.")
-        accepted = {f.name for f in fields(cls)}
+        accepted = {f.name for f in fields(cls) if not f.metadata.get('runtime')}
         data = {k: v for k, v in data.items() if k in accepted}
         for key, value in data.items():
-            expected = bool if key in ("install_requirements", "managed_script", "monitoring_enabled", "monitor_expanded", "auto_restart") else int if key in ("restart_limit", "restart_backoff") else str
+            expected = bool if key in ("install_requirements", "managed_script", "monitoring_enabled", "monitor_expanded", "auto_restart", "nfs_enabled", "nfs_auto_connect") else int if key in ("restart_limit", "restart_backoff") else str
             if type(value) is not expected:
                 raise ValueError(f"Invalid value for {key}.")
         if data.get("mode", "python") not in ("python", "script"):
@@ -85,7 +91,11 @@ class Config:
             raise ValueError("Unknown update method.")
         if not 1 <= data.get('restart_limit', 3) <= 20 or not 1 <= data.get('restart_backoff', 2) <= 60:
             raise ValueError('Recovery requires 1–20 attempts and a 1–60 second initial delay.')
-        return cls(**data)
+        result = cls(**data)
+        if result.nfs_enabled:
+            from .network_output import specification
+            specification(result.nfs_server, result.nfs_export)
+        return result
 
     def save(self, path: Path | None = None) -> None:
         path = path or config_path()
@@ -93,7 +103,11 @@ class Config:
         fd, temporary = tempfile.mkstemp(prefix=".config-", dir=path.parent)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as stream:
-                json.dump(asdict(self), stream, indent=2)
+                values = asdict(self)
+                for item in fields(self):
+                    if item.metadata.get('runtime'):
+                        values.pop(item.name, None)
+                json.dump(values, stream, indent=2)
                 stream.write("\n")
             os.replace(temporary, path)
         finally:
@@ -126,12 +140,27 @@ class Config:
 
     def command(self) -> list[str]:
         args = shlex.split(self.arguments)
+        if self.nfs_enabled:
+            # Replace only the output option; preserve all other launch flags.
+            filtered, index = [], 0
+            while index < len(args):
+                if args[index] == '--output-directory':
+                    if index + 1 >= len(args) or args[index + 1].startswith('--'):
+                        raise ValueError('--output-directory needs a folder.')
+                    index += 2
+                elif args[index].startswith('--output-directory='):
+                    index += 1
+                else:
+                    filtered.append(args[index]); index += 1
+            args = [*filtered, '--output-directory', str(self.folder('output'))]
         if self.mode == "script":
             marker = ["--comfyui-control-args"] if self.managed_script else []
             return ["/bin/bash", str(expand(self.script)), *marker, *args]
         return [self.interpreter(), "-u", "main.py", *args]
 
     def folder(self, kind: str) -> Path:
+        if kind == 'output' and self.nfs_enabled:
+            return expand(self.session_output_dir) if self.session_output_dir else self.directory / 'output'
         override = self.output_dir if kind == "output" else self.models_dir
         return expand(override) if override.strip() else self.directory / kind
 
@@ -168,9 +197,17 @@ class Config:
         if not self.comfy_dir.strip() or not (self.directory / "main.py").is_file():
             raise ValueError("Choose the ComfyUI folder containing main.py.")
         self.command()  # Validate argument quoting before starting anything.
+        if self.nfs_enabled:
+            from .network_output import specification
+            specification(self.nfs_server, self.nfs_export)
         if self.mode == "script":
             if not self.script.strip() or not expand(self.script).is_file():
                 raise ValueError("Choose an existing Bash launch script.")
+            if self.nfs_enabled and not self.managed_script:
+                from .script_flags import inspect_script
+                flags = inspect_script(expand(self.script))
+                if not flags.forwards_arguments or any(arg == '--output-directory' or arg.startswith('--output-directory=') for arg in flags.arguments):
+                    raise ValueError('For network output, use a generated launch script or a simple main.py script that forwards "$@" to Python.')
         else:
             interpreter = self.interpreter()
             if not shutil.which(interpreter):
