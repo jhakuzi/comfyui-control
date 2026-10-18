@@ -88,7 +88,7 @@ class LaunchFlags(QWidget):
                 checkbox.setChecked(True)
                 checkbox.blockSignals(blocked)
                 checkbox.setEnabled(False)
-                checkbox.setToolTip("Set in the selected script. Use Edit script file… to change it.")
+                checkbox.setToolTip("Set in the selected script. Use Edit script file to change it.")
             elif self.reserve.isEnabled() and (token == "--reserve-vram" or token.startswith("--reserve-vram=")):
                 value = token.partition("=")[2] if "=" in token else arguments[index + 1] if index + 1 < len(arguments) else ""
                 try:
@@ -191,7 +191,7 @@ class LaunchScriptDialog(QDialog):
         self.options = LaunchFlags(config.directory, arguments)
         layout.addWidget(self.options)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
-        buttons.button(QDialogButtonBox.StandardButton.Save).setText("Choose script file…")
+        buttons.button(QDialogButtonBox.StandardButton.Save).setText("Choose script file")
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)

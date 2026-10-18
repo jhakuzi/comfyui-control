@@ -2,7 +2,7 @@
 
 A small Qt desktop app for starting, stopping, and updating ComfyUI on Linux.
 
-Testing version **0.11.2.dev5** adds optional NFS output with local fallback,
+Testing version **0.11.2.dev6** adds optional NFS output with local fallback,
 alongside the tray icon and expandable mobile prompt box. See Settings → Network
 output and the [NFS guide](https://github.com/jhakuzi/comfyui-control/blob/testing/nfs-output/docs/NFS_OUTPUT.md).
 Desktop and mobile warn when output is local; upload fallback images manually.
@@ -58,7 +58,7 @@ or install a new copy through Comfy CLI. New setup needs Konsole, GNOME Terminal
 or xterm. GPU drivers and models are configured separately.
 
 Use **Settings** to select Python or a launch script and
-inspect launch flags. For CLI updates, use **Choose environment…** to select
+inspect launch flags. For CLI updates, use **Choose environment** to select
 your ComfyUI environment folder, such as `comfy-env`.
 
 ## Update this app

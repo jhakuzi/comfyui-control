@@ -37,7 +37,7 @@ class UpdateDialog(QDialog):
         row = QHBoxLayout(python_row)
         row.setContentsMargins(0, 0, 0, 0)
         row.addWidget(self.python, 1)
-        browse = QPushButton("Choose environment…")
+        browse = QPushButton("Choose environment")
         browse.clicked.connect(self._browse_python)
         row.addWidget(browse)
         form.addRow("Python / environment", python_row)

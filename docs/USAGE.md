@@ -53,8 +53,8 @@ The app uses its own Python/Qt environment. Your ComfyUI environment stays separ
 
 | Option | Action |
 | --- | --- |
-| **Choose existing installation…** | Select the ComfyUI folder containing `main.py`. |
-| **Install with Comfy CLI…** | Choose a new folder, Python, and GPU/CPU option. Open the setup terminal, then click **Use this installation** after success. |
+| **Choose existing installation** | Select the ComfyUI folder containing `main.py`. |
+| **Install with Comfy CLI** | Choose a new folder, Python, and GPU/CPU option. Open the setup terminal, then click **Use this installation** after success. |
 
 ![Startup choices](../startup-preview.png)
 
@@ -109,7 +109,7 @@ Click **Update** to choose either method and review the ComfyUI Python environme
 | **Git** | `git pull --ff-only`; optional requirements installation, off by default. |
 | **Comfy CLI** | `comfy update` for the selected folder and environment, including requirements. Choose this if you already use Comfy CLI. |
 
-For CLI updates, use **Choose environment…** to select your `comfy-env` or Conda folder. You can also enter its `bin/python` path. The app detects `comfy` there or on PATH; an explicit executable can be set in launch configuration.
+For CLI updates, use **Choose environment** to select your `comfy-env` or Conda folder. You can also enter its `bin/python` path. The app detects `comfy` there or on PATH; an explicit executable can be set in launch configuration.
 
 Changes to tracked files stop updates. Untracked files such as `.env` and `gpucore.*` can remain; Git reports actual file conflicts. A running server restarts only after success. Installing requirements can change GPU packages. Custom nodes and this controller app are updated separately.
 

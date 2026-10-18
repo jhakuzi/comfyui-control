@@ -73,9 +73,9 @@ Discovery works with ComfyUI offline. Importing node-editor files needs a runnin
 ComfyUI for its node metadata; API-format files can be imported offline.
 Alternatively, use these buttons:
 
-- **Browse workflows saved in ComfyUI…** reads the same server-side files used
+- **Browse workflows saved in ComfyUI** reads the same server-side files used
   by ComfyUI's Workflows menu. ComfyUI must be running.
-- **Choose workflow file from this computer…** opens the local saved-workflow
+- **Choose workflow file from this computer** opens the local saved-workflow
   folder when available; API-format JSON also works with ComfyUI offline.
 - **Use latest queued workflow from ComfyUI** copies an executable graph from
   its queue/history, including custom nodes, quantized models and LoRAs.

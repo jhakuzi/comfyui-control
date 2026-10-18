@@ -52,7 +52,7 @@ class CrashDialog(QDialog):
         actions=QHBoxLayout()
         copy=QPushButton('Copy diagnostics')
         copy.clicked.connect(lambda: QApplication.clipboard().setText(self.text.toPlainText()))
-        export=QPushButton('Export diagnostics…')
+        export=QPushButton('Export diagnostics')
         export.clicked.connect(self._export)
         actions.addWidget(copy); actions.addWidget(export)
         layout.addLayout(actions)

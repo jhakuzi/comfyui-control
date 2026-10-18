@@ -19,7 +19,7 @@ def inspect_script(path: Path) -> ScriptFlags:
     except (OSError, UnicodeError) as exc:
         return ScriptFlags(message=f"Could not read script: {exc}")
     if len(source) > 262_144:
-        return ScriptFlags(message="Script is too large to inspect. Use Edit script file… to review its flags.")
+        return ScriptFlags(message="Script is too large to inspect. Use Edit script file to review its flags.")
     source = source.replace("\\\r\n", "").replace("\\\n", "")
     launches, defaults = [], []
     generated = "# The app supplies the current checkbox selections; standalone runs use defaults." in source and "--comfyui-control-args" in source
@@ -53,7 +53,7 @@ def inspect_script(path: Path) -> ScriptFlags:
                         launches.append(command[position + 1:])
                         break
     except ValueError:
-        return ScriptFlags(message="Script uses shell syntax that cannot be inspected reliably. Use Edit script file… to review its flags.")
+        return ScriptFlags(message="Script uses shell syntax that cannot be inspected reliably. Use Edit script file to review its flags.")
     if len(launches) != 1:
         return ScriptFlags(message="Could not identify a single Python main.py command. Script flags were not inferred.")
     arguments = [token for token in [*defaults, *launches[0]] if token not in ("$@", "${@}")]

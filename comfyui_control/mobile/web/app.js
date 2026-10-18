@@ -221,7 +221,7 @@ function updateGenerate() {
     preset.missing_nodes.length > 0 ||
     !!(job && activeStatuses.has(job.status));
   $("generate").textContent = busy
-    ? "Submitting…"
+    ? "Submitting"
     : pendingSubmission
       ? "Retry submission"
       : "✦ Generate";

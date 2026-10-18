@@ -111,7 +111,7 @@ No new runtime dependencies or ComfyUI extensions are required.
 ## Crash diagnostics and optional recovery
 
 Unexpected nonzero/signal exits show **Crashed**, the exit code and **View crash
-log…**. Normal exit code zero, Stop, Restart, Update and app shutdown do not
+log**. Normal exit code zero, Stop, Restart, Update and app shutdown do not
 schedule crash recovery. Only app-owned processes are supervised.
 
 In **Settings → Crash recovery**, enable automatic restart if

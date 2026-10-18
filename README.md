@@ -39,7 +39,7 @@ bash install.sh
 ## Use
 
 Open **ComfyUI Control** from the application menu. Select your existing ComfyUI
-folder containing `main.py`, or choose **Install with Comfy CLI…**, then press **Start**.
+folder containing `main.py`, or choose **Install with Comfy CLI**, then press **Start**.
 Use **Settings** for Python, scripts, flags, and the application style.
 
 ## Mobile UI

@@ -117,7 +117,7 @@ class SettingsDialog(QDialog):
         flags_layout.addWidget(self.note)
         form.addRow(self.flags_contents)
         self.flags_contents.hide()
-        self.edit_script = QPushButton("Edit script file…")
+        self.edit_script = QPushButton("Edit script file")
         self.edit_script.clicked.connect(self._edit_script)
         form.addRow(self.edit_script)
         self.output_row = self._path_row(self.output_dir, directory=True)
@@ -175,7 +175,7 @@ class SettingsDialog(QDialog):
         layout = QHBoxLayout(row)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(field)
-        button = QPushButton("Browse…")
+        button = QPushButton("Browse")
         button.clicked.connect(lambda: self._browse(field, directory, scripts, title))
         layout.addWidget(button)
         return row
@@ -212,7 +212,7 @@ class SettingsDialog(QDialog):
             'Checkbox selections replace the default flags when the app starts this generated script. '
             'Uncheck a flag to remove it on the next start.'
             if managed else
-            'Checked, locked options are read from the script; change them with “Edit script file…”. '
+            'Checked, locked options are read from the script; change them with “Edit script file”. '
             'App-added arguments remain editable and require the script to forward "$@".'
             if script_mode else
             "Arguments are passed directly to main.py. They are saved here and take effect on the next start."
@@ -399,7 +399,7 @@ class MainWindow(QMainWindow):
         mobile_row.addWidget(self.mobile_button)
         mobile_row.addWidget(self.mobile_status, 1)
         header.addLayout(mobile_row, 2, 0, 1, 2)
-        self.crash_log = QPushButton('View crash log…')
+        self.crash_log = QPushButton('View crash log')
         self.crash_log.setFixedWidth(status_width)
         self.crash_log.setMinimumHeight(30)
         self.crash_log.clicked.connect(lambda: CrashDialog(self.controller.history, self).exec())
