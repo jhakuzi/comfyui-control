@@ -1,6 +1,6 @@
 Name:           comfyui-control
 Version:        0.11.2
-Release:        0.3.dev3%{?dist}
+Release:        0.4.dev4%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
 License:        MIT
@@ -62,6 +62,10 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Sun Oct 18 2026 ComfyUI Control contributors - 0.11.2-0.4.dev4
+- Testing: persistent desktop/mobile mount errors and manual-upload fallback warnings.
+- Keep the mobile gallery on the selected local fallback destination.
+
 * Sun Oct 18 2026 ComfyUI Control contributors - 0.11.2-0.3.dev3
 - Testing: optional NFS output with authorized automount setup and local fallback.
 - Isolate network filesystem access and pin output selection to each server run.

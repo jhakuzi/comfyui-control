@@ -69,6 +69,7 @@ class NetworkOutput(QObject):
         self.spec = None
         self.ready = False
         self.message = ''
+        self.error = ''
         self.job = None
         self.operation = None
         self.stopped = True
@@ -85,6 +86,7 @@ class NetworkOutput(QObject):
         self.stop()
         self.stopped = False
         self.ready = False
+        self.error = ''
         self.spec = None
         if config.nfs_enabled:
             try:
@@ -94,6 +96,7 @@ class NetworkOutput(QObject):
                     QTimer.singleShot(0, self.retry)
             except ValueError as exc:
                 self.message = str(exc)
+                self.error = str(exc)
         else:
             self.message = ''
         self.changed.emit()
@@ -104,6 +107,31 @@ class NetworkOutput(QObject):
         path = self.spec['where'] if use_network else str(config.directory / 'output')
         return replace(config, session_output_dir=path if config.nfs_enabled else '',
                        session_network_output=use_network)
+
+    def status(self, config):
+        """One output warning shared by desktop and mobile, without changing jobs."""
+        if not config.nfs_enabled:
+            return {}
+        path = str(config.folder('output'))
+        if not config.session_network_output:
+            title = 'Local fallback — manual upload required'
+            message = (f'Using the local fallback folder: {path}. '
+                       'Upload images saved here to your network storage manually.')
+            if self.ready:
+                message += ' Network output is ready and applies on next ComfyUI start; restart ComfyUI to use it.'
+            level = 'warning'
+        elif not self.ready:
+            title = 'Network output unavailable'
+            message = ('The running server still targets NFS. Restart ComfyUI to use the local '
+                       'fallback folder. An in-progress save cannot be redirected.')
+            level = 'error'
+        else:
+            title = 'Network output ready'
+            message = 'Output: ' + path
+            level = 'info'
+        return dict(destination='network' if config.session_network_output else 'local_fallback',
+                    path=path, level=level, title=title, message=message,
+                    connection=self.message, error=self.error)
 
     def retry(self):
         if self.stopped or not self.spec or self.job:
@@ -130,6 +158,7 @@ class NetworkOutput(QObject):
 
     def _start(self, operation, command, timeout):
         self.operation = operation
+        self.error = ''
         self.message = 'Checking network output…' if operation == 'probe' else 'Waiting for mount setup / authorization…'
         try:
             self.job = BackgroundProcess(command, timeout=timeout)
@@ -154,6 +183,7 @@ class NetworkOutput(QObject):
                 self.retry()
                 return
             self.ready = True
+            self.error = ''
             self.message = 'Network output ready'
             self.changed.emit()
         except (OSError, ValueError) as exc:
@@ -163,7 +193,8 @@ class NetworkOutput(QObject):
         self.job = None
         self.timer.stop()
         self.ready = False
-        self.message = f'Network unavailable. {error}'
+        self.error = str(error)
+        self.message = f'Network mount failed: {error}'
         self.changed.emit()
         self.notification.emit(self.message)
 

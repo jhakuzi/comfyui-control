@@ -504,24 +504,17 @@ class MainWindow(QMainWindow):
     def _network_status(self):
         config = self.controller.config
         self.network_row.setVisible(config.nfs_enabled)
-        message = self.network_output.message
-        if self.network_output.ready and not config.session_network_output:
-            message += ' — applies on next ComfyUI start'
-        elif not self.network_output.ready and config.session_network_output:
-            message += ' — restart ComfyUI to use local fallback'
-        elif not self.network_output.ready:
-            message += ' — using local fallback'
-        self.network_status.setText(message + ('\nOutput: ' + str(config.folder('output')) if config.nfs_enabled else ''))
+        status = self.network_output.status(config)
+        self.mobile.update_output_status(status)
+        self.network_status.setText('\n'.join(filter(None, (status.get('connection'), status.get('message')))))
+        self.network_status.setStyleSheet('color: #e7b86a;' if status.get('level') in {'warning', 'error'} else '')
         self.network_retry.setEnabled(not self._closing and self.network_output.job is None)
         self.network_setup.setEnabled(not self._closing and self.network_output.job is None)
 
     def _network_notice(self, message):
         if self._closing:
             return
-        config = self.controller.config
-        suffix = ('The running server still targets NFS; restart ComfyUI to use local fallback.' if config.session_network_output
-                  else f'Saving locally to {config.directory / "output"}.')
-        text = message + '\n' + suffix
+        text = message + '\n' + self.network_output.status(self.controller.config).get('message', '')
         self.log.append_output('\n[ComfyUI Control] ' + text + '\n')
         if self.tray.isVisible():
             self.tray.showMessage('Network output', text, QSystemTrayIcon.MessageIcon.Warning, 6000)
@@ -607,6 +600,7 @@ class MainWindow(QMainWindow):
     def _set_config(self, config):
         self.controller.set_config(config)
         self.network_output.configure(config)
+        config = self.controller.config
         self.monitor.configure(config)
         self.mobile.update_desktop(config, self.controller.state)
         blocked = self.update_method.blockSignals(True)

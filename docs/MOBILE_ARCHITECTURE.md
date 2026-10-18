@@ -1,6 +1,6 @@
 # Mobile WebUI architecture and verification
 
-## 0.11.2.dev3 network output
+## 0.11.2.dev4 network output
 
 `network_output.py` is a standalone standard-library worker for validated systemd
 unit generation, explicit privileged setup, user write probes and isolated file
@@ -22,7 +22,14 @@ thumbnails are processed from bytes with the existing ownership gates. Failed
 scans retain the gallery. Configured NFS and local fallback retain separate
 output scopes without altering workflow/prompt/session storage.
 
-All 238 automated checks passed locally and on Fedora 44. Generated mount units
+`NetworkOutput.status()` supplies one shared status for desktop and mobile.
+The runtime retains it across listener restarts and includes it in both full
+state snapshots and partial SSE updates. A persistent Create/Gallery warning
+names the fallback folder, reports mount errors and requests manual upload.
+Warnings never change the active output scope or restart a generation. A failed
+retry while a server targets NFS asks for a manual restart to use fallback.
+
+All 240 automated checks passed locally and on Fedora 44. Generated mount units
 passed systemd validation where available. Chromium generation/recovery and
 WebKit prompt/history/metadata/GGUF/LoRA checks passed. Mount/write tests use
 ordinary directory fixtures and subprocesses, not a real NAS; administrator

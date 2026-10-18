@@ -4,10 +4,13 @@ from dataclasses import replace
 import json
 from pathlib import Path
 import shutil
+import socket
 import subprocess
 import sys
 import time
 from unittest.mock import patch
+import http.cookiejar
+import urllib.request
 
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
@@ -263,3 +266,89 @@ def test_network_gallery_http_privacy_deletion_and_unavailable_share(tmp_path):
         finally:
             await client.close()
     asyncio.run(scenario())
+
+
+def test_mount_error_warns_without_claiming_a_running_network_save_moved(tmp_path):
+    config = network_config(tmp_path)
+    manager = NetworkOutput()
+    manager.configure(config)
+    manager._failed(OSError('NAS refused write access'))
+    fallback = manager.status(manager.select(config))
+    assert fallback['destination'] == 'local_fallback'
+    assert fallback['path'] == str(tmp_path / 'output')
+    assert fallback['error'] == 'NAS refused write access'
+    assert 'Upload images saved here' in fallback['message']
+    running = replace(config, session_network_output=True, session_output_dir=manager.spec['where'])
+    status = manager.status(running)
+    assert status['destination'] == 'network' and status['level'] == 'error'
+    assert 'running server still targets NFS' in status['message']
+    assert 'Restart ComfyUI' in status['message']
+    assert manager.status(replace(config, nfs_enabled=False)) == {}
+    manager.stop()
+
+
+def test_desktop_and_live_mobile_recover_fallback_warning_and_gallery(app, tmp_path, monkeypatch):
+    monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path / 'settings'))
+    (tmp_path / 'main.py').touch()
+    output = tmp_path / 'output'
+    output.mkdir()
+    image = QImage(16, 24, QImage.Format.Format_RGB32)
+    image.fill(0)
+    assert image.save(str(output / 'local-result.png'))
+    # Real embedded HTTP lifecycle, no mount or privileged operations.
+    with socket.socket() as port_socket:
+        port_socket.bind(('127.0.0.1', 0))
+        port = port_socket.getsockname()[1]
+    settings = MobileSettings(enabled=True, bind='127.0.0.1', port=port)
+    settings.save()
+    window = MainWindow(network_config(tmp_path, monitoring_enabled=False))
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    def get(path):
+        return opener.open(f'http://127.0.0.1:{port}' + path, timeout=3)
+    def state():
+        with get('/api/state') as response:
+            return json.load(response)
+    try:
+        wait(lambda: window.mobile.status == 'Listening')
+        window.network_output._failed(OSError('NAS is offline'))
+        assert 'NAS is offline' in window.network_status.text()
+        assert 'Upload images saved here' in window.network_status.text()
+        assert 'Upload images saved here' in window.log.toPlainText()
+        with get('/api/session'):
+            pass
+        warning = state()['output_status']
+        assert warning['error'] == 'NAS is offline'
+        assert warning['destination'] == 'local_fallback'
+        with get('/api/gallery') as response:
+            gallery = json.load(response)
+        assert [item['filename'] for item in gallery] == ['local-result.png']
+        with get(gallery[0]['url']) as response:
+            assert response.read().startswith(b'\x89PNG')
+        # Both a reconnected SSE snapshot and live partial updates carry the
+        # warning; no new polling loop or browser-local warning state is needed.
+        with get('/api/events') as response:
+            snapshot = json.loads(response.readline().removeprefix(b'data: '))
+            assert snapshot['output_status'] == warning
+            window.network_output._failed(OSError('NAS still offline'))
+            for _ in range(6):
+                line = response.readline()
+                if not line.startswith(b'data: '):
+                    continue
+                update = json.loads(line.removeprefix(b'data: '))
+                if update['output_status'].get('error') == 'NAS still offline':
+                    assert update['partial']
+                    break
+            else:
+                pytest.fail('Fallback warning did not reach the live stream')
+        # Restarting the mobile listener retains the desktop's active warning.
+        window.mobile.stop()
+        wait(lambda: not window.mobile.running)
+        window.mobile.configure(settings, window.controller.config)
+        wait(lambda: window.mobile.status == 'Listening')
+        assert state()['output_status']['error'] == 'NAS still offline'
+        window._set_config(replace(window.controller.config, nfs_enabled=False))
+        assert state()['output_status'] == {}
+    finally:
+        window._closing = True
+        window.close()
+        wait(lambda: not window.mobile.running)

@@ -30,6 +30,7 @@ class MobileRuntime(QObject):
         self.url = ""
         self.pending = None
         self.observing = False
+        self.output_status = {}
         self.stop_requested = threading.Event()
         self.stopped.connect(self._finished)
 
@@ -86,6 +87,7 @@ class MobileRuntime(QObject):
         self.stop_event = asyncio.Event()
         self.service = MobileService(data_dir(), settings, config.folder("output"), state, self._execution, self._monitoring,
                                      network_output=config.session_network_output)
+        self.service.output_status = dict(self.output_status)
         runner = None
         if settings.enabled:
             runner = web.AppRunner(MobileHTTP(self.service).app(), access_log=None, shutdown_timeout=1)
@@ -130,6 +132,24 @@ class MobileRuntime(QObject):
                 self.service.broadcast()
         loop = self.loop
         if loop and loop.is_running():
+            try:
+                loop.call_soon_threadsafe(update)
+            except RuntimeError:
+                pass
+
+    def update_output_status(self, status):
+        # Retain the latest warning even while the embedded server is stopped.
+        # Reconnecting clients receive it in their initial state snapshot.
+        status = dict(status)
+        if status == self.output_status:
+            return
+        self.output_status = status
+        loop = self.loop
+        if loop and loop.is_running():
+            def update():
+                if self.service:
+                    self.service.output_status = status
+                    self.service.broadcast()
             try:
                 loop.call_soon_threadsafe(update)
             except RuntimeError:

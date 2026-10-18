@@ -44,6 +44,10 @@ async def main(browser_name,root):
     settings=MobileSettings(comfy_url=str(upstream.make_url('/')))
     data_dir=Path(tempfile.mkdtemp(prefix='data-',dir=root))
     service=MobileService(data_dir,settings,output)
+    fallback_status = dict(destination='local_fallback', path=str(output), level='warning',
+        title='Local fallback — manual upload required', connection='Network mount failed: NAS is offline',
+        error='NAS is offline', message=f'Using the local fallback folder: {output}. Upload images saved here to your network storage manually.')
+    service.output_status = dict(fallback_status)
     preset=service.presets.create('Custom GGUF and two LoRAs',graph)
     mappings=suggested_mappings(graph,info)
     # Preserve a user's existing Advanced mapping while presenting a model selector.
@@ -64,6 +68,7 @@ async def main(browser_name,root):
         nonlocal service,runner,site
         await service.stop(); await runner.cleanup()
         service=MobileService(data_dir,settings,output)
+        service.output_status = dict(fallback_status)
         await service.start()
         runner=web.AppRunner(MobileHTTP(service).app(),access_log=None,shutdown_timeout=1)
         await runner.setup(); site=web.TCPSite(runner,'127.0.0.1',port); await site.start()
@@ -75,6 +80,11 @@ async def main(browser_name,root):
         page=await context.new_page()
         page.on('pageerror',lambda error:errors.append(str(error)))
         await page.goto(url)
+        await expect(page.locator('#output-warning')).to_be_visible()
+        await expect(page.locator('#output-warning')).to_contain_text('NAS is offline')
+        await expect(page.locator('#output-warning')).to_contain_text('Upload images saved here')
+        await page.reload()
+        await expect(page.locator('#output-warning')).to_be_visible()
         prompt = page.locator('[data-role="positive"]')
         toggle = page.locator('.prompt-editor-toggle')
         await expect(prompt).to_be_visible()
@@ -167,6 +177,10 @@ async def main(browser_name,root):
         await stub.emit('progress',dict(prompt_id=job['prompt_id'],value=3,max=20))
         await page.evaluate('window.dispatchEvent(new PageTransitionEvent("pageshow",{persisted:true}))')
         await expect(page.locator('#progress')).to_have_js_property('value',3)
+        service.output_status = {**fallback_status, 'error': 'Write access denied'}
+        service.broadcast()
+        await expect(page.locator('#output-warning')).to_contain_text('Write access denied')
+        await expect(page.locator('#progress')).to_have_js_property('value',3)
         await expect(page.locator('[data-role="positive"]')).to_have_value('Unsent draft survives')
         await page.locator('#prompt-history').click()
         await expect(page.locator('.prompt-entry')).to_have_count(1)
@@ -204,6 +218,8 @@ async def main(browser_name,root):
         await context.set_offline(False)
         await expect(page.locator('#job-title')).to_have_text('Your image is ready')
         await page.locator('#gallery-tab').click()
+        await expect(page.locator('#output-warning')).to_be_visible()
+        await expect(page.locator('#output-warning')).to_contain_text('Upload images saved here')
         await page.get_by_role('button',name='View mobile.png',exact=True).click()
         await page.locator('#image-details > summary').click()
         await expect(page.locator('#image-metadata')).to_contain_text('A luminous city at dusk')
@@ -238,13 +254,16 @@ async def main(browser_name,root):
         assert 'A luminous city at dusk' not in await phone.locator('#image-metadata').text_content()
         await other.close()
         await page.locator('#create-tab').click()
+        service.output_status = {}
+        service.broadcast()
+        await expect(page.locator('#output-warning')).to_be_hidden()
         await page.locator('#prompt-history').click()
         await page.get_by_role('button',name='Delete',exact=True).click()
         await expect(page.locator('.prompt-entry')).to_have_count(0)
         assert service.presets.get(preset['id'])==original_preset
         assert originals=={p.name:p.read_bytes() for p in output.iterdir()}
         assert len(stub.submissions)==1 and not errors,errors
-        print(f'PASS {browser_name}: larger prompt editor, saved touch/keyboard expand/collapse, preserved text/selection, pinned live statistics, prompt search/favorites/reuse/persistence/isolation, lazy PNG/mobile metadata, clipboard, exact seeds, custom GGUF/two LoRAs, recovery and unchanged image files.')
+        print(f'PASS {browser_name}: fallback warnings across live progress, refresh/reconnect and gallery; larger prompt editor, saved touch/keyboard expand/collapse, preserved text/selection, pinned live statistics, prompt search/favorites/reuse/persistence/isolation, lazy PNG/mobile metadata, clipboard, exact seeds, custom GGUF/two LoRAs, recovery and unchanged image files.')
         await browser.close()
     finally:
         await service.stop(); await runner.cleanup(); await upstream.close()

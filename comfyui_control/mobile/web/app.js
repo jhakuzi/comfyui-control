@@ -775,6 +775,12 @@ function applyState(value) {
     }
   }
   state = value;
+  const output = state.output_status || {};
+  $("output-warning").hidden = !["warning", "error"].includes(output.level);
+  $("output-warning-title").textContent = output.title || "";
+  $("output-warning-error").textContent = output.error
+    ? "Network mount failed: " + output.error : output.connection || "";
+  $("output-warning-message").textContent = output.message || "";
   $("comfy-offline").hidden = state.online;
   $("comfy-offline").textContent = state.online
     ? ""

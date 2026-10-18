@@ -1,4 +1,4 @@
-# Network output (testing 0.11.2.dev3)
+# Network output (testing 0.11.2.dev4)
 
 [Back to features](FEATURES.md)
 
@@ -39,9 +39,15 @@ containing spaces are unsupported.
 - Missing setup, an unreachable NAS, a timeout or denied write access produces a
   visible error and selects **`ComfyUI/output`**. Saved custom output settings and
   launch flags are retained.
+- Desktop and mobile show a persistent warning naming the local fallback folder
+  and reminding you to **upload those images manually**. A failed mount also
+  shows its error. The mobile warning survives refreshes/reconnections and is
+  visible on both Create and Gallery; it clears when network output is selected
+  or the feature is disabled. Images are never automatically uploaded or moved.
 - A successful retry during an active run does not change its destination.
   Manually restart ComfyUI to use the share. Existing images are not moved.
 - **Open output folder** and the mobile gallery follow the selected folder.
+  While local fallback is selected, the gallery reads **`ComfyUI/output`**.
   Bounded disposable workers isolate NFS scans/reads from the Qt and HTTP loops.
 
 The app supplies ComfyUI's `--output-directory` option at launch, replacing a
@@ -55,6 +61,9 @@ Fallback is selected before starting a server. A NAS disappearing during a save
 can make that save fail or wait for recovery. Linux's default NFS hard-mount
 semantics are retained; a process blocked in kernel NFS I/O can remain until the
 NAS recovers. The app cannot transparently redirect that in-progress write.
+If a subsequent connection check fails while a server still targets NFS, the
+warning asks you to restart ComfyUI for local fallback rather than claiming the
+active server has already changed its output folder.
 
 ## Gallery
 
@@ -98,5 +107,8 @@ inside a mounted export during cleanup.
 
 Tests use disposable directories/processes and validate generated systemd units
 where the validator is available. They cover fallback, output writes, timeouts,
-script forwarding, worker limits, image reads, privacy and deletion. Real NAS
+script forwarding, worker limits, image reads, privacy and deletion. Embedded
+HTTP/SSE checks cover mount error delivery, fallback gallery reads, live warning
+updates and listener restarts. Browser checks cover persistent warnings on
+Create/Gallery without interrupting generation progress or prompt recovery. Real NAS
 mounting, polkit authorization and NAS UID/GID permissions need testing on your PC.

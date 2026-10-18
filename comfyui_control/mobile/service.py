@@ -56,6 +56,7 @@ class MobileService:
         self.output_dir = Path(os.path.abspath(output_dir)) if network_output else Path(output_dir).resolve()
         self.output_scope = self.scope_for(self.output_dir)
         self.desktop_state = desktop_state
+        self.output_status = {}
         self.presets = Presets(self.directory / "presets")
         self.prompts = PromptHistory(self.directory / 'prompts')
         self.prompt_lock = asyncio.Lock()
@@ -173,6 +174,7 @@ class MobileService:
         preview_allowed = owner is None or any(j["id"] == self.preview_job for j in jobs)
         return json_safe({"instance": self.instance_id, "version": self.state_version,
                 "online": self.online, "connection": self.connection, "desktop": self.desktop_state,
+                "output_status": self.output_status,
                 "jobs": public, "partial": not include_details, "queue_remaining": len(self.queue.get("queue_running", [])) + len(self.queue.get("queue_pending", [])),
                 "hardware": self.hardware if self.online and time.monotonic() - self.hardware_time < 5 else {},
                 "preview": f"/api/preview?v={self.preview_version}" if self.preview and preview_allowed else None,

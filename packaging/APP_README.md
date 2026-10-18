@@ -2,9 +2,10 @@
 
 A small Qt desktop app for starting, stopping, and updating ComfyUI on Linux.
 
-Testing version **0.11.2.dev3** adds optional NFS output with local fallback,
+Testing version **0.11.2.dev4** adds optional NFS output with local fallback,
 alongside the tray icon and expandable mobile prompt box. See Settings → Network
 output and the [NFS guide](https://github.com/jhakuzi/comfyui-control/blob/testing/nfs-output/docs/NFS_OUTPUT.md).
+Desktop and mobile warn when output is local; upload fallback images manually.
 See the [feature guide](https://github.com/jhakuzi/comfyui-control/blob/main/docs/FEATURES.md).
 Use **Mobile WebUI** to enable the embedded listener, configure your LAN/VPN
 address and password, and scan the QR. It is disabled by default.
