@@ -1,8 +1,8 @@
 # Fedora RPM and COPR
 
-Version **1.0.0** is the stable 1.0 release. RPM version `1.0.0-1` upgrades
-0.11.x and the `1.0.0~rc1`/`1.0.0~rc2` candidates normally.
-See the [release notes](../docs/releases/1.0.0.md). Development versions remain
+Version **1.0.1** fixes installed-LoRA selection in the Mobile WebUI.
+RPM version `1.0.1-1` upgrades 1.0.0 and earlier releases normally.
+See the [release notes](../docs/releases/1.0.1.md). Development versions remain
 blocked from COPR; stable releases and explicitly numbered RCs can be published.
 
 ## App ZIP download

@@ -5,9 +5,8 @@ A small Qt app for ComfyUI on Linux, built with KDE Plasma in mind.
 Start/stop, restart, Git or Comfy CLI updates, launch flags, and folder shortcuts.
 Includes a [Mobile WebUI](docs/MOBILE.md) for phones, iPads and laptops.
 
-**1.0.0:** responsive WebUI, optional cross-device image reuse, tray controls,
-[SSH startup](docs/SSH.md), and [NFS output with local fallback](docs/NFS_OUTPUT.md).
-[Release notes](docs/releases/1.0.0.md).
+**1.0.1:** installed LoRA dropdowns in the Mobile WebUI, including custom loaders.
+[Release notes](docs/releases/1.0.1.md).
 
 [System/sampling monitoring and optional crash recovery](docs/FEATURES.md) keep
 server activity visible without leaving the app.

@@ -1,6 +1,6 @@
 Name:           comfyui-control
 Version:        1.0.1
-Release:        0.1.dev1%{?dist}
+Release:        1%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
 License:        MIT
@@ -62,6 +62,10 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Mon Oct 19 2026 ComfyUI Control contributors - 1.0.1-1
+- Show installed LoRA dropdowns for mapped custom-node text inputs.
+- Refresh the cached ComfyUI LoRA catalogue and preserve saved workflow defaults.
+
 * Mon Oct 19 2026 ComfyUI Control contributors - 1.0.1-0.1.dev1
 - Testing: installed LoRA pickers for custom string inputs with catalogue refresh.
 - Preserve node-specific choices, workflow mappings, strengths and saved drafts.

@@ -1,6 +1,6 @@
 # Mobile WebUI
 
-Included in **ComfyUI Control 1.0.0**. No separate service or mobile installation
+Included in **ComfyUI Control 1.0.1**. No separate service or mobile installation
 is required. Keep the desktop app open while using it.
 
 The [responsive interface](RESPONSIVE_WEBUI.md) uses the same address on

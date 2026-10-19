@@ -2,8 +2,9 @@
 
 A small Qt desktop app for starting, stopping, and updating ComfyUI on Linux.
 
-**Version 1.0.0** includes a responsive Mobile WebUI for phones, tablets and
+**Version 1.0.1** includes a responsive Mobile WebUI for phones, tablets and
 laptops, live progress, a gallery and reuse from ComfyUI PNG metadata.
+Mapped LoRA filenames have installed-model dropdowns, including custom loaders.
 Enable **Share image prompts and settings between browsers** in desktop
 **Mobile WebUI** to reuse laptop generations from your phone. It is off by default.
 [Mobile guide](https://github.com/jhakuzi/comfyui-control/blob/main/docs/MOBILE.md).
