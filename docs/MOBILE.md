@@ -290,6 +290,16 @@ of the selected output folder populate the gallery. Mobile-created images have
 saved prompt/settings metadata for reuse. Other images may have no mobile
 metadata. Temporary previews and deleted files can become unavailable.
 
+In the responsive testing build, **Reuse settings** and **New variation** also
+read API workflow metadata from local PNGs saved directly by ComfyUI, including
+the configured NFS output. Compatible saved mappings are reused; otherwise a
+separate image workflow preset is created. Original PNGs, graphs and source
+workflows are unchanged. Reuse fills the form without submitting a generation;
+variation enables seed randomization. Missing metadata or an unmapped seed is
+explained inside the image viewer. Another browser's private mobile settings
+remain unavailable. Wide-screen gallery thumbnails use 768px or 1280px previews
+instead of stretching the phone's 384px previews.
+
 ### Live statistics
 
 The pinned progress card shows only **s/it**, **used VRAM** and **GPU utilization**.

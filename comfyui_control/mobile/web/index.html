@@ -344,9 +344,10 @@
           <div id="image-metadata"></div>
         </details>
         <div class="actions">
-          <button id="reuse-image" type="button">Reuse settings</button
-          ><button id="vary-image" type="button">New variation</button>
+          <button id="reuse-image" type="button" aria-describedby="image-reuse-status">Reuse settings</button
+          ><button id="vary-image" type="button" aria-describedby="image-reuse-status">New variation</button>
         </div>
+        <p id="image-reuse-status" class="hint" role="status" hidden></p>
       </div>
     </dialog>
   </body>

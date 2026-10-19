@@ -1,5 +1,34 @@
 # Mobile WebUI architecture and verification
 
+## 1.0.0rc2.dev5 image reuse and gallery clarity
+
+Gallery descriptors advertise reuse eligibility without reading every image.
+`POST /api/images/{id}/reuse` applies the existing ownership checks, uses the
+existing bounded PNG parser/NFS reader on demand and returns mapped settings,
+never a raw graph. Compatible saved presets retain their explicit mappings:
+replacing only mapped literal values must reproduce the exact PNG API graph.
+Otherwise a separate preset preserves that complete graph and uses existing
+input detection. Neither path submits a generation or modifies the image.
+Private mobile PNGs cannot be turned into shared presets when their job journal
+has been pruned. Viewer errors explain missing metadata, unmapped seeds and
+private sessions; late responses after navigation are ignored. `graph_from`
+also handles an API graph whose literal node ID is `prompt`.
+
+Gallery tiles use responsive `picture` sources: wide screens request 768px
+thumbnails or 1280px at higher pixel density; compact layouts keep 384px.
+The server accepts only those bounded sizes, caches variants separately in its
+existing 64-entry cache and removes embedded text. Large previews use JPEG quality
+88 rather than 80. Original image downloads/comparison are unchanged; small
+sources are not upscaled, and cache hits avoid repeated NFS reads.
+
+Verification: 363 automated checks passed, including metadata reuse, exact
+64-bit seeds, graph preservation, existing mappings, ownership, NFS-reader
+selection, thumbnail dimensions/caching and original files. Chromium and Linux
+WebKit checks passed for laptop reuse/variation from mobile jobs and a simulated
+desktop-generated PNG, missing metadata, retained session privacy and 1x/2x
+preview selection. Protocol fixtures and generated PNGs were used; actual GPU
+generation, the user's NAS and physical Apple devices were not exercised here.
+
 ## 1.0.0rc2.dev4 wide-screen header progress
 
 The existing progress/detail/statistic elements share a `job-metrics` wrapper.

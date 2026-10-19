@@ -1,4 +1,4 @@
-# Responsive WebUI testing — 1.0.0rc2.dev4
+# Responsive WebUI testing — 1.0.0rc2.dev5
 
 Open the **same Mobile WebUI URL** on your phone, iPad or laptop. No device
 setting, second server or separate installation is needed.
@@ -10,6 +10,11 @@ setting, second server or separate installation is needed.
   The header stays visible while scrolling. Completed images appear on the right.
 - Create opens directly at Workflow, with both columns aligned at the top.
 - **Gallery:** four columns and larger image/comparison dialogs on wide screens.
+  Previews use 768px thumbnails, or 1280px on high-density screens; phones keep
+  the smaller previews. Full-size viewing and comparison keep their original images.
+- **Reuse settings / New variation:** also work for images saved directly by
+  ComfyUI when the local PNG includes its API workflow metadata. Settings fill
+  the form; tap Generate when ready. Missing metadata is explained in the viewer.
 
 Layout follows available space, not the device name: two columns start at
 1000 × 600 CSS pixels. iPad Split View, browser zoom, small tablets and short

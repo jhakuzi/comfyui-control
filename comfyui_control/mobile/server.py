@@ -236,7 +236,14 @@ class MobileHTTP:
     async def image_details(self, request):
         return json_response(await self.service.image_details(request.match_info['id'],request[OWNER]))
 
+    async def image_reuse(self, request):
+        await object_body(request)
+        return json_response(await self.service.prepare_image_reuse(request.match_info['id'], request[OWNER]))
+
     async def image(self, request):
+        thumb_size = int(request.query.get('size', '384')) if request.query.get('thumbnail') == '1' else 384
+        if thumb_size not in {384, 768, 1280}:
+            raise ValueError('Choose a supported thumbnail size: 384, 768 or 1280.')
         item = self.service.images.get(request.match_info["id"])
         if not item:
             for job in self.service.current_jobs():
@@ -257,20 +264,23 @@ class MobileHTTP:
             filename = str(Path(item['filename']).with_suffix('.png')) if private_metadata else item['filename']
             headers["Content-Disposition"] = "attachment; filename*=UTF-8''" + quote(filename, safe="")
         if self.service.network_output and item['type'] == 'output':
+            key = (item['id'], item.get('modified'), thumb_size)
+            if request.query.get('thumbnail') == '1' and key in self.thumbnails:
+                return web.Response(body=self.thumbnails[key], content_type='image/jpeg')
             try:
                 contents = await self.service.network_io('read', item)
             except FileNotFoundError:
                 self.service.image_unavailable(item['id'])
                 raise web.HTTPNotFound(text='This image is no longer available.')
             if request.query.get('thumbnail') == '1':
-                return await self.thumbnail((item['id'], item.get('modified')), contents)
+                return await self.thumbnail((item['id'], item.get('modified')), contents, thumb_size)
             if private_metadata:
                 contents = await self.encode_image(contents, thumbnail=False)
             return web.Response(body=contents, content_type='image/png' if private_metadata else
                                 mimetypes.guess_type(item['filename'])[0], headers=headers)
         if path:
             if request.query.get("thumbnail") == "1":
-                return await self.thumbnail((item["id"], path.stat().st_mtime_ns), path)
+                return await self.thumbnail((item["id"], path.stat().st_mtime_ns), path, thumb_size)
             if private_metadata:
                 return web.Response(body=await self.encode_image(path, thumbnail=False), content_type='image/png', headers=headers)
             return web.FileResponse(path, headers=headers)
@@ -283,10 +293,11 @@ class MobileHTTP:
         params = {k: item[k] for k in ("filename", "subfolder", "type")}
         thumb = request.query.get("thumbnail") == "1"
         key = (item["id"], item.get("job"), item.get("created"))
-        if thumb and key in self.thumbnails:
-            return web.Response(body=self.thumbnails[key], content_type="image/jpeg")
+        cache_key = (*key, thumb_size)
+        if thumb and cache_key in self.thumbnails:
+            return web.Response(body=self.thumbnails[cache_key], content_type="image/jpeg")
         if thumb:
-            params["preview"] = "jpeg;75"
+            params["preview"] = "jpeg;90" if thumb_size > 384 else "jpeg;75"
         query = urlencode(params)
         async with self.service.session.get(self.service.client.base + "/view?" + query) as upstream:
             if upstream.status in {404, 410}:
@@ -303,7 +314,7 @@ class MobileHTTP:
                         raise web.HTTPRequestEntityTooLarge(max_size=20 * 1024 * 1024, actual_size=size)
                     chunks.append(chunk)
                 if thumb:
-                    return await self.thumbnail(key, b"".join(chunks))
+                    return await self.thumbnail(key, b"".join(chunks), thumb_size)
                 return web.Response(body=await self.encode_image(b''.join(chunks), thumbnail=False), content_type='image/png', headers=headers)
             response = web.StreamResponse(headers={**headers, "Content-Type": upstream.content_type, "Cache-Control": "no-store"})
             await response.prepare(request)
@@ -312,15 +323,16 @@ class MobileHTTP:
             await response.write_eof()
             return response
 
-    async def thumbnail(self, key, source):
+    async def thumbnail(self, key, source, size=384):
+        key = (*key, size)
         if key not in self.thumbnails:
-            data = await self.encode_image(source, thumbnail=True)
+            data = await self.encode_image(source, thumbnail=True, size=size)
             self.thumbnails[key] = data
             while len(self.thumbnails) > 64:
                 self.thumbnails.popitem(last=False)
         return web.Response(body=self.thumbnails[key], content_type="image/jpeg")
 
-    async def encode_image(self, source, thumbnail):
+    async def encode_image(self, source, thumbnail, size=384):
         def encode():
             from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QSize, Qt
             from PySide6.QtGui import QImageReader
@@ -333,8 +345,8 @@ class MobileHTTP:
                 buffer.open(QIODevice.OpenModeFlag.ReadOnly)
                 reader = QImageReader(buffer)
             reader.setAutoTransform(True)
-            if thumbnail:
-                reader.setScaledSize(reader.size().scaled(QSize(384, 384), Qt.AspectRatioMode.KeepAspectRatio))
+            if thumbnail and max(reader.size().width(), reader.size().height()) > size:
+                reader.setScaledSize(reader.size().scaled(QSize(size, size), Qt.AspectRatioMode.KeepAspectRatio))
             image = reader.read()
             if image.isNull():
                 return None
@@ -345,7 +357,7 @@ class MobileHTTP:
             data = QByteArray()
             output = QBuffer(data)
             output.open(QIODevice.OpenModeFlag.WriteOnly)
-            if not image.save(output, 'JPEG' if thumbnail else 'PNG', 80 if thumbnail else -1):
+            if not image.save(output, 'JPEG' if thumbnail else 'PNG', (88 if size > 384 else 80) if thumbnail else -1):
                 return None
             return bytes(data)
         data = await asyncio.to_thread(encode)
@@ -390,6 +402,7 @@ class MobileHTTP:
             web.get('/api/presets/{id}', self.preset), web.put('/api/presets/{id}', self.preset), web.delete('/api/presets/{id}', self.preset),
             web.post('/api/presets/{id}/models', self.refresh_models),
             web.post('/api/generate', self.generate), web.post('/api/jobs/{id}/cancel', self.cancel),
+            web.post('/api/images/{id}/reuse', self.image_reuse),
             web.get('/api/prompts', self.prompts), web.delete('/api/prompts', self.prompts),
             web.put('/api/prompts/{id}', self.prompt), web.delete('/api/prompts/{id}', self.prompt),
             web.get('/api/gallery', self.gallery), web.get('/api/images/{id}', self.image), web.get('/api/preview', self.preview),

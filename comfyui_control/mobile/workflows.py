@@ -40,6 +40,8 @@ def graph_from(value):
     if not isinstance(value, dict):
         raise ValueError("Import a ComfyUI API-format JSON object.")
     graph = value.get("prompt", value)
+    if isinstance(graph, dict) and isinstance(graph.get('class_type'), str) and isinstance(graph.get('inputs'), dict):
+        graph = value  # A valid API graph may itself have a node named "prompt".
     if not isinstance(graph, dict) or not graph or "nodes" in graph:
         raise ValueError("This looks like node-editor JSON. Export the workflow in API format from ComfyUI first.")
     if len(graph) > 3000:

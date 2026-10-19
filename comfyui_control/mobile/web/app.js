@@ -23,6 +23,7 @@ let mappingDraft = new Map(),
   viewerItems = [],
   viewerIndex = 0;
 let fullStatePending = false;
+let imageReuseEpoch = 0;
 let fullStateAgain = false;
 let presetEpoch = 0;
 let connected = false,
@@ -904,6 +905,13 @@ function renderImages(container, items) {
     button.dataset.source = source;
     button.setAttribute("aria-label", "View " + item.filename);
     const image = node("img");
+    const picture = node("picture");
+    if (item.thumbnail) {
+      const wide = node("source");
+      wide.media = wideLayout.media;
+      wide.srcset = `${item.thumbnail}&size=768 1x, ${item.thumbnail}&size=1280 2x`;
+      picture.append(wide);
+    }
     image.src = source;
     image.alt = item.filename;
     image.loading = "lazy";
@@ -911,13 +919,15 @@ function renderImages(container, items) {
     image.addEventListener("error", () => {
       if (image.dataset.fallback !== "1" && item.thumbnail) {
         image.dataset.fallback = "1";
+        picture.querySelector("source")?.remove();
         image.src = item.url;
         return;
       }
       button.replaceChildren(node("span", "Image unavailable", "missing"));
       container.dataset.signature = "";
     });
-    button.append(image);
+    picture.append(image);
+    button.append(picture);
     button.addEventListener("click", () => {
       const currentItems = container.imageItems;
       const currentIndex = currentItems.findIndex((entry) => entry.id === item.id);
@@ -980,6 +990,7 @@ function loadGallery(force = false) {
   return galleryPromise;
 }
 function openImage(items, index) {
+  imageReuseEpoch++;
   viewerItems = items;
   viewerIndex = (index + items.length) % items.length;
   const item = items[viewerIndex],
@@ -988,13 +999,35 @@ function openImage(items, index) {
   $("image-caption").textContent = item.filename;
   $("download-image").href = item.download;
   $("previous-image").disabled = $("next-image").disabled = items.length < 2;
-  $("reuse-image").disabled = $("vary-image").disabled = !job;
+  $("reuse-image").disabled = $("vary-image").disabled = !job && !item.reuse?.available;
+  $("image-reuse-status").textContent = job ? "" : item.reuse?.reason || "";
+  $("image-reuse-status").hidden = !$("image-reuse-status").textContent;
   imageDetails.select(item);
   if (!$("image-dialog").open) $("image-dialog").showModal();
 }
-async function reuseJob(job, variation = false) {
+async function reuseImage(variation) {
+  const epoch = imageReuseEpoch, item = viewerItems[viewerIndex];
+  if (!item) return;
+  $("reuse-image").disabled = $("vary-image").disabled = true;
+  $("image-reuse-status").textContent = "Loading saved generation settings…";
+  $("image-reuse-status").hidden = false;
+  try {
+    const job = state.jobs.find((entry) => entry.id === item.job) ||
+      await api(`/api/images/${encodeURIComponent(item.id)}/reuse`, { method: "POST", body: "{}" });
+    if (epoch !== imageReuseEpoch || !$("image-dialog").open) return;
+    if (variation && !job.controls?.some((field) => field.role === "seed"))
+      throw new Error("No seed input is mapped in this workflow. Use Reuse settings, then map its seed in Advanced & workflows to create variations.");
+    await reuseJob(job, variation, () => epoch === imageReuseEpoch && $("image-dialog").open);
+  } catch (error) {
+    if (epoch === imageReuseEpoch) $("image-reuse-status").textContent = error.message;
+  } finally {
+    if (epoch === imageReuseEpoch) $("reuse-image").disabled = $("vary-image").disabled = false;
+  }
+}
+async function reuseJob(job, variation = false, current = () => true) {
   if (!job) return;
   const loaded = await api("/api/presets/" + encodeURIComponent(job.preset));
+  if (!current()) return;
   if (loaded.revision !== job.revision)
     throw new Error(
       "This preset’s mappings changed. Choose it again and review the settings before generating.",
@@ -1002,6 +1035,7 @@ async function reuseJob(job, variation = false) {
   selectedJob = "new";
   writeStore("job", "new");
   await loadPresets(job.preset);
+  if (!current()) return;
   await choosePreset(job.preset, {
     revision: job.revision,
     values: job.values,
@@ -1311,6 +1345,7 @@ $("gallery-tab").addEventListener("click", () => {
 });
 $("refresh-gallery").addEventListener("click", () => loadGallery(true));
 $("close-image").addEventListener("click", () => $("image-dialog").close());
+$("image-dialog").addEventListener("close", () => { imageReuseEpoch++; });
 $("previous-image").addEventListener("click", () =>
   openImage(viewerItems, viewerIndex - 1),
 );
@@ -1319,21 +1354,11 @@ $("next-image").addEventListener("click", () =>
 );
 $("reuse-image").addEventListener(
   "click",
-  guarded(() =>
-    reuseJob(
-      state.jobs.find((job) => job.id === viewerItems[viewerIndex].job),
-      false,
-    ),
-  ),
+  () => reuseImage(false),
 );
 $("vary-image").addEventListener(
   "click",
-  guarded(() =>
-    reuseJob(
-      state.jobs.find((job) => job.id === viewerItems[viewerIndex].job),
-      true,
-    ),
-  ),
+  () => reuseImage(true),
 );
 let touchStart = null;
 $("full-image").addEventListener(

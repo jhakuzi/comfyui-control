@@ -1,6 +1,6 @@
 Name:           comfyui-control
 Version:        1.0.0~rc2
-Release:        0.4.dev4%{?dist}
+Release:        0.5.dev5%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
 License:        MIT
@@ -62,6 +62,10 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Mon Oct 19 2026 ComfyUI Control contributors - 1.0.0~rc2-0.5.dev5
+- Reuse workflows embedded in local ComfyUI PNGs without submitting a generation.
+- Preserve mapped inputs and privacy; use sharper wide-screen gallery previews.
+
 * Mon Oct 19 2026 ComfyUI Control contributors - 1.0.0~rc2-0.4.dev4
 - Move active progress and generation statistics to a pinned widescreen header.
 - Keep phone metrics above Generate and preserve live state across resizing.

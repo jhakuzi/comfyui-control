@@ -4,6 +4,7 @@ No physical iPad/iPhone, VPN, GPU inference, or real model loading is exercised.
 """
 import argparse
 import asyncio
+from copy import deepcopy
 import json
 from pathlib import Path
 import struct
@@ -36,6 +37,14 @@ async def main(browser_name, root):
         'lora': dict(class_type='CustomLoRA', inputs=dict(model=['model', 0], strength=.7)),
         'sampler': dict(class_type='CustomSampler', inputs=dict(prompt=['text', 0], seed=42, steps=20, cfg=5.5, width=768, height=1024)),
     }
+    external = deepcopy(graph)
+    external['text']['inputs']['text'] = 'Prompt saved directly by ComfyUI'
+    external['sampler']['inputs']['seed'] = 18446744073709551600
+    image = QImage(1024, 1536, QImage.Format.Format_RGB32)
+    image.fill(QColor('#456b89'))
+    image.setText('prompt', json.dumps(external))
+    assert image.save(str(output / 'desktop.png'))
+    original_png = (output / 'desktop.png').read_bytes()
     stub = ComfyStub(graph)
     upstream = TestServer(stub.app())
     await upstream.start_server()
@@ -148,7 +157,7 @@ async def main(browser_name, root):
             service.broadcast()
             await page.set_viewport_size(dict(width=1440, height=900))
             await page.locator('#gallery-tab').click()
-            await expect(page.locator('#gallery-grid button')).to_have_count(16)
+            await expect(page.locator('#gallery-grid button')).to_have_count(17)
             assert await page.locator('#gallery-grid').evaluate('el => getComputedStyle(el).gridTemplateColumns.split(" ").length') == 4
             await page.evaluate('window.scrollTo(0,100000)')
             await reachable()
@@ -189,9 +198,52 @@ async def main(browser_name, root):
             await reachable(('generate', 'same-seed', 'variation'))
             assert len(stub.submissions) == 1
             await page.screenshot(path=str(root / 'result-laptop.png'))
+            # Both gallery reuse actions must work with a generation saved by
+            # this laptop browser, without submitting another job on selection.
+            for action, randomize in [('reuse-image', False), ('vary-image', True)]:
+                await page.locator('#gallery-tab').click()
+                if await page.locator('#select-compare').get_attribute('aria-pressed') == 'true':
+                    await page.locator('#select-compare').click()
+                await page.get_by_role('button', name='View image00.png', exact=True).click()
+                await expect(page.locator('#reuse-image')).to_be_enabled()
+                await expect(page.locator('#vary-image')).to_be_enabled()
+                await page.locator('#' + action).click()
+                await expect(page.locator('#image-dialog')).to_be_hidden()
+                await expect(prompt).to_have_value('An unsent draft survives resizing')
+                await page.locator('#settings-card').evaluate('el => el.open=true')
+                if randomize:
+                    await expect(page.locator('#random-seed')).to_be_checked()
+                else:
+                    await expect(page.locator('#random-seed')).not_to_be_checked()
+                assert len(stub.submissions) == 1
+            # Direct ComfyUI output has no mobile job. Recover its exact mapped
+            # values from PNG metadata, retaining the user's custom mappings.
+            for action, randomize in [('reuse-image', False), ('vary-image', True)]:
+                await page.locator('#gallery-tab').click()
+                tile = page.get_by_role('button', name='View desktop.png', exact=True)
+                await tile.scroll_into_view_if_needed()
+                await expect(tile.locator('img')).to_have_js_property('complete', True)
+                assert 'size=768' in await tile.locator('img').evaluate('el => el.currentSrc')
+                assert await tile.locator('img').evaluate('el => el.naturalWidth') == 512
+                await tile.click()
+                await expect(page.locator('#reuse-image')).to_be_enabled()
+                await page.locator('#' + action).click()
+                await expect(page.locator('#image-dialog')).to_be_hidden()
+                await expect(prompt).to_have_value(external['text']['inputs']['text'])
+                await page.locator('#settings-card').evaluate('el => el.open=true')
+                await expect(page.locator('[data-role="seed"]')).to_have_value(str(external['sampler']['inputs']['seed']))
+                assert await page.locator('#random-seed').is_checked() == randomize
+                assert len(stub.submissions) == 1 and len(service.presets.list()) == 1
+            await page.locator('#gallery-tab').click()
+            await page.get_by_role('button', name='View image01.png', exact=True).click()
+            await page.locator('#reuse-image').click()
+            await expect(page.locator('#image-reuse-status')).to_contain_text('no usable ComfyUI API workflow')
+            await expect(page.locator('#image-dialog')).to_be_visible()
+            await page.locator('#close-image').click()
+            assert (output / 'desktop.png').read_bytes() == original_png
             # A separate touch-capable tablet client starts clean and rotates
             # between wide and Split View layouts without losing its own draft.
-            tablet = await browser.new_context(viewport=dict(width=1024, height=1366), is_mobile=True, has_touch=True, service_workers='block')
+            tablet = await browser.new_context(viewport=dict(width=1024, height=1366), device_scale_factor=2, is_mobile=True, has_touch=True, service_workers='block')
             touch = await tablet.new_page()
             touch.on('pageerror', lambda error: errors.append(str(error)))
             await touch.goto(url)
@@ -204,10 +256,21 @@ async def main(browser_name, root):
                 await expect(touch.locator('[data-role="positive"]')).to_have_value('Tablet draft')
                 assert await touch.evaluate('document.documentElement.scrollWidth <= innerWidth')
                 assert await touch.locator('#job-card').is_hidden()
+            await touch.set_viewport_size(dict(width=1366, height=1024))
+            await touch.locator('#gallery-tab').tap()
+            high_dpi = touch.get_by_role('button', name='View desktop.png', exact=True)
+            await high_dpi.scroll_into_view_if_needed()
+            await expect(high_dpi.locator('img')).to_have_js_property('complete', True)
+            assert 'size=1280' in await high_dpi.locator('img').evaluate('el => el.currentSrc')
+            await touch.get_by_role('button', name='View image00.png', exact=True).tap()
+            await expect(touch.locator('#reuse-image')).to_be_disabled()
+            await expect(touch.locator('#image-reuse-status')).to_contain_text('another browser session')
             await tablet.close()
             assert not errors, errors
             print(json.dumps(dict(browser=browser_name, responsive_layout='phone, tablet portrait/landscape, Split View, laptop, short window',
                 generation='fixture: model loading, progress/preview, sticky controls, offline completion and reload',
+                reuse='mobile jobs and desktop PNG: exact seed, variation, no auto-submit, missing metadata, unchanged files',
+                previews='768px at 1x, 1280px at 2x; private sessions remain isolated',
                 gallery='4 columns, keyboard comparison, accessible close', tablet='touch expansion, rotation, isolated draft', javascript_errors=errors)))
             await browser.close()
     finally:

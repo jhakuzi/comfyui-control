@@ -590,7 +590,7 @@ class MobileService:
                 await self.scan_gallery()
             ordered = sorted(self.images.values(), key=lambda item: item.get('created',
                 self.jobs.get(item.get('job'), {}).get('created', 0)), reverse=True)
-            return [{**item, 'job': item.get('job') if owner is None or
+            return [{**item, 'reuse': self.image_reuse_status(item, owner), 'job': item.get('job') if owner is None or
                      self.jobs.get(item.get('job'), {}).get('owner') == owner else None}
                     for item in ordered if item['id'] not in self.unavailable_images][:200]
 
@@ -702,6 +702,65 @@ class MobileService:
             return False
         key = self.image_ownership_key(item)
         return key not in self.image_owners or self.image_owners[key] == owner
+
+    def image_reuse_status(self, item, owner):
+        if not self._metadata_allowed(item, owner):
+            return dict(available=False, reason='Generation settings belong to another browser session.')
+        job = self.jobs.get(item.get('job'), {})
+        if job.get('preset') and job.get('revision') and isinstance(job.get('values'), dict):
+            return dict(available=True, reason='')
+        if item.get('type') == 'output' and self.local_comfy and Path(item['filename']).suffix.lower() == '.png':
+            # Read the bounded PNG metadata only when reuse is requested, not
+            # on every gallery refresh or for every thumbnail on a slow NAS.
+            return dict(available=True, reason='')
+        return dict(available=False, reason='No saved mobile settings or local ComfyUI PNG workflow are available for this image.')
+
+    async def prepare_image_reuse(self, identifier, owner):
+        from .image_metadata import png_graph
+        item = self.images.get(identifier)
+        if not item or identifier in self.unavailable_images:
+            raise ValueError('Image is no longer available. Refresh the gallery.')
+        status = self.image_reuse_status(item, owner)
+        if not status['available']:
+            raise ValueError(status['reason'])
+        job = self.jobs.get(item.get('job'), {})
+        if job.get('preset') and job.get('revision') and isinstance(job.get('values'), dict):
+            return self.public_job(job)
+        scope = self.output_scope
+        path = await self.network_io('read', item) if self.network_output else self.local_image(item)
+        try:
+            graph = await asyncio.to_thread(png_graph, path)
+        except OSError:
+            graph = None
+        if graph is None:
+            raise ValueError('This image has no usable ComfyUI API workflow saved in its PNG metadata. Use a PNG saved by ComfyUI with metadata enabled, or import its API workflow.')
+        if scope != self.output_scope or not self._metadata_allowed(item, owner):
+            raise ValueError('The output folder or image ownership changed. Refresh the gallery before reusing this image.')
+        # Prefer the user's existing input mappings, but only when replacing
+        # their mapped literals reproduces this exact saved graph. Unknown
+        # nodes, connections and unmapped inputs must remain unchanged.
+        preset = None
+        for entry in self.presets.list():
+            existing = self.presets.get(entry['id'])
+            candidate = deepcopy(existing['graph'])
+            for mapping in existing['mappings']:
+                node, name = mapping['node'], mapping['input']
+                if node not in graph or type(graph[node]['inputs'].get(name)) not in (str, int, float, bool):
+                    break
+                candidate[node]['inputs'][name] = graph[node]['inputs'][name]
+            else:
+                if json.dumps(candidate, sort_keys=True) == json.dumps(graph, sort_keys=True):
+                    preset = existing
+                    break
+        if preset is None:
+            if self.image_ownership_key(item) in self.image_owners:
+                raise ValueError('This image\'s mobile generation record is no longer available. Select an existing workflow with matching input mappings to reuse it.')
+            preset = self.presets.create(('Image · ' + Path(item['filename']).stem)[:100], graph)
+            preset = self.presets.map(preset['id'], suggested_mappings(graph, self.info), automatic=True)
+        description = await self.describe(preset)
+        return dict(preset=description['id'], revision=description['revision'], disabled_loras=[],
+                    values={field['key']: graph[field['node']]['inputs'][field['input']] for field in description['fields']},
+                    controls=description['fields'])
 
     async def image_details(self, identifier, owner=None):
         from .image_metadata import image_size, png_details

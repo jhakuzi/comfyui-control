@@ -539,6 +539,11 @@ details details {
   height: 100%;
   object-fit: cover;
 }
+.image-grid picture {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
 .image-grid .missing {
   padding: 20px;
   font-size: 0.8rem;
