@@ -16,6 +16,15 @@ The `1.0.0rc1` suite has 337 automated tests covering desktop behaviour, appeara
 The user has separately confirmed NFS setup/removal, mobile gallery access and
 recovery after connection loss on their actual installation.
 
+Uninstaller coverage uses disposable user homes and fixture packages. It checks
+the real installer/standalone script, legacy and current shortcut ownership,
+pip-only removal, mounted/symlink/shared-folder guards, confirmation/cancellation,
+folder identity changes and desktop server/child/WebUI shutdown before deletion.
+The per-user subprocess cases intentionally skip root-only RPM runners; refusal
+to uninstall as root is checked separately. A disposable full Qt environment
+also completed self-removal and displayed its real success dialog after the
+environment was deleted. No real user ComfyUI/NAS data is used.
+
 [Current Fedora desktop screenshot](screenshots/desktop-0.10.2.png)
 
 Screenshots live in `docs/screenshots/`. Use a versioned filename when replacing

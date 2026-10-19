@@ -55,6 +55,8 @@ def apply_application_style(name):
 
 
 class SettingsDialog(QDialog):
+    UninstallRequested = 2
+
     def __init__(self, config, parent=None, *, launch_locked=False):
         super().__init__(parent)
         self.setWindowTitle("Settings")
@@ -167,6 +169,9 @@ class SettingsDialog(QDialog):
         area.setWidgetResizable(True)
         area.setWidget(self.launch_contents)
         layout.addWidget(area)
+        self.uninstall_button = QPushButton('Uninstall app')
+        self.uninstall_button.clicked.connect(lambda: self.done(self.UninstallRequested))
+        layout.addWidget(self.uninstall_button, alignment=Qt.AlignmentFlag.AlignLeft)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
@@ -400,12 +405,14 @@ class MainWindow(QMainWindow):
 
     def __init__(self, config, first_run=False, load_error=""):
         super().__init__()
+        self.uninstall_plan = None
         style_available = apply_application_style(config.application_style)
         self.setWindowTitle(f"ComfyUI Control {__version__}")
         self.setWindowIcon(application_icon())
         self.resize(920, 740)
         self.setMinimumSize(580, 400)
         self._closing = False
+        self._closed = False
         self._tray_quit_requested = False
         self.tray = QSystemTrayIcon(self.windowIcon(), self)
         self.tray_menu = QMenu(self)
@@ -771,7 +778,10 @@ class MainWindow(QMainWindow):
         current = self.controller.config
         locked = self.controller.state not in {'stopped', 'crashed'} or not (current.directory / 'main.py').is_file() or not current.comfy_dir
         dialog = SettingsDialog(current, self, launch_locked=locked)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
+        result = dialog.exec()
+        if result == SettingsDialog.UninstallRequested:
+            self._uninstall()
+        elif result == QDialog.DialogCode.Accepted:
             config = dialog.result_config
             if replace(config, application_style=current.application_style, close_behavior=current.close_behavior) == current:
                 self.controller.config = config
@@ -788,6 +798,28 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(self, "Style unavailable", "This style could not be loaded. Choose System default or another available style.")
             if dialog.setup_mount_requested:
                 QTimer.singleShot(0, lambda: None if self._closing else self._setup_network_mount())
+
+    def _uninstall(self):
+        from .uninstall import UninstallError
+        from .uninstall_widgets import UninstallDialog
+        if self.network_output.job or self.network_output.setup_open:
+            QMessageBox.information(self, 'Mount operation in progress', 'Wait for the network mount operation to finish before uninstalling.')
+            return
+        if self.controller.state == 'updating':
+            QMessageBox.information(self, 'Update in progress', 'Wait for the update to finish before uninstalling.')
+            return
+        try:
+            dialog = UninstallDialog(self.controller.config, self)
+        except (UninstallError, OSError) as exc:
+            QMessageBox.information(self, 'Uninstall this installation', str(exc))
+            return
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        if self.network_output.job or self.network_output.setup_open:
+            QMessageBox.information(self, 'Mount operation in progress', 'Wait for the network mount operation to finish, then retry uninstalling.')
+            return
+        self.uninstall_plan = dialog.plan
+        self._quit_from_tray()
 
     def _start_stop(self):
         if self.controller.state in {'stopped','crashed'}:
@@ -871,6 +903,8 @@ class MainWindow(QMainWindow):
     def _fit_contents(self):
         # Wrapped labels can change their minimum after the inner layout runs.
         # Recheck the central layout too, including its current-width height.
+        if self._closing:
+            return
         body = self.centralWidget()
         self.setMinimumHeight(max(400, body.minimumSizeHint().height(), body.heightForWidth(body.width())))
 
@@ -938,7 +972,10 @@ class MainWindow(QMainWindow):
             self._tray_quit_requested = False
 
     def closeEvent(self, event):
-        quit_confirmed = not self._tray_quit_requested and self.controller.config.close_behavior == 'quit'
+        if self._closed:
+            event.accept()
+            return
+        quit_confirmed = self.uninstall_plan is not None or not self._tray_quit_requested and self.controller.config.close_behavior == 'quit'
         if not self._closing and not self._tray_quit_requested and QSystemTrayIcon.isSystemTrayAvailable():
             choice = self._close_choice() if self.controller.config.close_behavior == 'ask' else self.controller.config.close_behavior
             if choice == 'tray':
@@ -967,6 +1004,7 @@ class MainWindow(QMainWindow):
             self.monitor.stop()
             self.tray_watch.stop()
             self.tray.hide()
+            self._closed = True
             self.closed.emit()
             return
         if not self._closing:
@@ -1015,9 +1053,18 @@ def desktop_main():
     window.closed.connect(app.quit)
     window.show()
     result = app.exec()
-    window.deleteLater()
-    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
-    lock.unlock()
+    uninstall_plan = window.uninstall_plan
+    try:
+        if uninstall_plan is not None:
+            from .uninstall_widgets import run_uninstall
+            result = run_uninstall(uninstall_plan)
+    finally:
+        # The uninstall dialogs run a nested event loop. Keep the retired
+        # window alive until it ends so queued Qt callbacks cannot target
+        # already-deleted C++ widgets. Owned server/mobile work is stopped.
+        window.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        lock.unlock()
     return result
 
 

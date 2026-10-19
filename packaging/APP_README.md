@@ -2,6 +2,10 @@
 
 A small Qt desktop app for starting, stopping, and updating ComfyUI on Linux.
 
+**Uninstall:** use **Settings → Uninstall app**, or run `bash uninstall.sh` from
+this download. Choose app-only removal or confirm removing the configured ComfyUI
+folder too. Settings and external/NAS files are kept.
+
 **Version 1.0.1** includes a responsive Mobile WebUI for phones, tablets and
 laptops, live progress, a gallery and reuse from ComfyUI PNG metadata.
 Mapped LoRA filenames have installed-model dropdowns, including custom loaders.

@@ -82,4 +82,12 @@ Password protection is optional.
 The app's **Update** button updates your ComfyUI installation. Settings are kept
 when updating this app.
 
+## Uninstall
+
+**ZIP/pip:** **Settings → Uninstall app**, or run `bash uninstall.sh` from the
+download. Choose app-only removal or explicitly confirm deleting the configured
+ComfyUI folder too. Settings and external/NAS files are kept.
+**RPM:** `sudo dnf remove comfyui-control`.
+[Uninstall details](docs/UNINSTALL.md).
+
 [Usage & troubleshooting](https://github.com/jhakuzi/comfyui-control/blob/main/docs/USAGE.md) · [Maintainer guide](https://github.com/jhakuzi/comfyui-control/blob/main/docs/MAINTAINING.md) · [MIT license](LICENSE)

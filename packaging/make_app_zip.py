@@ -16,6 +16,7 @@ def main():
     version = tomllib.loads((root / "pyproject.toml").read_text())["project"]["version"]
     files = {
         "install.sh": root / "install.sh",
+        "uninstall.sh": root / "uninstall.sh",
         "pyproject.toml": root / "pyproject.toml",
         "README.md": root / "packaging/APP_README.md",
     }
@@ -35,7 +36,7 @@ def main():
         for relative, source in sorted(files.items()):
             info = zipfile.ZipInfo(f"comfyui-control/{relative}", date_time=(1980, 1, 1, 0, 0, 0))
             info.create_system = 3
-            info.external_attr = (stat.S_IFREG | (0o755 if relative == "install.sh" else 0o644)) << 16
+            info.external_attr = (stat.S_IFREG | (0o755 if relative in {"install.sh", "uninstall.sh"} else 0o644)) << 16
             info.compress_type = zipfile.ZIP_DEFLATED
             output.writestr(info, source.read_bytes())
     # A stable filename keeps the README's app-download link valid.
