@@ -59,7 +59,7 @@
           /><button class="primary" type="submit">Connect</button>
         </form>
       </section>
-      <div id="workspace" hidden>
+      <div id="workspace" data-page="create" hidden>
         <aside id="output-warning" role="status" hidden>
           <strong id="output-warning-title"></strong>
           <p id="output-warning-error"></p>
@@ -185,6 +185,13 @@
               </button>
             </details>
           </form>
+        </section>
+        <aside id="generation-panel" aria-label="Generation preview and results">
+          <h2 class="wide-screen-only">Preview & results</h2>
+          <p id="generation-empty" class="wide-screen-only muted">
+            Your next image starts here. Choose a workflow, enter your prompt,
+            and tap Generate.
+          </p>
           <div id="job-output">
             <section
               class="card job-card"
@@ -221,7 +228,20 @@
               </div>
             </section>
           </div>
-        </section>
+          <div class="generate-bar" id="generation-dock">
+            <div class="card" id="dock-submitting" role="status" hidden>
+              <p>Sending your idea…</p>
+              <progress max="1"></progress>
+            </div>
+            <button id="dock-result" type="button" hidden>
+              <img id="dock-result-image" alt="" width="40" height="40" />
+              <span>View result</span>
+            </button>
+            <button class="primary" id="generate" type="submit" form="generate-form" disabled>
+              <span aria-hidden="true">✦</span> Generate
+            </button>
+          </div>
+        </aside>
         <section id="gallery-page" hidden>
           <div class="heading">
             <div>
@@ -244,19 +264,6 @@
             No images yet. Your next idea starts in Create.
           </p>
         </section>
-        <div class="generate-bar" id="generation-dock">
-          <div class="card" id="dock-submitting" role="status" hidden>
-            <p>Sending your idea…</p>
-            <progress max="1"></progress>
-          </div>
-          <button id="dock-result" type="button" hidden>
-            <img id="dock-result-image" alt="" width="40" height="40" />
-            <span>View result</span>
-          </button>
-          <button class="primary" id="generate" type="submit" form="generate-form" disabled>
-            <span aria-hidden="true">✦</span> Generate
-          </button>
-        </div>
       </div>
       <p id="notice" role="alert" hidden></p>
     </main>

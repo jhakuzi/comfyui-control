@@ -2,7 +2,11 @@
 
 A small Qt desktop app for starting, stopping, and updating ComfyUI on Linux.
 
-**Testing 1.0.0rc2.dev1** adds foreground SSH startup:
+**Testing 1.0.0rc2.dev2** adds a responsive Mobile WebUI for phones, tablets and
+laptops: the same URL automatically switches between compact and two-column
+layouts. [Testing guide](https://github.com/jhakuzi/comfyui-control/blob/testing/responsive-webui/docs/RESPONSIVE_WEBUI.md).
+
+Includes foreground SSH startup:
 `comfyui-control --start-server --start-webui`. Use your existing configuration;
 Ctrl+C stops both components. [SSH guide](https://github.com/jhakuzi/comfyui-control/blob/testing/ssh-startup/docs/SSH.md).
 No flags opens the normal desktop window.

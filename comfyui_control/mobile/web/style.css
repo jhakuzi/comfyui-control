@@ -763,6 +763,9 @@ dialog::backdrop {
 .job-card {
   scroll-margin-top: 20px;
 }
+.wide-screen-only {
+  display: none;
+}
 [hidden] {
   display: none !important;
 }
@@ -784,6 +787,154 @@ dialog::backdrop {
   }
   .image-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+/* Use available space, rather than a device/user-agent guess. A narrow laptop
+   window and iPad Split View retain the phone layout and its fixed progress dock. */
+@media (min-width: 1000px) and (min-height: 600px) {
+  main,
+  .masthead {
+    max-width: 1440px;
+  }
+  #login,
+  #offline {
+    max-width: 640px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  #workspace[data-page="create"] {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    gap: 0 28px;
+    align-items: start;
+  }
+  .tabs {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+  #output-warning {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  #create-page {
+    grid-column: 1;
+    grid-row: 3;
+    min-width: 0;
+  }
+  main:has(#workspace[data-page="create"]:not([hidden])) {
+    padding-bottom: calc(35px + var(--safe-area-bottom));
+  }
+  #workspace[data-page="create"] #generation-panel {
+    grid-column: 2;
+    grid-row: 2 / span 2;
+    position: sticky;
+    top: calc(16px + var(--safe-area-top));
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    /* Reserve room for the masthead and tabs before sticky positioning starts. */
+    max-height: calc(100dvh - 210px - var(--safe-area-top) - var(--safe-area-bottom));
+    padding: 22px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+  }
+  #workspace[data-page="create"] .wide-screen-only {
+    display: block;
+  }
+  #generation-empty {
+    padding: 40px 12px;
+    text-align: center;
+  }
+  #workspace[data-page="create"] #job-output {
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  #workspace[data-page="create"] #job-output > .job-card {
+    margin: 0 0 16px;
+    padding: 0;
+    background: transparent;
+    border: 0;
+  }
+  #workspace[data-page="create"] .generate-bar {
+    position: static;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  #workspace[data-page="create"] .generate-bar > button {
+    flex-shrink: 0;
+  }
+  #workspace[data-page="create"] #dock-result {
+    /* The full result is already directly above Generate in this layout. */
+    display: none;
+  }
+  #workspace[data-page="create"] .generate-bar > .job-card {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    max-height: calc(100dvh - 210px - var(--safe-area-top) - var(--safe-area-bottom));
+    margin-bottom: 14px;
+    padding: 0 0 14px;
+    border: 0;
+    border-radius: 0;
+    border-bottom: 1px solid var(--line);
+    background: transparent;
+    box-shadow: none;
+  }
+  #workspace[data-page="create"] .generate-bar > .job-card .preview {
+    width: 100%;
+    height: clamp(160px, 32dvh, 400px);
+    min-height: 60px;
+    flex-shrink: 1;
+  }
+  #workspace[data-page="create"] .generate-bar > .job-card .heading,
+  #workspace[data-page="create"] .generate-bar > .job-card .hint,
+  #workspace[data-page="create"] .generate-bar > .job-card progress,
+  #workspace[data-page="create"] .generate-bar > .job-card .generation-stats {
+    flex-shrink: 0;
+  }
+  #workspace[data-page="create"] #job-images {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  #workspace[data-page="create"] #job-images:has(> :only-child) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #workspace[data-page="create"] #job-images button {
+    aspect-ratio: auto;
+    height: clamp(180px, 40dvh, 480px);
+  }
+  #workspace[data-page="create"] #job-images img {
+    object-fit: contain;
+  }
+  main:has(#workspace[data-page="create"]:not([hidden])) #notice {
+    bottom: calc(16px + var(--safe-area-bottom));
+  }
+  #workspace[data-page="gallery"] .generate-bar {
+    left: auto;
+    right: calc(28px + var(--safe-area-right));
+    width: 440px;
+  }
+  #workspace[data-page="gallery"] .wide-screen-only {
+    display: none;
+  }
+  #gallery-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+  }
+  #compare-dialog,
+  #image-dialog {
+    width: min(1120px, calc(100% - 56px - var(--safe-area-left) - var(--safe-area-right)));
+  }
+  .compare-viewport {
+    aspect-ratio: 16 / 10;
+    max-height: 62dvh;
   }
 }
 @media (max-width: 360px) {

@@ -3,6 +3,10 @@
 Available in **ComfyUI Control 0.9.0**. No separate service or mobile installation
 is required. Keep the desktop app open while using it.
 
+The [responsive testing build](RESPONSIVE_WEBUI.md) uses the same address on
+phones, large iPads and laptops. Wider windows show settings beside a pinned
+preview/results column; narrow windows and Split View keep the compact layout.
+
 ## Run from source in an isolated environment
 
 Close any running ComfyUI Control window, then:

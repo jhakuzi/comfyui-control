@@ -6,6 +6,7 @@ A small Qt app for ComfyUI on Linux, built with KDE Plasma in mind.
 without a window; Ctrl+C stops it. [Testing instructions](docs/SSH.md).
 Start/stop, restart, Git or Comfy CLI updates, launch flags, and folder shortcuts.
 Includes a [Mobile WebUI](docs/MOBILE.md) for generating images from your phone.
+The [responsive testing build](docs/RESPONSIVE_WEBUI.md) also adapts to laptops and large iPads.
 
 **1.0.0rc1:** tray controls, expandable mobile prompts, and optional
 [NFS output with local fallback](docs/NFS_OUTPUT.md). [Release notes](docs/releases/1.0.0rc1.md).

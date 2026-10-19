@@ -1,5 +1,30 @@
 # Mobile WebUI architecture and verification
 
+## 1.0.0rc2.dev2 responsive frontend
+
+The same HTML, CSS and JavaScript adapt to the browser viewport, without device
+identification, a separate frontend, new dependencies or API changes. At 1000px
+wide and 600px tall, Create becomes two columns. An aside holds the existing
+job output and generation dock; the phone dock keeps its fixed positioning.
+On wide screens the aside sticks while the settings scroll, with bounded
+overflow so controls remain accessible in shorter windows. Gallery retains the
+active floating dock, expands to four columns, and uses larger image/comparison
+dialogs. Small windows, rotation and Split View switch layouts automatically.
+
+The only new application state is the current tab's DOM attribute. Original
+prompt drafts, workflow mappings, client identities, job recovery, image access
+and comparison caching remain shared. Switching viewport does not submit jobs.
+The service-worker shell cache version is bumped; private data is not cached.
+
+Verification: 357 automated checks passed. The new optional
+`tests/manual/mobile_responsive_browser.py` passed in Chromium and Linux WebKit,
+covering 320–1440px widths, tablet portrait/landscape, Split View, short windows,
+keyboard/touch controls, pinned live progress, larger previews, four-column
+gallery, comparison, draft preservation, client isolation and completion after
+a simulated disconnect/reload. Existing Chromium generation/recovery and mobile
+extras checks also passed. These use a protocol fixture and local PNGs, not
+physical Apple devices, actual VPN access or GPU inference.
+
 ## 1.0.0rc2.dev1 foreground SSH startup
 
 `cli.py` dispatches explicit component flags to `headless.py`; normal launches

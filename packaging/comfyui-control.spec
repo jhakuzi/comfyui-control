@@ -1,6 +1,6 @@
 Name:           comfyui-control
 Version:        1.0.0~rc2
-Release:        0.1.dev1%{?dist}
+Release:        0.2.dev2%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
 License:        MIT
@@ -62,6 +62,10 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Mon Oct 19 2026 ComfyUI Control contributors - 1.0.0~rc2-0.2.dev2
+- Testing: responsive tablet/laptop Mobile WebUI with pinned preview and controls.
+- Expand gallery and comparison layouts while preserving phone behavior.
+
 * Mon Oct 19 2026 ComfyUI Control contributors - 1.0.0~rc2-0.1.dev1
 - Testing: foreground SSH startup for configured ComfyUI and Mobile WebUI.
 - Reuse process ownership, signal shutdown, NFS selection and hardware workers.

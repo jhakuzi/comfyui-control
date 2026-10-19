@@ -161,6 +161,7 @@ function restoreUI() {
   uiReady = true;
 }
 function selectTab(name) {
+  $("workspace").dataset.page = name;
   $("create-page").hidden = name !== "create";
   $("gallery-page").hidden = name !== "gallery";
   $("create-tab").classList.toggle("selected", name === "create");
@@ -182,6 +183,8 @@ function syncGenerationDock() {
     card = $("job-card"),
     destination = active ? dock : $("job-output");
   renderGenerationStats(job);
+  $("job-output").hidden = !$("gallery-page").hidden;
+  $("generation-empty").hidden = !!job || submitting;
   if (card.parentElement !== destination) {
     if (active) destination.prepend(card);
     else destination.append(card);
