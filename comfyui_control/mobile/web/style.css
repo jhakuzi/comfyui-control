@@ -273,6 +273,9 @@ main {
 .card h2 {
   margin-top: 0;
 }
+#generate-form > .card:first-of-type {
+  margin-top: 0;
+}
 .heading {
   display: flex;
   gap: 14px;

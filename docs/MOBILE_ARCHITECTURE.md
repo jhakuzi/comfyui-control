@@ -1,5 +1,11 @@
 # Mobile WebUI architecture and verification
 
+## 1.0.0rc2.dev3 Create spacing
+
+Removed the decorative Create heading on all screen sizes and the first card's
+top margin, aligning the wide layout's workflow and preview cards. The ComfyUI
+offline hint now sits inside the workflow card so it does not offset its column.
+
 ## 1.0.0rc2.dev2 responsive frontend
 
 The same HTML, CSS and JavaScript adapt to the browser viewport, without device

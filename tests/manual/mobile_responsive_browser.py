@@ -78,6 +78,8 @@ async def main(browser_name, root):
                 if wide:
                     assert panel['x'] >= form['x'] + form['width'] + 20, (form, panel)
                     assert panel['width'] >= 350
+                    card = await page.locator('#generate-form > .card').first.bounding_box()
+                    assert abs(card['y'] - panel['y']) < 1, (card, panel)
                 else:
                     assert await page.locator('#generation-dock').evaluate('el => getComputedStyle(el).position') == 'fixed'
                 await expect(prompt).to_have_value('An unsent draft survives resizing')

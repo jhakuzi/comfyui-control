@@ -70,17 +70,7 @@
           ><button id="gallery-tab" type="button">Gallery</button>
         </nav>
         <section id="create-page">
-          <div class="heading">
-            <div>
-              <p class="eyebrow">YOUR IDEAS, IN FOCUS</p>
-              <h1>What will you create?</h1>
-            </div>
-          </div>
           <form id="generate-form">
-            <p id="comfy-offline" class="hint" hidden>
-              Start ComfyUI in the desktop app. This page will reconnect
-              automatically.
-            </p>
             <section class="card">
               <label for="preset">Workflow</label
               ><select id="preset">
@@ -88,6 +78,10 @@
               </select>
               <p id="empty-presets" class="hint">
                 Import an API-format workflow below to get started.
+              </p>
+              <p id="comfy-offline" class="hint" hidden>
+                Start ComfyUI in the desktop app. This page will reconnect
+                automatically.
               </p>
               <div id="prompt-controls"></div>
               <button id="prompt-history" class="small prompt-action" type="button">History & favorites</button>

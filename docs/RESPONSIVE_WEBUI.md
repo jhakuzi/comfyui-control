@@ -1,4 +1,4 @@
-# Responsive WebUI testing — 1.0.0rc2.dev2
+# Responsive WebUI testing — 1.0.0rc2.dev3
 
 Open the **same Mobile WebUI URL** on your phone, iPad or laptop. No device
 setting, second server or separate installation is needed.
@@ -7,6 +7,7 @@ setting, second server or separate installation is needed.
 - **Large iPad / laptop:** prompts and settings on the left; a pinned preview,
   progress and Generate column on the right. Scroll the settings while tracking
   generation. Completed images appear in that column.
+- Create opens directly at Workflow, with both columns aligned at the top.
 - **Gallery:** four columns and larger image/comparison dialogs on wide screens.
 
 Layout follows available space, not the device name: two columns start at
