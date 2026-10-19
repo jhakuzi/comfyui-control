@@ -1,5 +1,23 @@
 # Mobile WebUI architecture and verification
 
+## 1.0.0rc2.dev4 wide-screen header progress
+
+The existing progress/detail/statistic elements share a `job-metrics` wrapper.
+At the same wide-screen breakpoint, active jobs move this single wrapper into
+the masthead; narrowing the viewport or ending a job returns it to the job card.
+No metrics are duplicated and no extra monitoring requests are introduced.
+On phones `display: contents` preserves the existing dock's layout. The active
+wide header sticks during scrolling, with its observed height used to offset
+the preview panel and Gallery comparison toolbar. The sign-in screen hides
+header job information. Completed results retain their original details.
+
+Verification: the responsive checks passed in Chromium and Linux WebKit with
+single-instance metric placement, visible progress/VRAM/GPU values at every
+scroll position, phone restoration after resizing, sign-in hiding and job
+recovery after reload. Existing Chromium generation/reconnect checks and WebKit
+mobile extras also passed. These use simulated ComfyUI events, not GPU inference
+or a physical iPad/iPhone.
+
 ## 1.0.0rc2.dev3 Create spacing
 
 Removed the decorative Create heading on all screen sizes and the first card's

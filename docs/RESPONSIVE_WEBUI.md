@@ -1,12 +1,13 @@
-# Responsive WebUI testing — 1.0.0rc2.dev3
+# Responsive WebUI testing — 1.0.0rc2.dev4
 
 Open the **same Mobile WebUI URL** on your phone, iPad or laptop. No device
 setting, second server or separate installation is needed.
 
 - **Phone / narrow window:** existing compact controls and bottom Generate/progress dock.
 - **Large iPad / laptop:** prompts and settings on the left; a pinned preview,
-  progress and Generate column on the right. Scroll the settings while tracking
-  generation. Completed images appear in that column.
+  results and Generate column on the right. Live progress, s/it, VRAM and GPU
+  usage appear in the top header while generating, including in Gallery.
+  The header stays visible while scrolling. Completed images appear on the right.
 - Create opens directly at Workflow, with both columns aligned at the top.
 - **Gallery:** four columns and larger image/comparison dialogs on wide screens.
 

@@ -2,9 +2,10 @@
 
 A small Qt desktop app for starting, stopping, and updating ComfyUI on Linux.
 
-**Testing 1.0.0rc2.dev3** adds a responsive Mobile WebUI for phones, tablets and
+**Testing 1.0.0rc2.dev4** adds a responsive Mobile WebUI for phones, tablets and
 laptops: the same URL automatically switches between compact and two-column
-layouts. [Testing guide](https://github.com/jhakuzi/comfyui-control/blob/testing/responsive-webui/docs/RESPONSIVE_WEBUI.md).
+layouts. Wide screens show live progress and statistics in the top header.
+[Testing guide](https://github.com/jhakuzi/comfyui-control/blob/testing/responsive-webui/docs/RESPONSIVE_WEBUI.md).
 
 Includes foreground SSH startup:
 `comfyui-control --start-server --start-webui`. Use your existing configuration;

@@ -33,7 +33,9 @@
         ><img src="/icon.png" alt="" width="34" height="34" /><span
           >comfy<span class="muted"> control</span></span
         ></a
-      ><span class="pill" id="connection" role="status">Connecting</span>
+      >
+      <div id="header-generation" role="group" aria-label="Current generation progress" aria-live="polite" hidden></div>
+      <span class="pill" id="connection" role="status">Connecting</span>
     </header>
     <main>
       <section id="offline" class="card" hidden>
@@ -199,12 +201,14 @@
                   Cancel
                 </button>
               </div>
-              <p id="job-detail" class="hint"></p>
-              <progress id="progress" max="1" value="0" hidden></progress>
-              <div id="generation-stats" class="generation-stats" hidden aria-live="off" aria-label="Live generation statistics">
-                <span><b id="stat-iteration">--</b> s/it</span>
-                <span>VRAM <b id="stat-vram">--</b></span>
-                <span>GPU <b id="stat-gpu">--</b></span>
+              <div id="job-metrics">
+                <p id="job-detail" class="hint"></p>
+                <progress id="progress" max="1" value="0" hidden></progress>
+                <div id="generation-stats" class="generation-stats" hidden aria-live="off" aria-label="Live generation statistics">
+                  <span><b id="stat-iteration">--</b> s/it</span>
+                  <span>VRAM <b id="stat-vram">--</b></span>
+                  <span>GPU <b id="stat-gpu">--</b></span>
+                </div>
               </div>
               <img
                 id="preview"

@@ -7,6 +7,7 @@ const activeStatuses = new Set([
   "cancelling",
   "unknown",
 ]);
+const wideLayout = window.matchMedia("(min-width: 1000px) and (min-height: 600px)");
 let preset = null,
   draft = {},
   disabledLoras = new Set(),
@@ -114,6 +115,7 @@ function showLogin() {
   connected = false;
   $("login").hidden = false;
   $("workspace").hidden = true;
+  syncJobMetrics(false);
   $("connection").textContent = "Sign in";
   $("connection").classList.remove("online");
 }
@@ -176,6 +178,17 @@ function currentJob() {
     ? null
     : state.jobs.find((item) => item.id === selectedJob) || state.jobs.at(-1);
 }
+function syncJobMetrics(active) {
+  const header = $("header-generation"),
+    metrics = $("job-metrics"),
+    atTop = active && wideLayout.matches && !$("workspace").hidden,
+    destination = atTop ? header : $("job-card");
+  if (metrics.parentElement !== destination) {
+    if (atTop) destination.append(metrics);
+    else destination.insertBefore(metrics, $("preview"));
+  }
+  header.hidden = !atTop;
+}
 function syncGenerationDock() {
   const job = currentJob(),
     active = !!job && activeStatuses.has(job.status),
@@ -183,6 +196,7 @@ function syncGenerationDock() {
     card = $("job-card"),
     destination = active ? dock : $("job-output");
   renderGenerationStats(job);
+  syncJobMetrics(active);
   $("job-output").hidden = !$("gallery-page").hidden;
   $("generation-empty").hidden = !!job || submitting;
   if (card.parentElement !== destination) {
@@ -1181,6 +1195,10 @@ new ResizeObserver(() => {
   const height = $("generation-dock").getBoundingClientRect().height;
   document.documentElement.style.setProperty("--generation-dock-height", `${height}px`);
 }).observe($("generation-dock"));
+wideLayout.addEventListener("change", syncGenerationDock);
+new ResizeObserver(([entry]) => {
+  document.documentElement.style.setProperty("--masthead-height", `${entry.target.getBoundingClientRect().height}px`);
+}).observe(document.querySelector(".masthead"));
 $("mapping-search").addEventListener("input", renderMappings);
 $("save-mapping").addEventListener(
   "click",

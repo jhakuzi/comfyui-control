@@ -343,6 +343,9 @@ main {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+#job-metrics {
+  display: contents;
+}
 .generation-stats b { font-weight: 500; color: var(--text); }
 .generate-bar > .job-card.has-preview .generation-stats { grid-column: 1 / -1; }
 .generate-bar > .job-card .preview {
@@ -795,6 +798,56 @@ dialog::backdrop {
 /* Use available space, rather than a device/user-agent guess. A narrow laptop
    window and iPad Split View retain the phone layout and its fixed progress dock. */
 @media (min-width: 1000px) and (min-height: 600px) {
+  body {
+    --live-header-height: 0px;
+  }
+  body:has(#header-generation:not([hidden])) {
+    --live-header-height: var(--masthead-height, 74px);
+  }
+  .masthead {
+    min-height: calc(74px + var(--safe-area-top));
+    padding-top: calc(12px + var(--safe-area-top));
+    padding-bottom: 12px;
+    gap: 24px;
+  }
+  body:has(#header-generation:not([hidden])) .masthead {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    background: var(--bg);
+  }
+  .masthead .brand,
+  .masthead .pill {
+    flex-shrink: 0;
+  }
+  #header-generation {
+    width: min(48vw, 560px);
+    min-width: 0;
+    margin: 0 auto;
+  }
+  #header-generation #job-metrics {
+    display: grid;
+    gap: 3px;
+  }
+  #header-generation .hint {
+    margin: 0;
+    font-size: 0.72rem;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #header-generation progress {
+    display: block;
+    height: 6px;
+  }
+  #header-generation .generation-stats {
+    font-size: 0.68rem;
+    gap: 4px 12px;
+  }
+  .comparison-actions {
+    top: calc(8px + max(var(--safe-area-top), var(--live-header-height)));
+  }
   main,
   .masthead {
     max-width: 1440px;
@@ -831,7 +884,7 @@ dialog::backdrop {
     grid-column: 2;
     grid-row: 2 / span 2;
     position: sticky;
-    top: calc(16px + var(--safe-area-top));
+    top: calc(16px + max(var(--safe-area-top), var(--live-header-height)));
     display: flex;
     flex-direction: column;
     min-width: 0;

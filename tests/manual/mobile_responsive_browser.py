@@ -97,6 +97,8 @@ async def main(browser_name, root):
             assert not stub.submissions
             await page.locator('#generate').click()
             await expect(page.locator('#job-title')).to_have_text('In the queue')
+            await expect(page.locator('#header-generation #progress')).to_be_visible()
+            assert await page.locator('#progress').count() == 1
             assert len(stub.submissions) == 1
             stub.running, stub.pending = stub.pending, []
             job = list(service.jobs.values())[-1]
@@ -104,6 +106,9 @@ async def main(browser_name, root):
             await stub.emit('executing', dict(prompt_id=job['prompt_id'], node='model'))
             await expect(page.locator('#job-title')).to_have_text('Preparing / loading models…')
             await stub.emit('progress', dict(prompt_id=job['prompt_id'], value=4, max=20))
+            service.update_hardware(dict(utilization=73, vram_used=6 * 2**30))
+            await expect(page.locator('#stat-gpu')).to_have_text('73%')
+            await expect(page.locator('#stat-vram')).to_have_text('6.0 GiB')
             for ws in stub.sockets:
                 await ws.send_bytes(struct.pack('>II', 1, 2) + (output / 'image00.png').read_bytes())
             await expect(page.locator('#preview')).to_be_visible()
@@ -119,10 +124,15 @@ async def main(browser_name, root):
 
             for width, height in [(1024, 1366), (1366, 1024), (1440, 900), (1000, 600), (390, 844)]:
                 await page.set_viewport_size(dict(width=width, height=height))
+                at_top = width >= 1000 and height >= 600
+                parent = '#header-generation' if at_top else '#job-card'
+                await expect(page.locator(parent + ' #progress')).to_be_visible()
+                await expect(page.locator(parent + ' #generation-stats')).to_be_visible()
                 for scroll in (0, 800, 100000):
                     await page.evaluate('(y) => window.scrollTo(0,y)', scroll)
                     await page.wait_for_timeout(60)
                     await reachable()
+                    await reachable(('stat-iteration', 'stat-vram', 'stat-gpu'))
                 await page.evaluate('window.scrollTo(0,0)')
                 await page.screenshot(path=str(root / f'progress-{width}.png'))
             # An NFS fallback warning must not push the wide preview/Generate
@@ -155,6 +165,13 @@ async def main(browser_name, root):
             await page.locator('#close-compare').click()
             await page.locator('#create-tab').click()
             await page.evaluate('window.scrollTo(0,0)')
+            # A sign-in screen must not retain job information in the header
+            # outside the now-hidden workspace. Reload restores the same job.
+            await page.evaluate('showLogin()')
+            await expect(page.locator('#header-generation')).to_be_hidden()
+            await page.reload()
+            await expect(page.locator('#header-generation #progress')).to_be_visible()
+            assert len(stub.submissions) == 1
             await context.set_offline(True)
             stub.history[job['prompt_id']] = dict(prompt=stub.running[0], status=dict(status_str='success'),
                 outputs=dict(save=dict(images=[dict(filename='image00.png', subfolder='', type='output')])))
@@ -164,6 +181,8 @@ async def main(browser_name, root):
             await context.set_offline(False)
             await expect(page.locator('#job-output #job-images img')).to_be_visible()
             await expect(page.locator('#job-title')).to_have_text('Your image is ready')
+            await expect(page.locator('#header-generation')).to_be_hidden()
+            assert await page.locator('#job-card #job-metrics').count() == 1
             await page.reload()
             await expect(page.locator('#job-images img')).to_be_visible()
             await expect(prompt).to_have_value('An unsent draft survives resizing')
