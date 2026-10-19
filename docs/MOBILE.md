@@ -1,9 +1,9 @@
 # Mobile WebUI
 
-Available in **ComfyUI Control 0.9.0**. No separate service or mobile installation
+Included in **ComfyUI Control 1.0.0**. No separate service or mobile installation
 is required. Keep the desktop app open while using it.
 
-The [responsive testing build](RESPONSIVE_WEBUI.md) uses the same address on
+The [responsive interface](RESPONSIVE_WEBUI.md) uses the same address on
 phones, large iPads and laptops. Wider windows show settings beside a pinned
 preview/results column; narrow windows and Split View keep the compact layout.
 
@@ -311,7 +311,7 @@ Turning sharing off prevents further cross-browser image-detail/reuse access.
 Drafts or shared workflow presets already copied through reuse remain saved;
 this option does not erase settings a device has already received.
 
-In the responsive testing build, **Reuse settings** and **New variation** also
+**Reuse settings** and **New variation** also
 read API workflow metadata from local PNGs saved directly by ComfyUI, including
 the configured NFS output. Compatible saved mappings are reused; otherwise a
 separate image workflow preset is created. Original PNGs, graphs and source

@@ -1,4 +1,4 @@
-# Start from SSH (testing 1.0.0rc2.dev1)
+# Start from SSH (1.0.0)
 
 After Wake on LAN, SSH into the PC using the same Linux account that configured
 ComfyUI Control. No KDE login, desktop display or background service is needed.
@@ -44,14 +44,14 @@ This is deliberately a foreground command: the SSH session controls its lifetime
 No boot-start service, user lingering or new persistent configuration is installed.
 Closing the command does not unmount an NFS share another program might use.
 
-## Try the testing build
+## Run from source
 
-RC1's installed RPM does not contain these flags yet. Leave it installed and use
-this isolated testing environment, with your existing saved configuration:
+The 1.0 RPM and ZIP installations include these flags. For an isolated source
+installation using your existing saved configuration:
 
 ```bash
-git clone --single-branch --branch testing/ssh-startup https://github.com/jhakuzi/comfyui-control.git comfyui-control-testing-ssh
-cd comfyui-control-testing-ssh
+git clone --single-branch --branch main https://github.com/jhakuzi/comfyui-control.git comfyui-control-source
+cd comfyui-control-source
 python3 -m venv .venv-test
 .venv-test/bin/python -m pip install .
 .venv-test/bin/comfyui-control --start-server --start-webui
@@ -64,9 +64,9 @@ When starting directly from another machine, request a terminal for Ctrl+C and
 use an absolute executable path:
 
 ```bash
-ssh -t your-user@your-pc '/full/path/to/comfyui-control-testing-ssh/.venv-test/bin/comfyui-control --start-server --start-webui'
+ssh -t your-user@your-pc '/usr/bin/comfyui-control --start-server --start-webui'
 ```
 
 A ZIP installation's executable is `~/.local/bin/comfyui-control`; an RPM's is
-`/usr/bin/comfyui-control`. Select the testing executable explicitly until the
-feature is released. Your SSH shell may have a different PATH from KDE.
+`/usr/bin/comfyui-control`. For a source install, use the absolute path to its
+`.venv-test/bin/comfyui-control`. Your SSH shell may have a different PATH from KDE.

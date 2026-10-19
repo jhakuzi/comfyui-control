@@ -1,4 +1,4 @@
-# Responsive WebUI testing — 1.0.0rc2.dev6
+# Responsive WebUI — 1.0.0
 
 Open the **same Mobile WebUI URL** on your phone, iPad or laptop. No device
 setting, second server or separate installation is needed.
@@ -26,15 +26,16 @@ Layout follows available space, not the device name: two columns start at
 windows can use the compact layout. Controls retain their existing touch sizing.
 Resizing or rotating preserves your prompt, workflow, settings and current job.
 Saved workflows, custom nodes, GGUF models, LoRAs and session recovery use the
-same backend. This branch also includes [foreground SSH startup](SSH.md).
+same backend. [Foreground SSH startup](SSH.md) is included in 1.0.
 
-## Try it
+## Run from source
 
-Close the running app, then install this testing copy as your usual Linux user:
+The 1.0 RPM and app ZIP include this interface. For an isolated source copy,
+close the running app and install as your usual Linux user:
 
 ```bash
-git clone --single-branch --branch testing/responsive-webui https://github.com/jhakuzi/comfyui-control.git comfyui-control-testing-responsive
-cd comfyui-control-testing-responsive
+git clone --single-branch --branch main https://github.com/jhakuzi/comfyui-control.git comfyui-control-responsive
+cd comfyui-control-responsive
 python3 -m venv .venv-test
 .venv-test/bin/python -m pip install .
 .venv-test/bin/comfyui-control
@@ -42,10 +43,9 @@ python3 -m venv .venv-test
 
 Enable Mobile WebUI as usual, and open its existing URL on each device. Reload
 an already-open browser page to pick up the new layout. Your installed RPM and
-desktop launcher are unchanged; the testing copy reads your saved configuration.
-No COPR build has been queued for this branch.
+desktop launcher are unchanged; the source copy reads your saved configuration.
 
-For SSH, use the testing executable with `--start-server --start-webui`.
+For SSH, use the source environment's executable with `--start-server --start-webui`.
 For updates, close it, run `git pull --ff-only` in this checkout and reinstall
 with `.venv-test/bin/python -m pip install .`.
 
@@ -59,9 +59,10 @@ with `.venv-test/bin/python -m pip install .`.
 4. Refresh or briefly disconnect during generation; confirm recovery and no
    duplicate request. Try Gallery, comparison selection and closing the viewer.
 
-Chromium and Linux WebKit checks passed with a simulated ComfyUI backend. Actual
-iPad/iPhone Safari, your LAN/VPN, GPU generation and real workflows still need
-testing on your installation. Browser checks can be repeated with Playwright:
+Chromium and Linux WebKit checks passed with a simulated ComfyUI backend. The user
+also confirmed phone/laptop/iPad use, generation settings, SSH, NFS/fallback,
+iPhone reconnection and cross-device reuse on their own installation. Other
+devices/workflows may need their own checks. Repeat browser checks with Playwright:
 
 ```bash
 python tests/manual/mobile_responsive_browser.py --browser chromium

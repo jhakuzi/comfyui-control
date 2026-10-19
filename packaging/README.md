@@ -1,8 +1,8 @@
 # Fedora RPM and COPR
 
-Version **1.0.0rc1** is the first 1.0 release candidate. RPM version
-`1.0.0~rc1-2` upgrades 0.11.x and sorts below final `1.0.0-1`.
-See the [release notes](../docs/releases/1.0.0rc1.md). Development versions remain
+Version **1.0.0** is the stable 1.0 release. RPM version `1.0.0-1` upgrades
+0.11.x and the `1.0.0~rc1`/`1.0.0~rc2` candidates normally.
+See the [release notes](../docs/releases/1.0.0.md). Development versions remain
 blocked from COPR; stable releases and explicitly numbered RCs can be published.
 
 ## App ZIP download

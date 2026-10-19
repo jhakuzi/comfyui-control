@@ -2,14 +2,12 @@
 
 A small Qt app for ComfyUI on Linux, built with KDE Plasma in mind.
 
-**SSH testing build:** `comfyui-control --start-server --start-webui` runs
-without a window; Ctrl+C stops it. [Testing instructions](docs/SSH.md).
 Start/stop, restart, Git or Comfy CLI updates, launch flags, and folder shortcuts.
-Includes a [Mobile WebUI](docs/MOBILE.md) for generating images from your phone.
-The [responsive testing build](docs/RESPONSIVE_WEBUI.md) also adapts to laptops and large iPads.
+Includes a [Mobile WebUI](docs/MOBILE.md) for phones, iPads and laptops.
 
-**1.0.0rc1:** tray controls, expandable mobile prompts, and optional
-[NFS output with local fallback](docs/NFS_OUTPUT.md). [Release notes](docs/releases/1.0.0rc1.md).
+**1.0.0:** responsive WebUI, optional cross-device image reuse, tray controls,
+[SSH startup](docs/SSH.md), and [NFS output with local fallback](docs/NFS_OUTPUT.md).
+[Release notes](docs/releases/1.0.0.md).
 
 [System/sampling monitoring and optional crash recovery](docs/FEATURES.md) keep
 server activity visible without leaving the app.
@@ -49,19 +47,23 @@ Open **ComfyUI Control** from the application menu. Select your existing ComfyUI
 folder containing `main.py`, or choose **Install with Comfy CLI**, then press **Start**.
 Use **Settings** for Python, scripts, flags, and the application style.
 
+Over SSH: `comfyui-control --start-server --start-webui`. **Ctrl+C** stops both
+servers. Uses your saved configuration; no desktop login is needed.
+
 ## Mobile UI
 
-Generate from your phone over your LAN or VPN using saved ComfyUI workflows.
+Generate from your phone, iPad or laptop over your LAN or VPN using saved workflows.
 
 <a href="docs/screenshots/mobile-create-0.10.1.png"><img src="docs/screenshots/mobile-create-0.10.1.png" alt="Mobile prompt and diffusion, VAE, and text encoder selectors" width="300"></a>
 <a href="docs/screenshots/mobile-generation-0.10.1.png"><img src="docs/screenshots/mobile-generation-0.10.1.png" alt="Mobile generation settings with sampling progress anchored above Generate" width="300"></a>
 
-*Current Mobile WebUI with an example workflow and simulated sampling progress. Click to enlarge.*
+*Example workflow and simulated sampling progress. Click to enlarge.*
 
 - Edit prompts, choose models (including GGUF), and adjust supported LoRAs and generation settings.
-- Follow live progress and previews above Generate while scrolling. Jobs and drafts recover after reconnecting.
+- Follow live progress and previews while scrolling. Jobs and drafts recover after reconnecting.
 - Browse your gallery, save images, and reuse settings or create variations.
 - Select two gallery images to compare them with a touch slider.
+- Enable optional image-settings sharing to reuse generations across your devices.
 
 Live s/it, VRAM and GPU usage, searchable prompt history/favorites, and image
 Details keep generation controls close at hand. Comparison keeps the selected
