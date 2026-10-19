@@ -103,6 +103,9 @@ class MobileService:
         self.resume_task = None
         self.info = {}
         self.info_time = 0
+        self.lora_files = None
+        self.lora_files_time = 0
+        self.lora_files_lock = asyncio.Lock()
         self.session = None
         self.client = None
         self.socket_task = None
@@ -214,6 +217,24 @@ class MobileService:
             self.info_time = time.monotonic()
         return self.info
 
+    async def lora_choices(self, preset, info, force=False):
+        if not info or self.client is None or not any(field['role'] == 'lora_model' and field['options'] is None
+                               for field in fields_for(preset, info)):
+            return None
+        async with self.lora_files_lock:
+            if force or not self.lora_files_time or time.monotonic() - self.lora_files_time > 30:
+                try:
+                    files = await self.client.request('GET', '/models/loras', expected_type=list)
+                    if not all(isinstance(name, str) and name for name in files):
+                        raise ComfyError('ComfyUI returned an invalid LoRA list.')
+                    self.lora_files = list(dict.fromkeys(files))
+                except ComfyError:
+                    # Older servers can lack this endpoint. Keep the workflow
+                    # and its original value usable without fabricating choices.
+                    self.lora_files = None
+                self.lora_files_time = time.monotonic()
+        return self.lora_files
+
     async def describe(self, preset):
         try:
             info = await self.metadata()
@@ -226,10 +247,11 @@ class MobileService:
             if preset["mappings"] != previous["mappings"]:
                 preset["model_upgrade_revision"] = revision(previous)
             save_json(self.presets.path(preset["id"]), preset)
+        lora_models = await self.lora_choices(preset, info)
         return {"id": preset["id"], "name": preset["name"], "revision": revision(preset),
                 "graph_revision": hashlib.sha256(json.dumps(preset["graph"], sort_keys=True).encode()).hexdigest(),
                 "model_upgrade_revision": preset.get("model_upgrade_revision"),
-                "fields": fields_for(preset, info), "candidates": [{k: v for k, v in item.items() if k != "default"} for item in candidates(preset["graph"], info)],
+                "fields": fields_for(preset, info, lora_models), "candidates": [{k: v for k, v in item.items() if k != "default"} for item in candidates(preset["graph"], info)],
                 "missing_nodes": missing}
 
     async def refresh_models(self, identifier):
@@ -239,6 +261,7 @@ class MobileService:
         if preset["mappings"] != previous["mappings"]:
             preset["model_upgrade_revision"] = revision(previous)
         save_json(self.presets.path(identifier), preset)
+        await self.lora_choices(preset, info, force=True)
         return await self.describe(preset)
 
     async def saved_workflows(self):
@@ -277,13 +300,14 @@ class MobileService:
             missing = {n["class_type"] for n in preset["graph"].values()} - set(info)
             if missing:
                 raise ValueError("ComfyUI is missing these nodes: " + ", ".join(sorted(missing)))
-            graph, actual = render(preset, body.get("values", {}), body.get("random_seed", False), body.get("disabled_loras", []), info)
+            lora_models = await self.lora_choices(preset, info)
+            graph, actual = render(preset, body.get("values", {}), body.get("random_seed", False), body.get("disabled_loras", []), info, lora_models)
             # Journal before the network request. A lost response never retries a prompt blindly.
             job = {"id": request_id, "owner": owner, "scope": self.output_scope, "preset": preset["id"], "preset_name": preset["name"], "revision": revision(preset),
                    "values": actual, "disabled_loras": body.get("disabled_loras", []), "created": time.time(),
                    "status": "submitting", "phase": "preparing", "progress": None, "images": [], "prompt_id": None,
                    "prompt_history_recorded": False}
-            controls = fields_for(preset, info)
+            controls = fields_for(preset, info, lora_models)
             job["controls"] = [{k: field[k] for k in ("key", "label", "role", "kind", "node", "input", "group")} for field in controls]
             job['metadata'] = generation_details(controls, actual, graph, info)
             self.jobs[request_id] = job

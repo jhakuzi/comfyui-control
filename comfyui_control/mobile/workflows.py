@@ -202,20 +202,28 @@ def with_model_controls(preset, info):
     return item
 
 
-def fields_for(preset, info):
+def fields_for(preset, info, lora_models=None):
     available = {(c["node"], c["input"]): c for c in candidates(preset["graph"], info)}
     diffusion = diffusion_inputs(preset["graph"], info)
     fields = [{**available[(m["node"], m["input"])], **m} for m in preset["mappings"]]
     for field in fields:
+        # Custom loaders may register a STRING widget populated by their own
+        # frontend extension. Use ComfyUI's model catalogue for explicitly
+        # mapped LoRA names; registered combo choices remain authoritative.
+        if field["role"] == "lora_model" and field["options"] is None and lora_models is not None:
+            field["options"] = list(lora_models)
+            # A custom loader can use an original sentinel such as "None".
+            # The catalogue constrains edits, not the workflow's saved default.
+            field["allow_saved_value"] = True
         if field["role"] == "advanced" and (field["node"], field["input"]) in diffusion:
             field["model_role"] = "diffusion_model"
     return fields
 
 
-def render(preset, values, random_seed=False, disabled_loras=None, info=None):
+def render(preset, values, random_seed=False, disabled_loras=None, info=None, lora_models=None):
     if not isinstance(values, dict) or type(random_seed) is not bool:
         raise ValueError("Invalid generation settings.")
-    fields = fields_for(preset, info or {})
+    fields = fields_for(preset, info or {}, lora_models)
     if set(values) - {f["key"] for f in fields}:
         raise ValueError("Generation includes an unmapped input.")
     groups = {f["group"] for f in fields if f["role"] == "lora_strength"}
@@ -247,7 +255,8 @@ def render(preset, values, random_seed=False, disabled_loras=None, info=None):
                 raise ValueError(f"{field['label']} must be positive.")
             if field["role"] == "batch" and value > 64:
                 raise ValueError("Mobile batch size is limited to 64.")
-        if field["options"] is not None and value not in field["options"]:
+        if (field["options"] is not None and value not in field["options"]
+                and not (field.get("allow_saved_value") and value == field["default"])):
             raise ValueError(f"{field['label']} is not available in this ComfyUI installation.")
         graph[field["node"]]["inputs"][field["input"]] = value
         actual[field["key"]] = value

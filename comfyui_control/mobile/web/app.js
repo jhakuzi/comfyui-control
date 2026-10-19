@@ -393,7 +393,7 @@ async function choosePreset(id, reuse) {
 }
 function control(field, container, hideLabel = false) {
   const wrap = node("div", undefined, "control");
-  if ((field.kind === "text" && !field.options) || field.role === "seed")
+  if ((field.kind === "text" && !field.options) || ["seed", "lora_model"].includes(field.role))
     wrap.classList.add("wide");
   const label = node("label", field.label);
   if (hideLabel) label.classList.add("visually-hidden");
@@ -408,10 +408,20 @@ function control(field, container, hideLabel = false) {
     label.prepend(input);
     wrap.append(label);
   } else {
-    if (field.options) {
+    if (field.options || field.role === "lora_model") {
       input = node("select");
-      for (const option of field.options)
+      for (const option of field.options || [])
         input.add(new Option(String(option), String(option)));
+      if (field.role === "lora_model") {
+        const value = String(draft[field.key] ?? "");
+        if (!(field.options || []).some((option) => String(option) === value)) {
+          const saved = field.allow_saved_value && value === String(field.default);
+          const current = new Option(value ? `${value} · ${saved ? "saved value" : "unavailable"}` : "Choose a LoRA", value);
+          current.disabled = !saved;
+          input.prepend(current);
+        }
+        input.disabled = !field.options?.length;
+      }
     } else if (["positive", "negative"].includes(field.role)) {
       input = node("textarea");
       if (field.role === "negative") input.classList.add("negative");
@@ -433,6 +443,10 @@ function control(field, container, hideLabel = false) {
     }
     input.value = draft[field.key] ?? "";
     wrap.append(label, input);
+    if (field.role === "lora_model" && !field.options?.length)
+      wrap.append(node("p", field.options
+        ? "No installed LoRAs found. Add a LoRA in ComfyUI, then refresh model choices."
+        : "LoRA choices are unavailable. Start ComfyUI, then refresh model choices.", "muted"));
   }
   if (input.tagName === "TEXTAREA" && field.role === "positive") {
     input.classList.add("positive");

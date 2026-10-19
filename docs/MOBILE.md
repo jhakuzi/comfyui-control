@@ -137,6 +137,14 @@ Use **Refresh model choices** after starting ComfyUI or adding models. This
 fetches fresh choices and adds missing loader controls without changing the
 saved graph or replacing your current prompt/model edits. Choices remain specific
 to the selected loader; the app does not swap node types or quantization formats.
+
+Mapped **LoRA** filenames use dropdown pickers too. Registered node choices take
+priority; for custom nodes that expose only a text input, the app uses ComfyUI's
+installed `loras` catalogue, including subfolders and configured extra model
+paths. **Refresh model choices** refreshes this list. Missing/unavailable choices
+are labelled without clearing the saved selection; strengths and enable switches
+keep their existing mappings. LoRA connections and structured custom inputs are
+left unchanged.
 Controls explicitly hidden in the mapping editor stay hidden on ordinary loads;
 the refresh button can restore recognized model controls when wanted.
 If a loader's filename comes from a connection rather than a literal value,

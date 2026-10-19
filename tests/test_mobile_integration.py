@@ -39,6 +39,8 @@ class ComfyStub:
         self.safe_cancel_supported = True
         self.saved = {}
         self.object_info = None
+        self.loras = None
+        self.lora_requests = 0
 
     async def ws(self, request):
         ws = web.WebSocketResponse()
@@ -57,6 +59,11 @@ class ComfyStub:
             await ws.send_json({'type': kind, 'data': data})
 
     async def endpoint(self, request):
+        if request.path == '/models/loras':
+            self.lora_requests += 1
+            if self.loras is None:
+                raise web.HTTPNotFound()
+            return web.json_response(self.loras)
         if request.path == '/object_info':
             if self.object_info is not None:
                 return web.json_response(self.object_info)
