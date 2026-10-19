@@ -964,7 +964,7 @@ function loadGallery(force = false) {
           if (index < 0) {
             $("image-dialog").close();
             notice("This image was removed from the output folder.");
-          } else if (gallery[index].url !== previous.url) {
+          } else if (gallery[index].url !== previous.url || gallery[index].reuse?.available !== previous.reuse?.available) {
             openImage(gallery, index);
           } else {
             viewerItems = gallery;

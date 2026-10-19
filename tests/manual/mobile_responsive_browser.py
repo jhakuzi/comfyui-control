@@ -10,6 +10,7 @@ from pathlib import Path
 import struct
 import sys
 import tempfile
+from dataclasses import replace
 
 sys.path[:0] = [str(Path(__file__).resolve().parents[2]), str(Path(__file__).resolve().parents[1])]
 from aiohttp import web
@@ -281,12 +282,39 @@ async def main(browser_name, root):
             await touch.get_by_role('button', name='View image00.png', exact=True).tap()
             await expect(touch.locator('#reuse-image')).to_be_disabled()
             await expect(touch.locator('#image-reuse-status')).to_contain_text('another browser session')
+            # The optional desktop setting shares image settings with a second
+            # browser, while its job history and live controls remain isolated.
+            service.settings = replace(service.settings, share_image_settings=True)
+            await touch.evaluate('loadGallery(true)')
+            await expect(touch.locator('#reuse-image')).to_be_enabled()
+            await touch.locator('#close-image').tap()
+            await touch.set_viewport_size(dict(width=390, height=844))
+            saved_seed = job['values'][next(field['key'] for field in job['controls'] if field['role'] == 'seed')]
+            for action, randomize in [('reuse-image', False), ('vary-image', True)]:
+                await touch.locator('#gallery-tab').tap()
+                await touch.get_by_role('button', name='View image00.png', exact=True).tap()
+                await expect(touch.locator('#reuse-image')).to_be_enabled()
+                await touch.locator('#' + action).tap()
+                await expect(touch.locator('#image-dialog')).to_be_hidden()
+                await expect(touch.locator('[data-role="positive"]')).to_have_value('An unsent draft survives resizing')
+                await touch.locator('#settings-card').evaluate('el => el.open=true')
+                await expect(touch.locator('[data-role="seed"]')).to_have_value(str(saved_seed))
+                assert await touch.locator('#random-seed').is_checked() == randomize
+                assert await touch.evaluate('fetch("/api/state").then(r=>r.json()).then(s=>s.jobs.length)') == 0
+                assert await touch.evaluate('fetch("/api/prompts").then(r=>r.json()).then(p=>p.length)') == 0
+                assert len(stub.submissions) == 1
+            await touch.locator('#gallery-tab').tap()
+            await touch.get_by_role('button', name='View image00.png', exact=True).tap()
+            service.settings = replace(service.settings, share_image_settings=False)
+            await touch.evaluate('loadGallery(true)')
+            await expect(touch.locator('#reuse-image')).to_be_disabled()
             await tablet.close()
             assert not errors, errors
             print(json.dumps(dict(browser=browser_name, responsive_layout='phone, tablet portrait/landscape, Split View, laptop, short window',
                 generation='fixture: model loading, progress/preview, sticky controls, offline completion and reload',
                 reuse='mobile jobs and desktop PNG: exact seed, variation, no auto-submit, missing metadata, unchanged files',
                 previews='768px at 1x, 1280px at 2x; private sessions remain isolated',
+                cross_device='opt-in laptop to phone reuse/variation; independent history/jobs; disabling sharing restores image restrictions',
                 gallery='4 columns, keyboard comparison, accessible close', tablet='touch expansion, rotation, isolated draft', javascript_errors=errors)))
             await browser.close()
     finally:

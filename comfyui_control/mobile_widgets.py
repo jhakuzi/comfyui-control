@@ -136,6 +136,10 @@ class MobileDialog(QDialog):
         form.addRow("Mobile password", self.password)
         self.password.setEnabled(self.auth.isChecked())
         self.auth.toggled.connect(self.password.setEnabled)
+        self.share_images = QCheckBox("Share image prompts and settings between browsers")
+        self.share_images.setChecked(self.settings.share_image_settings)
+        self.share_images.setToolTip("Allow every browser connected to this Mobile WebUI to view and reuse image settings. Enable only for trusted devices. Live jobs, cancellation and prompt history stay separate.")
+        form.addRow(self.share_images)
         self.default_preset = WorkflowCombo()
         self.default_preset.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self.default_preset.setMinimumContentsLength(14)
@@ -377,6 +381,7 @@ class MobileDialog(QDialog):
                 enabled=self.enabled.isChecked(), bind=self.bind.text().strip(), port=self.port.value(),
                 advertised=self.settings.advertised, comfy_url=self.comfy_url.text().strip(),
                 require_auth=self.auth.isChecked(),
+                share_image_settings=self.share_images.isChecked(),
                 password=password_hash(self.password.text()) if self.password.text() else self.settings.password,
                 default_preset=self.default_preset.currentData() or "",
             )

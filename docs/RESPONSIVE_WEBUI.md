@@ -1,4 +1,4 @@
-# Responsive WebUI testing — 1.0.0rc2.dev5
+# Responsive WebUI testing — 1.0.0rc2.dev6
 
 Open the **same Mobile WebUI URL** on your phone, iPad or laptop. No device
 setting, second server or separate installation is needed.
@@ -15,6 +15,11 @@ setting, second server or separate installation is needed.
 - **Reuse settings / New variation:** also work for images saved directly by
   ComfyUI when the local PNG includes its API workflow metadata. Settings fill
   the form; tap Generate when ready. Missing metadata is explained in the viewer.
+- **Reuse across devices:** in desktop **Mobile WebUI**, enable **Share image
+  prompts and settings between browsers**, click **Apply**, then refresh your
+  phone. Any browser allowed into this WebUI can inspect/reuse image settings.
+  Live jobs, cancellation, previews and prompt history stay separate. The option
+  is off by default and is also loaded when starting through SSH.
 
 Layout follows available space, not the device name: two columns start at
 1000 × 600 CSS pixels. iPad Split View, browser zoom, small tablets and short

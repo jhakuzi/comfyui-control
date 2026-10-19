@@ -84,6 +84,7 @@ class MobileSettings:
     password: str = ""  # Salted PBKDF2 hash, never a plaintext password.
     default_preset: str = ""
     preferences_version: int = 1
+    share_image_settings: bool = False
 
     @classmethod
     def load(cls, path=None):
@@ -106,6 +107,8 @@ class MobileSettings:
     def validate(self, require_password=True):
         if type(self.enabled) is not bool or type(self.require_auth) is not bool:
             raise ValueError("Invalid mobile enable/authentication setting.")
+        if type(self.share_image_settings) is not bool:
+            raise ValueError("Invalid image settings sharing preference.")
         if type(self.preferences_version) is not int or self.preferences_version < 1:
             raise ValueError("Invalid mobile preferences version.")
         if type(self.port) is not int or not 1024 <= self.port <= 65535:

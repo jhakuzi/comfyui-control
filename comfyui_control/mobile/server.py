@@ -256,7 +256,9 @@ class MobileHTTP:
         if not item:
             raise web.HTTPNotFound(text="This image is no longer available. Refresh the gallery.")
         path = self.service.local_image(item)
-        private_metadata = not self.service._metadata_allowed(item, request[OWNER])
+        # Sharing permits inspected settings and reuse, not raw workflow text
+        # hidden inside another browser's download (which may contain secrets).
+        private_metadata = not self.service._metadata_allowed(item, request[OWNER], allow_shared=False)
         headers = {}
         if request.query.get("download") == "1":
             # ASCII fallback avoids response-header injection via filenames.

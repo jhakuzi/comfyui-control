@@ -676,9 +676,7 @@ class MobileService:
             return []
         job = self.jobs.get(item.get('job'))
         if job:
-            # Gallery files are shared, but another browser's job metadata isn't.
-            if owner is not None and job.get('owner') != owner:
-                return []
+            # Image sharing is handled by the same gate as Details and reuse.
             return parameters(job.get('controls',[]),job.get('values',{}))
         path = await self.network_io('read', item) if self.network_output else self.local_image(item)
         try:
@@ -692,8 +690,8 @@ class MobileService:
         path = self.output_dir / item['subfolder'] / item['filename']
         return hashlib.sha256((item['type'] + ':' + str(path)).encode()).hexdigest()[:32]
 
-    def _metadata_allowed(self, item, owner):
-        if owner is None:
+    def _metadata_allowed(self, item, owner, *, allow_shared=True):
+        if owner is None or allow_shared and self.settings.share_image_settings:
             return True
         job = self.jobs.get(item.get('job'))
         if job:
@@ -705,7 +703,7 @@ class MobileService:
 
     def image_reuse_status(self, item, owner):
         if not self._metadata_allowed(item, owner):
-            return dict(available=False, reason='Generation settings belong to another browser session.')
+            return dict(available=False, reason='Generation settings belong to another browser session. Enable image settings sharing in the desktop Mobile WebUI settings to reuse them across your devices.')
         job = self.jobs.get(item.get('job'), {})
         if job.get('preset') and job.get('revision') and isinstance(job.get('values'), dict):
             return dict(available=True, reason='')
@@ -725,7 +723,8 @@ class MobileService:
             raise ValueError(status['reason'])
         job = self.jobs.get(item.get('job'), {})
         if job.get('preset') and job.get('revision') and isinstance(job.get('values'), dict):
-            return self.public_job(job)
+            return {key: deepcopy(job.get(key, [] if key in {'controls', 'disabled_loras'} else {}))
+                    for key in ('preset', 'revision', 'values', 'controls', 'disabled_loras')}
         scope = self.output_scope
         path = await self.network_io('read', item) if self.network_output else self.local_image(item)
         try:
@@ -753,7 +752,7 @@ class MobileService:
                     preset = existing
                     break
         if preset is None:
-            if self.image_ownership_key(item) in self.image_owners:
+            if self.image_ownership_key(item) in self.image_owners and not self.settings.share_image_settings:
                 raise ValueError('This image\'s mobile generation record is no longer available. Select an existing workflow with matching input mappings to reuse it.')
             preset = self.presets.create(('Image · ' + Path(item['filename']).stem)[:100], graph)
             preset = self.presets.map(preset['id'], suggested_mappings(graph, self.info), automatic=True)

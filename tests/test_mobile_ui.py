@@ -51,6 +51,26 @@ def test_launch_settings_keep_mobile_preferences(app, tmp_path, monkeypatch):
     dialog.close()
 
 
+def test_desktop_image_sharing_is_optional_and_saved_without_launching_comfy(app, tmp_path, monkeypatch):
+    monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path))
+    runtime = MobileRuntime()
+    dialog = MobileDialog(runtime, Config())
+    assert not dialog.share_images.isChecked()
+    dialog.share_images.setChecked(True)
+    with patch.object(runtime, 'configure') as configure:
+        dialog._apply()
+        assert configure.call_args.args[0].share_image_settings
+    assert MobileSettings.load().share_image_settings
+    dialog.close()
+    reopened = MobileDialog(runtime, Config())
+    assert reopened.share_images.isChecked()
+    reopened.share_images.setChecked(False)
+    with patch.object(runtime, 'configure'):
+        reopened._apply()
+    assert not MobileSettings.load().share_image_settings
+    reopened.close()
+
+
 def test_mobile_dialog_scrolls_only_when_content_needs_it(app,tmp_path,monkeypatch):
     from PySide6.QtCore import QPoint
     from PySide6.QtGui import QFont

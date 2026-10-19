@@ -272,7 +272,7 @@ Refreshing restores these edits rather than replacing them with the last
 submitted prompt. Request IDs survive connection failures to prevent duplicate
 submissions. Generation controls stay disabled while recovery is in progress.
 
-Each browser profile has a persistent HttpOnly client-identity cookie. Its
+Each browser profile has a persistent HttpOnly client-identity cookie. By default its
 jobs, progress, previews, cancellation, and reuse metadata are isolated from
 other profiles. Tabs in the same profile share that identity; presets and the
 output-image gallery remain shared. Clearing site cookies or using a new
@@ -291,14 +291,34 @@ of the selected output folder populate the gallery. Mobile-created images have
 saved prompt/settings metadata for reuse. Other images may have no mobile
 metadata. Temporary previews and deleted files can become unavailable.
 
+### Reuse image settings across your devices
+
+In the desktop app, open **Mobile WebUI**, enable **Share image prompts and
+settings between browsers**, then click **Apply** and refresh the phone page.
+The saved option also applies to SSH startup. It is off by default; enabling it
+lets any browser allowed into this WebUI inspect and reuse image prompts/settings.
+Use it for your trusted LAN/VPN devices. Password protection remains optional.
+
+The gallery uses the saved generation record where available, otherwise the
+API workflow embedded in the original PNG. Choose **Reuse settings** for the
+recorded seed or **New variation** to enable randomization, then tap Generate.
+Original image files stay unchanged. Missing PNG metadata is explained in the
+viewer. Live jobs, progress/previews, cancellation and prompt history still
+belong to the browser that started them. Another browser's PNG download continues
+to omit raw embedded workflow text; inspected settings are shared through the API.
+
+Turning sharing off prevents further cross-browser image-detail/reuse access.
+Drafts or shared workflow presets already copied through reuse remain saved;
+this option does not erase settings a device has already received.
+
 In the responsive testing build, **Reuse settings** and **New variation** also
 read API workflow metadata from local PNGs saved directly by ComfyUI, including
 the configured NFS output. Compatible saved mappings are reused; otherwise a
 separate image workflow preset is created. Original PNGs, graphs and source
 workflows are unchanged. Reuse fills the form without submitting a generation;
 variation enables seed randomization. Missing metadata or an unmapped seed is
-explained inside the image viewer. Another browser's private mobile settings
-remain unavailable. Wide-screen gallery thumbnails use 768px or 1280px previews
+explained inside the image viewer. Another browser's mobile image settings remain
+unavailable unless image sharing is enabled. Wide-screen gallery thumbnails use 768px or 1280px previews
 instead of stretching the phone's 384px previews.
 
 ### Live statistics
@@ -355,8 +375,9 @@ Additional details include mapped inputs and safe numeric/boolean or enumerated
 custom-node values, not raw graphs, arbitrary PNG text, or credential-like inputs.
 Unknown connections and the original graph are untouched.
 
-The output gallery is still shared, but another mobile identity cannot inspect
-your generation details or reuse settings. A small `mobile/image-owners.json`
+The output gallery is still shared, but by default another mobile identity cannot
+inspect your generation details or reuse settings. The optional sharing setting
+above permits those image actions across devices. A small `mobile/image-owners.json`
 ledger retains that boundary after old job records are pruned. When another
 identity opens/downloads an owned image, the server sends pixels without its
 embedded prompt text; the original file is not modified. Thumbnails also omit
@@ -403,7 +424,8 @@ The table highlights differing models, samplers, steps, CFG, seeds, resolution
 and LoRA values when available. Mobile jobs use their saved mapped settings;
 local PNGs can supply recognized settings from ComfyUI's embedded prompt metadata.
 Missing metadata shows an unavailable message. Prompts and arbitrary custom-node
-values are excluded, and another browser's private job settings are not returned.
+values are excluded. Another browser's image parameters require the optional
+image-settings sharing preference; its live job record is never returned.
 Original files are unchanged; no duplicate files are stored on the PC.
 
 ## Home-screen / PWA use

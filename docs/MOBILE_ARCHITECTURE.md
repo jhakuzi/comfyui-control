@@ -1,5 +1,33 @@
 # Mobile WebUI architecture and verification
 
+## 1.0.0rc2.dev6 optional cross-browser image settings
+
+`MobileSettings.share_image_settings` defaults to false, is strictly validated
+and is saved by the desktop Mobile WebUI checkbox. The existing runtime applies
+these preferences to desktop and SSH startup; ComfyUI generation is not restarted.
+The central image metadata gate permits inspected details, comparison parameters
+and reuse when sharing is explicitly enabled. Gallery job IDs and the owner
+filters for live jobs/previews, cancellation and prompt history remain unchanged.
+Reuse returns only preset/revision, mapped values/controls and disabled LoRAs;
+it does not return another client's prompt ID or job record. Raw downloads retain
+the original ownership filter and omit embedded workflow text for another client.
+
+If a mobile job has been pruned, shared reuse can parse its original PNG and
+preserve the full graph in a separate workflow preset, as for direct ComfyUI PNGs.
+Reused drafts and imported presets are persisted copies, so disabling sharing
+restricts subsequent image reads rather than erasing already received settings.
+Gallery reconciliation updates an open viewer's reuse controls when sharing
+availability changes, even if the image URL itself is unchanged.
+
+Verification: 368 automated checks passed, including preference validation/save,
+desktop controls, default privacy, sharing/revocation, pruned-job PNG recovery,
+minimal reuse responses, filtered downloads and retained job/history/cancel
+isolation. Chromium and Linux WebKit passed laptop-generation reuse/variation
+in a separate phone-sized browser context, with exact seed/prompt restoration,
+no automatic submissions and restored restrictions when sharing is disabled.
+These checks use generated PNGs and simulated ComfyUI events, not actual phone
+hardware, a physical NAS or GPU model inference.
+
 ## 1.0.0rc2.dev5 image reuse and gallery clarity
 
 Gallery descriptors advertise reuse eligibility without reading every image.
