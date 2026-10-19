@@ -230,6 +230,7 @@ value. Randomization affects mapped seeds only. A preset without a seed mapping
 keeps its original behaviour.
 
 **Randomize seed for each generation** is on by default.
+Uncheck it to unlock the Seed field, then clear or replace its value manually.
 Older drafts adopt this default once without losing prompts or stored seed values.
 Uncheck it to keep the seed fixed; your subsequent choice is remembered.
 **Same seed** explicitly switches to a fixed

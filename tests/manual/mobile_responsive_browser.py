@@ -98,6 +98,22 @@ async def main(browser_name, root):
                                          (1000, 600, True), (1440, 500, False)]:
                 await layout(width, height, wide)
             await layout(1440, 900, True)
+            # Fixed-seed editing must allow clearing/replacing the text without
+            # JavaScript rounding the 64-bit value or submitting a generation.
+            await page.locator('#settings-card').evaluate('el => el.open=true')
+            await expect(page.locator('[data-role="seed"]')).to_be_disabled()
+            await page.locator('#random-seed').uncheck()
+            seed = page.locator('[data-role="seed"]')
+            await expect(seed).to_be_enabled()
+            await seed.fill('')
+            await expect(seed).to_have_value('')
+            await seed.fill('18446744073709551600')
+            await page.reload()
+            await expect(seed).to_have_value('18446744073709551600')
+            await expect(page.locator('#random-seed')).not_to_be_checked()
+            await seed.fill('42')
+            await page.locator('#random-seed').check()
+            await page.locator('#settings-card').evaluate('el => el.open=false')
             # Keyboard activation opens a normal control without submitting.
             await page.locator('#prompt-history').focus()
             await page.keyboard.press('Enter')
