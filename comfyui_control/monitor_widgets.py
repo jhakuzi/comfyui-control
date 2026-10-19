@@ -1,8 +1,9 @@
 """Compact Qt monitoring, with at most one background hardware sample in flight."""
-from PySide6.QtCore import QEvent, QObject, QRunnable, QThreadPool, QTimer, Qt, Signal
+from PySide6.QtCore import QEvent, QThreadPool, QTimer, Qt, Signal
 from PySide6.QtWidgets import QGridLayout, QLabel, QLayout, QProgressBar, QPushButton, QSizePolicy, QStyle, QVBoxLayout, QWidget
 
 from .hardware import HardwareReader
+from .hardware_worker import Sample
 from .performance import GenerationPerformance
 
 
@@ -15,27 +16,6 @@ def memory(used, total=None):
         return '--'
     text = f'{used / 1024**3:.1f}'
     return text + (f' / {total / 1024**3:.1f} GiB' if total else ' GiB')
-
-
-class SampleSignals(QObject):
-    finished = Signal(object)
-
-
-class Sample(QRunnable):
-    def __init__(self, reader, pid):
-        super().__init__()
-        self.reader, self.pid = reader, pid
-        self.signals = SampleSignals()
-
-    def run(self):
-        try:
-            value = self.reader.sample(self.pid)
-        except Exception:
-            value = dict(cpu=None, ram_used=None, ram_total=None, process_memory=None, gpus=[])
-        try:
-            self.signals.finished.emit(value)
-        except RuntimeError:
-            pass
 
 
 class MonitorPanel(QWidget):

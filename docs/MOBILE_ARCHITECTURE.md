@@ -1,5 +1,39 @@
 # Mobile WebUI architecture and verification
 
+## 1.0.0rc2.dev1 foreground SSH startup
+
+`cli.py` dispatches explicit component flags to `headless.py`; normal launches
+still use the desktop. The foreground path owns a `QCoreApplication`, never a
+hidden QWidget or QApplication, so it needs no display server or desktop login.
+It reuses Controller, NetworkOutput and MobileRuntime, their persisted settings
+and the desktop's instance lock. CLI enable flags are runtime-only overrides.
+
+The NFS probe is queued before starting the configured server. Output selection
+is pinned through the existing selector, then shared status/actual output scope
+is propagated to the mobile service, including when HTTP starts after the probe.
+No privileged setup or mount teardown is attempted at SSH startup/shutdown.
+
+SIGINT/SIGTERM/SIGHUP handlers record a stop request; a short Qt timer executes
+the existing process-group shutdown and embedded-server cleanup. Saved recovery
+is retained, and deferred exit checks allow transient crashed/restarting states.
+The loop exits only after owned processes, the HTTP thread and an in-flight
+hardware sample finish. WebUI-only runs never stop an external ComfyUI server.
+
+The hardware worker moved unchanged to `hardware_worker.py` and is shared with
+the desktop monitor. The foreground runner samples only while MobileService
+requests metrics for active mobile jobs. Workflow/prompt/gallery/session logic
+is unchanged. See [SSH usage](SSH.md).
+
+Verification: 357 checks passed locally. The Fedora 44 RPM build passed 356 with
+one JavaScript-runtime check skipped; it passed locally. Real subprocess tests
+use no display and an invalid Qt platform name to verify the non-GUI path. They
+cover Python/script launch, HTTP gallery/image/thumbnail access, SIGINT/TERM/HUP,
+owned-child cleanup, unchanged settings, the instance lock, startup errors,
+NFS-selection/fallback protocol and saved crash recovery. The installed Fedora
+entry point separately passed no-display startup, HTTP access and Ctrl+C cleanup.
+These use disposable server scripts and controlled NFS probes; physical Wake on
+LAN, remote SSH access, GPU inference and actual NAS mounting remain user checks.
+
 ## 0.11.2.dev10 network output
 
 `network_output.py` is a standalone standard-library worker for validated systemd

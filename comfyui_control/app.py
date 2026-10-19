@@ -984,7 +984,7 @@ class MainWindow(QMainWindow):
         event.ignore()
 
 
-def main():
+def desktop_main():
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     app.setApplicationName("ComfyUI Control")
@@ -1019,6 +1019,11 @@ def main():
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     lock.unlock()
     return result
+
+
+def main(argv=None):
+    from .cli import main as cli_main
+    return cli_main(argv)
 
 
 if __name__ == "__main__":

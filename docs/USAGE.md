@@ -69,6 +69,12 @@ Setup creates a companion Python environment beside ComfyUI and runs `pip instal
 
 </details>
 
+## SSH startup (testing)
+
+`comfyui-control --start-server --start-webui` runs in the foreground without
+a desktop login. Ctrl+C stops both components and their owned processes.
+See the [SSH guide and testing install](SSH.md).
+
 ## Launch settings
 
 The main heading shows **ComfyUI - version** when the selected installation

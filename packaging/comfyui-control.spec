@@ -1,6 +1,6 @@
 Name:           comfyui-control
-Version:        1.0.0~rc1
-Release:        2%{?dist}
+Version:        1.0.0~rc2
+Release:        0.1.dev1%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
 License:        MIT
@@ -62,6 +62,10 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Mon Oct 19 2026 ComfyUI Control contributors - 1.0.0~rc2-0.1.dev1
+- Testing: foreground SSH startup for configured ComfyUI and Mobile WebUI.
+- Reuse process ownership, signal shutdown, NFS selection and hardware workers.
+
 * Sun Oct 18 2026 ComfyUI Control contributors - 1.0.0~rc1-2
 - Keep mount-content checks active in COPR without requiring a writable /run/systemd.
 - Run native systemd validation separately where the runtime directory is available.

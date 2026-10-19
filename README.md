@@ -1,6 +1,9 @@
 # ComfyUI Control
 
 A small Qt app for ComfyUI on Linux, built with KDE Plasma in mind.
+
+**SSH testing build:** `comfyui-control --start-server --start-webui` runs
+without a window; Ctrl+C stops it. [Testing instructions](docs/SSH.md).
 Start/stop, restart, Git or Comfy CLI updates, launch flags, and folder shortcuts.
 Includes a [Mobile WebUI](docs/MOBILE.md) for generating images from your phone.
 

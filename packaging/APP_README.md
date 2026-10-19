@@ -2,7 +2,12 @@
 
 A small Qt desktop app for starting, stopping, and updating ComfyUI on Linux.
 
-**1.0.0rc1** adds tray controls, an expandable mobile prompt editor and optional
+**Testing 1.0.0rc2.dev1** adds foreground SSH startup:
+`comfyui-control --start-server --start-webui`. Use your existing configuration;
+Ctrl+C stops both components. [SSH guide](https://github.com/jhakuzi/comfyui-control/blob/testing/ssh-startup/docs/SSH.md).
+No flags opens the normal desktop window.
+
+It also includes tray controls, an expandable mobile prompt editor and optional
 NFS output with local fallback. Mounts are requested at app startup, never enabled
 at boot. Desktop and mobile warn when fallback images need uploading manually.
 Older testing mount setups need **Set up mount** once to migrate.
