@@ -38,6 +38,19 @@ Resizing or rotating preserves your prompt, workflow, settings and current job.
 Saved workflows, custom nodes, GGUF models, LoRAs and session recovery use the
 same backend. [Foreground SSH startup](SSH.md) is included in 1.0.
 
+## Shared visual styling
+
+All layouts use the same charcoal surfaces, blue controls and green online
+indicator. Colors, control/panel radii, spacing, typography and shadows are
+defined at the top of `comfyui_control/mobile/web/style.css`. Component rules
+reuse those tokens; the responsive breakpoints and control positions are unchanged.
+Keyboard focus stays visible, controls retain their touch targets, and reduced
+motion disables the control transitions and loading animation.
+
+Browser chrome and the PWA manifest use the same background color. The shell
+cache version is updated for this theme; reload an existing tab to get the styles.
+The existing application icon is retained.
+
 ## Run from source
 
 The three-column workspace is on **testing/webui-workspace**, version

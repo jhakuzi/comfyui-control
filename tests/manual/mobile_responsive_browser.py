@@ -78,6 +78,42 @@ async def main(browser_name, root):
             await expect(prompt).to_be_visible()
             await prompt.fill('An unsent draft survives resizing')
 
+            # Check rendered legibility and keyboard focus, not only token values.
+            await page.emulate_media(reduced_motion='reduce')
+            contrast = await page.evaluate('''() => {
+                const luminance = color => {
+                    const rgb = color.match(/[\\d.]+/g).slice(0, 3).map(Number).map(v => {
+                        v /= 255;
+                        return v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4;
+                    });
+                    return rgb[0] * .2126 + rgb[1] * .7152 + rgb[2] * .0722;
+                };
+                const ratio = (a, b) => {
+                    const x = luminance(a), y = luminance(b);
+                    return (Math.max(x, y) + .05) / (Math.min(x, y) + .05);
+                };
+                const button = getComputedStyle(document.querySelector('#generate'));
+                const prompt = getComputedStyle(document.querySelector('[data-role="positive"]'));
+                const hint = getComputedStyle(document.querySelector('#create-page .hint'));
+                const card = getComputedStyle(document.querySelector('#generate-form > .card'));
+                return {
+                    button: ratio(button.color, button.backgroundColor),
+                    prompt: ratio(prompt.color, prompt.backgroundColor),
+                    hint: ratio(hint.color, card.backgroundColor),
+                    transition: button.transitionDuration,
+                };
+            }''')
+            assert all(contrast[name] >= 4.5 for name in ('button', 'prompt', 'hint')), contrast
+            assert all(float(duration.strip().removesuffix('s')) == 0 for duration in contrast['transition'].split(','))
+            await page.keyboard.press('Tab')
+            await page.locator('#prompt-history').focus()
+            focus = await page.locator('#prompt-history').evaluate('''el => {
+                const css = getComputedStyle(el);
+                return { visible: el.matches(':focus-visible'), style: css.outlineStyle, width: parseFloat(css.outlineWidth) };
+            }''')
+            assert focus['visible'] and focus['style'] != 'none' and focus['width'] >= 2, focus
+            await page.emulate_media(reduced_motion='no-preference')
+
             async def select_page(tab, name):
                 # Large layouts show all columns at once; only compact layouts
                 # have navigation tabs. Scrolling a visible column is sufficient.
@@ -122,7 +158,12 @@ async def main(browser_name, root):
                                          (1920, 1080, True), (2560, 1440, True), (3440, 1440, True),
                                          (1000, 600, True), (1440, 500, False)]:
                 await layout(width, height, wide)
+            await layout(390, 844, False)
+            await page.screenshot(path=str(root / 'create-phone.png'))
+            await layout(1194, 834, True)
+            await page.screenshot(path=str(root / 'create-tablet-landscape.png'))
             await layout(1440, 900, True)
+            await page.screenshot(path=str(root / 'create-desktop.png'))
             # Fixed-seed editing must allow clearing/replacing the text without
             # JavaScript rounding the 64-bit value or submitting a generation.
             await page.locator('#settings-card').evaluate('el => el.open=true')
