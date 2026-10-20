@@ -223,6 +223,9 @@ async def main(browser_name,root):
         await page.get_by_role('button',name='View mobile.png',exact=True).click()
         await page.locator('#image-details > summary').click()
         await expect(page.locator('#image-metadata')).to_contain_text('A luminous city at dusk')
+        await expect(page.locator('#image-metadata .metadata-card').filter(has_text='Prompts')).to_be_visible()
+        assert await page.locator('#copy-image-prompt').evaluate('el => el.closest(".metadata-card")?.querySelector("summary")?.textContent') == 'Prompts'
+        assert await page.locator('#image-metadata .metadata-card').first.evaluate('el => getComputedStyle(el).borderTopStyle') == 'solid'
         await page.get_by_text('Models & LoRAs',exact=True).click()
         await expect(page.locator('#image-metadata')).to_contain_text('other.gguf')
         await expect(page.locator('#image-metadata')).to_contain_text('one.safetensors')

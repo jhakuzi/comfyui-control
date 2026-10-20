@@ -194,9 +194,24 @@ async def main(browser_name, root):
             await expect(page.locator('#prompt-history-dialog')).to_be_visible()
             await page.locator('#close-prompt-history').click()
             assert not stub.submissions
+            submission_gate = asyncio.Event()
+            async def hold_submission(route):
+                await submission_gate.wait()
+                await route.continue_()
+            await page.route('**/api/generate', hold_submission)
             await page.locator('#generate').click()
+            await expect(page.locator('#preview-loading')).to_be_visible()
+            await expect(page.locator('#preview-loading-phase')).to_have_text('Submitting workflow…')
+            await page.screenshot(path=str(root / 'submitting-placeholder.png'))
+            submission_gate.set()
             await expect(page.locator('#job-title')).to_have_text('In the queue')
             await expect(page.locator('#header-generation #progress')).to_be_visible()
+            await expect(page.locator('#preview-loading')).to_be_visible()
+            await expect(page.locator('#preview-stage')).to_have_attribute('data-preview', 'false')
+            await page.emulate_media(reduced_motion='reduce')
+            assert await page.locator('#preview-loading .loading-spinner').evaluate('el => getComputedStyle(el).animationName') == 'none'
+            await page.emulate_media(reduced_motion='no-preference')
+            assert await page.locator('#preview-loading .loading-spinner').evaluate('el => getComputedStyle(el).animationName') == 'loading-spin'
             assert await page.locator('#progress').count() == 1
             assert len(stub.submissions) == 1
             stub.running, stub.pending = stub.pending, []
@@ -211,9 +226,13 @@ async def main(browser_name, root):
             service.update_hardware(dict(utilization=73, vram_used=6 * 2**30))
             await expect(page.locator('#stat-gpu')).to_have_text('73%')
             await expect(page.locator('#stat-vram')).to_have_text('6.0 GiB')
+            await expect(page.locator('#preview-stat-gpu')).to_have_text('73%')
+            await expect(page.locator('#preview-stat-vram')).to_have_text('6.0 GiB')
+            await page.screenshot(path=str(root / 'sampling-placeholder.png'))
             for ws in stub.sockets:
                 await ws.send_bytes(struct.pack('>II', 1, 2) + (output / 'image00.png').read_bytes())
             await expect(page.locator('#preview')).to_be_visible()
+            await expect(page.locator('#preview-stage')).to_have_attribute('data-preview', 'true')
             await page.locator('#advanced').evaluate('el => el.open=true')
             await page.locator('#mapping').evaluate('el => el.open=true')
 

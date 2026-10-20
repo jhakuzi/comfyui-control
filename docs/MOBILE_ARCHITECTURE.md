@@ -1,6 +1,15 @@
 # Mobile WebUI architecture and verification
 
-## Testing: responsive workspace (1.1.0.dev4)
+## Testing: responsive workspace (1.1.0.dev5)
+
+The wide preview reuses the header's monitoring values in its loading placeholder
+and live-preview overlay; no polling, job store or API is added for this display.
+The spinner respects reduced motion. Image metadata sections use shared surface
+tokens, with the existing LAN-compatible copy control inside the prompt panel.
+VRAM cleanup uses ComfyUI's standard `/free` API only after a fresh empty-queue
+check. Optional upscaling multipliers use the normal mapping renderer and the
+unique numeric `scale_multiplier` input; prior action presets/jobs remain intact.
+
 
 `testing/webui-workspace` extends the same HTML/JavaScript frontend: settings,
 selected-image preview and gallery/history share a three-column layout on

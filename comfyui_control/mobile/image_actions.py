@@ -75,6 +75,19 @@ def workflow_bindings(action, graph):
     return bindings
 
 
+def upscale_multiplier_binding(graph):
+    targets = [(node_id, node['inputs']['scale_multiplier']) for node_id, node in graph.items()
+               if 'scale_multiplier' in node['inputs']]
+    if len(targets) != 1:
+        raise ValueError('The upscale workflow needs exactly one scale_multiplier input to override its multiplier. '
+                         'Leave the multiplier blank to use the saved workflow settings.')
+    node_id, value = targets[0]
+    if type(value) not in (int, float):
+        raise ValueError(f'Node {node_id}: scale_multiplier must be a numeric literal, not a connection. '
+                         'Leave the multiplier blank to preserve the saved workflow.')
+    return dict(node=node_id, input='scale_multiplier', role='advanced', key='action-scale', label='Upscale multiplier')
+
+
 class ImageLibrary:
     """Small atomic sidecar; existing presets, jobs and image files stay intact."""
     def __init__(self, path):

@@ -21,6 +21,7 @@ let state = { jobs: [], online: false },
   events = null,
   busy = false;
 let submitting = false;
+let cleaningVram = false;
 let galleryRevision = "", galleryPromise = null, galleryTimer = null, galleryEpoch = 0;
 let mappingDraft = new Map(),
   gallery = [],
@@ -121,6 +122,7 @@ function showLogin() {
   if ($("prompt-history-dialog").open) $("prompt-history-dialog").close();
   if ($("compare-dialog").open) $("compare-dialog").close();
   if ($("edit-image-dialog").open) $("edit-image-dialog").close();
+  if ($("upscale-image-dialog").open) $("upscale-image-dialog").close();
   $("offline").hidden = true;
   if (events) events.close();
   events = null;
@@ -205,7 +207,7 @@ function syncJobMetrics(active) {
     destination = atTop ? header : $("job-card");
   if (metrics.parentElement !== destination) {
     if (atTop) destination.append(metrics);
-    else destination.insertBefore(metrics, $("preview"));
+    else destination.insertBefore(metrics, $("preview-stage"));
   }
   header.hidden = !atTop;
 }
@@ -214,9 +216,17 @@ function syncGenerationDock() {
     active = !!job && activeStatuses.has(job.status),
     dock = $("generation-dock"),
     card = $("job-card"),
-    destination = active ? dock : $("job-output");
+    destination = active || (submitting && wideLayout.matches) ? dock : $("job-output");
   renderGenerationStats(job);
   syncJobMetrics(active);
+  card.hidden = !job && !(submitting && wideLayout.matches);
+  card.dataset.preparing = String(submitting && !active);
+  const stage = $("preview-stage");
+  stage.hidden = !(active || submitting) || (studioLayout.matches && inspectingSavedImage);
+  stage.dataset.preview = String(!$("preview").hidden && !submitting);
+  $("preview-loading-phase").textContent = submitting && !active ? "Submitting workflow…"
+    : $("job-title").textContent || "Preparing generation…";
+  $("job-images").hidden = active || submitting;
   $("generation-panel").dataset.active = String(active || submitting);
   $("generation-panel").dataset.jobStatus = job?.status || "";
   $("job-output").hidden = !studioLayout.matches && !$("gallery-page").hidden;
@@ -245,11 +255,19 @@ function renderGenerationStats(job) {
   const numeric = (value) => typeof value === "number" && Number.isFinite(value);
   const timing = connected && state.online && job?.status === "running" ? job.seconds_per_iteration : null;
   const hardware = connected && state.online ? state.hardware || {} : {};
-  $("stat-iteration").textContent = numeric(timing) ? timing.toFixed(2) : "--";
-  $("stat-vram").textContent = numeric(hardware.vram_used) ? (hardware.vram_used / 2 ** 30).toFixed(1) + " GiB" : "--";
-  $("stat-gpu").textContent = numeric(hardware.utilization) ? Math.round(hardware.utilization) + "%" : "--";
+  const metrics = {
+    iteration: numeric(timing) ? timing.toFixed(2) : "--",
+    vram: numeric(hardware.vram_used) ? (hardware.vram_used / 2 ** 30).toFixed(1) + " GiB" : "--",
+    gpu: numeric(hardware.utilization) ? Math.round(hardware.utilization) + "%" : "--",
+  };
+  for (const [name, value] of Object.entries(metrics)) {
+    $("stat-" + name).textContent = value;
+    $("preview-stat-" + name).textContent = value;
+  }
 }
 function updateGenerate() {
+  $("cleanup-vram").disabled = cleaningVram || busy || !connected || recovering || !state.online || state.queue_remaining > 0;
+  $("cleanup-vram").title = state.queue_remaining > 0 ? "Available when ComfyUI has no running or queued generations." : "Unload idle models and release unused GPU memory. The next generation will reload its models.";
   const job = state.jobs.find((item) => item.id === selectedJob);
   $("generate").disabled =
     busy ||
@@ -848,13 +866,20 @@ function editInstruction(item) {
 async function runImageWorkflow(item, action, modified) {
   if (busy || pendingSubmission) throw new Error("Finish or retry the pending submission before starting an image action.");
   if (!connected || recovering || !state.online) throw new Error("Reconnect to ComfyUI before starting an image action.");
-  const prompt = action === "edit" ? await editInstruction(item) : null;
-  if (action === "edit" && prompt === null) return;
+  let parameters;
+  if (action === "edit") {
+    const prompt = await editInstruction(item);
+    if (prompt === null) return;
+    parameters = { prompt };
+  } else {
+    parameters = await upscaleOptions(item);
+    if (parameters === null) return;
+  }
   if (busy || pendingSubmission || !connected || recovering || !state.online)
     throw new Error("Connection or submission state changed. Reconnect and try again; your instruction is kept.");
   notice(`Preparing “${item.filename}” for ${action === "edit" ? "editing" : "upscaling"}…`);
   const error = await submitGeneration({ request_id: requestId(), image_action: {
-    image_id: item.id, action, modified, ...(action === "edit" ? { prompt } : {}),
+    image_id: item.id, action, modified, ...parameters,
   } });
   if (error) {
     if (selectedImage?.id === item.id) {
@@ -866,6 +891,38 @@ async function runImageWorkflow(item, action, modified) {
   }
   if ($("image-dialog").open) $("image-dialog").close();
   selectTab("create");
+}
+
+function upscaleOptions(item) {
+  const dialog = $("upscale-image-dialog"), input = $("upscale-image-multiplier"), form = $("upscale-image-form");
+  input.value = readStore("upscale-multiplier", "");
+  input.setCustomValidity("");
+  $("upscale-image-source").textContent = item.filename;
+  return new Promise((resolve) => {
+    let result = null;
+    const save = () => { input.setCustomValidity(""); writeStore("upscale-multiplier", input.value); };
+    const submit = (event) => {
+      event.preventDefault();
+      const multiplier = input.value === "" ? null : input.valueAsNumber;
+      if (multiplier !== null && (!Number.isFinite(multiplier) || multiplier <= 0)) {
+        input.setCustomValidity("Enter a positive multiplier or leave blank for the workflow default.");
+        input.reportValidity();
+        return;
+      }
+      result = multiplier === null ? {} : { multiplier };
+      dialog.close();
+    };
+    const close = () => {
+      input.removeEventListener("input", save);
+      form.removeEventListener("submit", submit);
+      resolve(result);
+    };
+    input.addEventListener("input", save);
+    form.addEventListener("submit", submit);
+    dialog.addEventListener("close", close, { once: true });
+    dialog.showModal();
+    input.focus();
+  });
 }
 function refreshFullState() {
   if (fullStatePending) return;
@@ -1509,6 +1566,23 @@ $("preset").addEventListener(
   guarded(() => selectWorkflow($("preset").value)),
 );
 $("refresh-workflows").addEventListener("click", loadSavedWorkflows);
+$("cleanup-vram").addEventListener("click", async () => {
+  if ($("cleanup-vram").disabled) return;
+  cleaningVram = true;
+  updateGenerate();
+  const status = $("cleanup-vram-status");
+  status.hidden = false;
+  status.textContent = "Requesting VRAM cleanup…";
+  try {
+    const result = await api("/api/vram/cleanup", { method: "POST", body: "{}" });
+    status.textContent = result.message;
+  } catch (error) {
+    status.textContent = error.message;
+  } finally {
+    cleaningVram = false;
+    updateGenerate();
+  }
+});
 $("refresh-models").addEventListener(
   "click",
   guarded(async () => {
@@ -1677,6 +1751,7 @@ $("reuse-selected-image").addEventListener("click", () => reuseSelectedImage(fal
 $("vary-selected-image").addEventListener("click", () => reuseSelectedImage(true));
 $("close-image").addEventListener("click", () => $("image-dialog").close());
 $("cancel-edit-image").addEventListener("click", () => $("edit-image-dialog").close());
+$("cancel-upscale-image").addEventListener("click", () => $("upscale-image-dialog").close());
 $("image-dialog").addEventListener("close", () => { imageReuseEpoch++; });
 $("previous-image").addEventListener("click", () =>
   navigateImage(-1),

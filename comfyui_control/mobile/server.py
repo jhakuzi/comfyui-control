@@ -245,6 +245,10 @@ class MobileHTTP:
             return json_response(await self.service.describe_image_actions(request.match_info['id'], request[OWNER]))
         return json_response(await self.service.image_action(request.match_info['id'], request[OWNER], await object_body(request)))
 
+    async def cleanup_vram(self, request):
+        await object_body(request)
+        return json_response(await self.service.cleanup_vram())
+
     async def trash(self, request):
         return json_response(await self.service.image_trash(request[OWNER]))
 
@@ -389,6 +393,7 @@ class MobileHTTP:
         app.add_routes([
             web.post('/api/login', self.login), web.get('/api/session', self.session), web.post('/api/logout', self.logout),
             web.get('/api/state', self.state), web.post('/api/resume', self.resume), web.get('/api/events', self.events),
+            web.post('/api/vram/cleanup', self.cleanup_vram),
             web.get('/api/presets', self.presets), web.post('/api/presets', self.presets),
             web.get('/api/workflows/saved', self.saved_workflows), web.post('/api/workflows/saved', self.saved_workflows),
             web.get('/api/presets/{id}', self.preset), web.put('/api/presets/{id}', self.preset), web.delete('/api/presets/{id}', self.preset),

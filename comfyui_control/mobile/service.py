@@ -20,7 +20,7 @@ from .workflow_sources import saved_workflows, saved_workflow_graph
 from ..performance import GenerationPerformance
 from .prompt_history import PromptHistory
 from .image_metadata import generation_details
-from .image_actions import IMAGE_WORKFLOWS, ImageLibrary, workflow_capabilities, workflow_name, workflow_bindings, workflow_import_error
+from .image_actions import IMAGE_WORKFLOWS, ImageLibrary, workflow_capabilities, workflow_name, workflow_bindings, workflow_import_error, upscale_multiplier_binding
 from .image_pixels import encode_image
 from ..background_process import run_background
 import sys
@@ -275,6 +275,18 @@ class MobileService:
 
     async def saved_workflows(self):
         return await saved_workflows(self.client)
+
+    async def cleanup_vram(self):
+        if self.client is None or not self.online:
+            raise ValueError('Start ComfyUI and reconnect before requesting VRAM cleanup.')
+        async with self.submit_lock:
+            queue = await self.client.request('GET', '/queue')
+            if not all(isinstance(queue.get(key), list) for key in ('queue_running', 'queue_pending')):
+                raise ValueError('Could not verify that ComfyUI is idle. VRAM cleanup was not requested.')
+            if queue.get('queue_running') or queue.get('queue_pending'):
+                raise ValueError('Wait until ComfyUI has no running or queued generations before cleaning VRAM.')
+            await self.client.request('POST', '/free', {'unload_models': True, 'free_memory': True})
+        return {'message': 'VRAM cleanup requested. ComfyUI will release idle models and reload them for the next generation.'}
 
     async def import_saved_workflow(self, name):
         graph = await saved_workflow_graph(self.client, name)
@@ -760,6 +772,10 @@ class MobileService:
         instruction = body.get('prompt')
         if action == 'edit' and (not isinstance(instruction, str) or not instruction.strip() or len(instruction) > 20000):
             raise ValueError('Enter an edit instruction (1–20,000 characters).')
+        multiplier = body.get('multiplier')
+        if multiplier is not None and (action != 'upscale' or type(multiplier) not in (int, float)
+                                       or abs(multiplier) > 1e308 or not math.isfinite(multiplier) or multiplier <= 0):
+            raise ValueError('The upscale multiplier must be a finite positive number, or left blank for the workflow default.')
         # Serialize only preparation. Execution still uses submit(), its journal,
         # the shared ComfyUI queue, and the existing WebSocket/session recovery.
         async with self.image_workflow_lock:
@@ -782,10 +798,19 @@ class MobileService:
             except ValueError as exc:
                 raise ValueError(workflow_import_error(action, name, exc)) from None
             bindings = workflow_bindings(action, graph)
+            if action == 'upscale':
+                try:
+                    bindings.append(upscale_multiplier_binding(graph))
+                except ValueError:
+                    if multiplier is not None:
+                        raise
             info = await self.metadata()
             missing = {node['class_type'] for node in graph.values()} - set(info)
             if missing:
                 raise ValueError('ComfyUI is missing these nodes: ' + ', '.join(sorted(missing)))
+            if multiplier is not None:
+                # Check node limits before making an unnecessary input copy.
+                render({'graph': graph, 'mappings': [bindings[-1]]}, {'action-scale': multiplier}, info=info)
             if scope != self.output_scope:
                 raise ValueError('The output folder changed. Refresh the gallery before trying again.')
             try:
@@ -802,9 +827,11 @@ class MobileService:
             await self.metadata(force=True)
             marker = {'action': action, 'source': name}
             preset = None
+            required = {(m['key'], m['node'], m['input'], m['role']) for m in bindings}
             for entry in self.presets.list():
                 saved = self.presets.get(entry['id'])
-                if saved.get('image_workflow') == marker and saved['graph'] == graph:
+                mapped = {(m['key'], m['node'], m['input'], m['role']) for m in saved['mappings']}
+                if saved.get('image_workflow') == marker and saved['graph'] == graph and required <= mapped:
                     preset = saved
                     break
             if preset is None:
@@ -817,6 +844,8 @@ class MobileService:
             values = {'action-image': uploaded}
             if action == 'edit':
                 values['action-prompt'] = instruction
+            elif multiplier is not None:
+                values['action-scale'] = multiplier
             if scope != self.output_scope:
                 raise ValueError('The output folder changed. No generation was queued; refresh the gallery.')
             job = await self.submit({'request_id': request_id, 'preset': preset['id'], 'revision': revision(preset),

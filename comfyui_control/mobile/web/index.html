@@ -96,6 +96,8 @@
                   Refresh saved ComfyUI workflows
                 </button>
               </div>
+              <button id="cleanup-vram" class="small prompt-action" type="button" disabled>VRAM cleanup</button>
+              <p id="cleanup-vram-status" class="hint" role="status" hidden></p>
               <button id="reuse-last" class="small prompt-action" type="button" hidden>
                 Reuse last generation
               </button>
@@ -211,12 +213,23 @@
                   <span>GPU <b id="stat-gpu">--</b></span>
                 </div>
               </div>
-              <img
-                id="preview"
-                class="preview"
-                alt="Current generation preview"
-                hidden
-              />
+              <div id="preview-stage" class="preview-stage" hidden>
+                <img
+                  id="preview"
+                  class="preview"
+                  alt="Current generation preview"
+                  hidden
+                />
+                <div id="preview-loading" class="preview-loading">
+                  <span class="loading-spinner" aria-hidden="true"></span>
+                  <p id="preview-loading-phase" class="hint">Preparing generation</p>
+                  <div class="generation-stats" aria-live="off" aria-label="Live generation statistics">
+                    <span><b id="preview-stat-iteration">--</b> s/it</span>
+                    <span>VRAM <b id="preview-stat-vram">--</b></span>
+                    <span>GPU <b id="preview-stat-gpu">--</b></span>
+                  </div>
+                </div>
+              </div>
               <div id="job-images" class="image-grid"></div>
               <div class="actions">
                 <button id="same-seed" type="button" hidden>Same seed</button
@@ -298,6 +311,19 @@
       </div>
       <p id="notice" role="alert" hidden></p>
     </main>
+    <dialog id="upscale-image-dialog" aria-labelledby="upscale-image-title">
+      <form id="upscale-image-form" class="viewer">
+        <h2 id="upscale-image-title">Upscale image</h2>
+        <p id="upscale-image-source" class="hint"></p>
+        <label for="upscale-image-multiplier">Scale multiplier (optional)</label>
+        <input id="upscale-image-multiplier" type="number" min="0" step="any" inputmode="decimal" placeholder="Workflow default" />
+        <p class="hint">Leave blank to use the saved workflow multiplier.</p>
+        <div class="actions">
+          <button id="cancel-upscale-image" type="button">Cancel</button>
+          <button class="primary" type="submit">Upscale image</button>
+        </div>
+      </form>
+    </dialog>
     <dialog id="edit-image-dialog" aria-labelledby="edit-image-title">
       <form id="edit-image-form" class="viewer">
         <h2 id="edit-image-title">Edit image</h2>
@@ -386,7 +412,7 @@
             </p>
             <details id="image-details">
               <summary>Details</summary>
-              <button id="copy-image-prompt" class="text-button" type="button" disabled>Copy prompt</button>
+              <button id="copy-image-prompt" class="small" type="button" disabled>Copy prompt</button>
               <p id="copy-prompt-status" class="hint" role="status"></p>
               <div id="image-metadata"></div>
             </details>

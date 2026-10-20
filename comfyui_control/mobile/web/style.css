@@ -879,6 +879,17 @@ details details {
   background: var(--image-bg);
   margin-top: 14px;
 }
+.preview-stage { display: contents; }
+.preview-loading { display: none; }
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: loading-spin .9s linear infinite;
+}
+@keyframes loading-spin { to { transform: rotate(360deg); } }
 .job-card .image-grid {
   margin-top: 16px;
 }
@@ -913,6 +924,7 @@ progress:indeterminate::-webkit-progress-bar {
 }
 @media (prefers-reduced-motion: reduce) {
   progress:indeterminate { animation: none; }
+  .loading-spinner { animation: none; }
   button, .button, input, textarea, select, #header-generation { transition: none; }
 }
 #notice {
@@ -983,11 +995,23 @@ dialog::backdrop {
   color: var(--muted);
   line-height: 1.7;
 }
-.metadata-list { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 5px 12px; }
+.metadata-card {
+  margin: 10px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--panel-sheen) var(--surface);
+}
+.metadata-card > summary { font-size: .83rem; font-weight: 600; }
+.metadata-card[open] > summary { margin-bottom: 10px; }
+.metadata-prompt-tools { display: flex; align-items: center; gap: 10px; }
+.metadata-prompt-tools .hint { flex: 1; margin: 0; }
+.metadata-prompt-tools button { flex-shrink: 0; }
+.metadata-list { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 5px 12px; margin: 6px 0 0; }
 .metadata-list dt, .metadata-list dd { margin: 0; overflow-wrap: anywhere; }
 .metadata-list dt { color: var(--muted); }
 .metadata-list dd { color: var(--text); }
-.metadata-prompt { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+.metadata-prompt { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; margin: 6px 0; }
 #image-metadata h3 { margin: 12px 0 4px; font-size: 0.83rem; }
 .clipboard-text { position: fixed; left: -9999px; top: 0; }
 .prompt-entry { border-top: 1px solid var(--line); padding: 12px 0; }
@@ -1002,7 +1026,7 @@ dialog::backdrop {
   background: var(--selected-sheen) var(--accent-soft);
 }
 #prompt-history-dialog { max-width: 540px; }
-#edit-image-dialog { max-width: 580px; }
+#edit-image-dialog, #upscale-image-dialog { max-width: 580px; }
 .job-card {
   scroll-margin-top: 20px;
 }
@@ -1253,6 +1277,49 @@ dialog::backdrop {
     min-height: 60px;
     flex-shrink: 1;
   }
+  #workspace[data-page="create"] .preview-stage {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1 1 auto;
+    min-height: 140px;
+    height: clamp(160px, 32dvh, 400px);
+    margin-top: 12px;
+    border-radius: var(--radius-control);
+    background: var(--image-bg);
+    overflow: hidden;
+  }
+  #workspace[data-page="create"] .preview-stage .preview { margin-top: 0; }
+  #workspace[data-page="create"] .preview-loading {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    max-width: calc(100% - 16px);
+    padding: 16px;
+    text-align: center;
+    pointer-events: none;
+  }
+  #preview-loading .hint { margin: 0; }
+  #preview-loading .generation-stats { justify-content: center; margin: 0; }
+  #workspace[data-page="create"] .preview-stage[data-preview="true"] .preview-loading {
+    bottom: 8px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+    background: var(--surface);
+  }
+  .preview-stage[data-preview="true"] .loading-spinner { width: 18px; height: 18px; border-width: 2px; }
+  .preview-stage[data-preview="true"] #preview-loading-phase { display: none; }
+  #workspace[data-page="create"] .job-card[data-preparing="true"] > .heading,
+  #workspace[data-page="create"] .job-card[data-preparing="true"] > .actions,
+  #workspace[data-page="create"] .job-card[data-preparing="true"] > #job-metrics { display: none; }
+  #workspace[data-page="create"] #generation-panel:has(#preview-stage:not([hidden])) #dock-submitting { display: none; }
   #workspace[data-page="create"] .generate-bar > .job-card .heading,
   #workspace[data-page="create"] .generate-bar > .job-card .hint,
   #workspace[data-page="create"] .generate-bar > .job-card progress,
@@ -1340,6 +1407,7 @@ dialog::backdrop {
   #workspace[data-layout="studio"] #generation-panel > .wide-screen-only { display: block; }
   #workspace[data-layout="studio"] #selected-image-panel { display: block; }
   #workspace[data-layout="studio"] #generation-panel[data-active="true"]:not([data-inspect="true"]) #selected-image-panel { display: none; }
+  #workspace[data-layout="studio"] #generation-panel[data-inspect="true"] #preview-stage { display: none; }
   #workspace[data-layout="studio"] #job-output { overflow: visible; flex-shrink: 0; }
   #workspace[data-layout="studio"] #job-output > .job-card { margin: 0 0 12px; padding: 0; border: 0; background: transparent; }
   #workspace[data-layout="studio"] .generate-bar {
@@ -1361,6 +1429,9 @@ dialog::backdrop {
   }
   #workspace[data-layout="studio"] .generate-bar > .job-card .preview {
     flex: 1 1 auto; width: 100%; height: 100%; min-height: 60px; max-height: none; object-fit: contain;
+  }
+  #workspace[data-layout="studio"] .generate-bar > .job-card .preview-stage {
+    flex: 1 1 auto; height: auto; min-height: 100px;
   }
   #workspace[data-layout="studio"] > #gallery-page {
     grid-column: 3; grid-row: 2; position: sticky;

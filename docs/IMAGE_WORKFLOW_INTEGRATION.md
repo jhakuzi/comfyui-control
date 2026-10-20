@@ -4,7 +4,11 @@ Select a saved image in the preview or phone viewer, then choose **Edit** or
 **Upscale**. Both retain the original image and use the existing queue, live
 progress, gallery, cancellation and session recovery. The main generation
 workflow and unsent prompt stay selected. Edit opens an instruction dialog;
-cancelling it never submits. Unsent edit instructions are retained per image in
+cancelling it never submits. Upscale asks for an optional multiplier; leaving
+it blank preserves the saved workflow value. A supplied multiplier maps only
+to a unique numeric `scale_multiplier` input and must satisfy its node's limits.
+Ambiguous, missing or connected multiplier inputs are rejected when overridden.
+The original workflow graph and image stay unchanged. Unsent edit instructions are retained per image in
 this browser, including across refreshes.
 
 ## Setup in ComfyUI
@@ -88,3 +92,13 @@ ComfyUI node package or dependency is introduced.
 Automated tests use representative API graphs, Chromium/Linux WebKit and a
 ComfyUI protocol fixture. They do not establish inference compatibility with
 the full SeedVR/Qwen workflows or installed models; verify those on your PC.
+
+## VRAM cleanup
+
+The WebUI's **VRAM cleanup** button uses ComfyUI's standard `POST /free` API
+with `unload_models` and `free_memory`. It is available while connected and the
+queue is empty. The backend checks the complete queue again before forwarding
+the request, including work from ComfyUI's regular interface or other clients.
+It does not interrupt generations, restart ComfyUI or alter images/workflows.
+ComfyUI performs the release; the UI reports the request rather than claiming
+an immediate amount of freed VRAM. Models reload on the next generation.

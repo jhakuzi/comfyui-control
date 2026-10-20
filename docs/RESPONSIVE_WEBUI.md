@@ -16,12 +16,19 @@ setting, second server or separate installation is needed.
   usage appear in the top header while generating, including in Gallery.
   The header stays visible while scrolling. Active progress has its own compact
   panel with a short fade (disabled with reduced motion); it disappears when
-  inactive. Completed images appear on the right.
+  inactive. The empty preview also shows a loading circle and the same live
+  statistics while submitting, loading models or sampling. With a live preview,
+  they become a small overlay; completion clears them. Reduced motion disables
+  the spinner animation. No extra monitoring requests are made.
+  Completed images appear on the right.
 - **Gallery:** the desktop sidebar has All images, Kept, History and Trash views.
   History lists this browser's jobs; selecting one never submits a generation.
   Phones keep the Gallery tab and full-size viewer. Comparison remains available.
   Previews use 768px thumbnails, or 1280px on high-density screens; phones keep
   the smaller previews. Full-size viewing and comparison keep their original images.
+- **Image Details:** prompts, generation parameters, models/LoRAs and additional
+  metadata use matching bordered panels. **Copy prompt** is inside the prompt
+  panel and also works over ordinary LAN HTTP.
 - **Reuse settings / New variation:** also work for images saved directly by
   ComfyUI when the local PNG includes its API workflow metadata. Settings fill
   the form; tap Generate when ready. Missing metadata is explained in the viewer.
@@ -63,7 +70,7 @@ The existing application icon is retained.
 ## Run from source
 
 The three-column workspace is on **testing/webui-workspace**, version
-**1.1.0.dev4**. It branches from main; the uninstall work remains separate.
+**1.1.0.dev5**. It branches from main; the uninstall work remains separate.
 For an isolated source copy,
 close the running app and install as your usual Linux user:
 
@@ -83,6 +90,11 @@ For SSH, use the source environment's executable with `--start-server --start-we
 For updates, close it, run `git pull --ff-only` in this checkout and reinstall
 with `.venv-test/bin/python -m pip install .`.
 
+**VRAM cleanup** below the workflow refresh controls unloads idle models using
+ComfyUI's existing API. It is disabled while work is queued or running. The
+server checks the queue again before requesting cleanup; the next generation
+will reload its models.
+
 ## Saved-image actions
 
 - **Keep:** mark/unmark the selected image for this browser's Kept filter in the
@@ -90,8 +102,9 @@ with `.venv-test/bin/python -m pip install .`.
   browser identity, output folder and file version.
 - **Edit:** enter an instruction for the selected saved image. Uses the saved
   `VeryComfy_Qwen21_Turbo_EDIT_ONLY.json` workflow in ComfyUI.
-- **Upscale:** sends the selected saved image to
-  `OfficialComfy-SeedVR_Upscaler.json` in ComfyUI.
+- **Upscale:** asks for an optional multiplier, then sends the selected saved
+  image to `OfficialComfy-SeedVR_Upscaler.json` in ComfyUI. Leave the multiplier
+  blank to keep its saved value; overrides map to `scale_multiplier`.
   Both actions retain the original image and use normal generation progress,
   cancellation and reconnect recovery. Your main workflow and prompt draft stay
   selected. Missing workflows disable the corresponding action with instructions.

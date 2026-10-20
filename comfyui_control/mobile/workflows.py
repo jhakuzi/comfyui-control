@@ -70,8 +70,13 @@ def candidates(graph, info):
             schema = input_schema(graph, node_id, name, info)
             limits = schema[1] if len(schema) > 1 and isinstance(schema[1], dict) else {}
             options = schema[0] if schema and isinstance(schema[0], list) else limits.get("options")
+            # JSON exports often serialize a FLOAT default such as 2.0 as 2.
+            # Respect declared FLOAT inputs so fractional edits remain possible.
+            kind = "bool" if type(value) is bool else "int" if type(value) is int else "float" if type(value) is float else "text"
+            if kind == "int" and schema and schema[0] == "FLOAT":
+                kind = "float"
             result.append({"node": node_id, "input": name, "label": f"{title} · {name}",
-                           "default": value, "kind": "bool" if type(value) is bool else "int" if type(value) is int else "float" if type(value) is float else "text",
+                           "default": value, "kind": kind,
                            "options": options, "min": limits.get("min"), "max": limits.get("max"), "step": limits.get("step")})
     return result
 

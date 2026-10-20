@@ -34,7 +34,7 @@ def action_graphs():
     }
     upscale = {
         '1': dict(class_type='LoadImage', inputs={'image': 'saved.png'}),
-        'custom': dict(class_type='UnknownUpscaler', inputs={'pixels': ['1', 0], 'scale': 2.5, 'seed': 4567}),
+        'custom': dict(class_type='UnknownUpscaler', inputs={'pixels': ['1', 0], 'scale_multiplier': 2, 'seed': 4567}),
     }
     return {IMAGE_WORKFLOWS['edit']['name'] + '.json': edit,
             IMAGE_WORKFLOWS['upscale']['name'] + '.json': upscale}
@@ -47,10 +47,15 @@ class ImageWorkflowStub(ComfyStub):
         self.object_info = {node['class_type']: {'input': {}} for graph in self.saved.values() for node in graph.values()}
         self.image_names = ['saved.png']
         self.object_info['LoadImage'] = {'input': {'required': {'image': [self.image_names, {'image_upload': True}]}}}
+        self.object_info['UnknownUpscaler'] = {'input': {'required': {'scale_multiplier': ['FLOAT', {'min': .25, 'max': 8}]}}}
         self.uploads = []
         self.upload_hook = None
+        self.free_requests = []
 
     async def endpoint(self, request):
+        if request.path == '/free':
+            self.free_requests.append(await request.json())
+            return web.Response(status=200)  # ComfyUI's endpoint has no JSON body.
         if request.path == '/upload/image':
             fields = await request.post()
             file = fields['image']
@@ -285,3 +290,129 @@ def test_source_read_rejects_replaced_file_and_symlink(tmp_path):
     (tmp_path / 'link.png').symlink_to(tmp_path / 'one.png')
     with pytest.raises(FileNotFoundError):
         read_image(tmp_path, {**descriptor, 'filename': 'link.png'})
+
+
+def test_multiplier_maps_unique_numeric_input_and_preserves_workflow_defaults(tmp_path):
+    async def scenario():
+        stub = ImageWorkflowStub()
+        upstream = TestServer(stub.app())
+        await upstream.start_server()
+        picture(tmp_path / 'out/one.png')
+        service = MobileService(tmp_path / 'data', MobileSettings(comfy_url=str(upstream.make_url('/'))), tmp_path / 'out')
+        try:
+            await service.start()
+            await until(lambda: service.online)
+            item = (await service.gallery(ALICE))[0]
+            body = dict(action='upscale', modified=item['modified'])
+            name = IMAGE_WORKFLOWS['upscale']['name'] + '.json'
+            original = deepcopy(stub.saved[name])
+            for value in (None, 1.5, 4):
+                result = await service.image_action(item['id'], ALICE, {
+                    **body, 'request_id': str(uuid.uuid4()), 'multiplier': value})
+                expected = deepcopy(original)
+                expected['1']['inputs']['image'] = stub.uploads[-1]['name']
+                if value is not None:
+                    expected['custom']['inputs']['scale_multiplier'] = value
+                assert stub.submissions[-1]['prompt'] == expected
+                assert result['job']['values']['action-scale'] == (2 if value is None else value)
+            assert len(service.presets.list()) == 1 and stub.saved[name] == original
+            for value in (0, -2, True, '2', float('inf'), 10**500, .1, 9):
+                with pytest.raises(ValueError):
+                    await service.image_action(item['id'], ALICE, {
+                        **body, 'request_id': str(uuid.uuid4()), 'multiplier': value})
+            assert len(stub.submissions) == len(stub.uploads) == 3
+            stub.saved[name]['another'] = dict(class_type='UnknownUpscaler', inputs={'scale_multiplier': 3})
+            with pytest.raises(ValueError, match='exactly one'):
+                await service.image_action(item['id'], ALICE, {**body, 'request_id': str(uuid.uuid4()), 'multiplier': 2})
+            del stub.saved[name]['another']
+            stub.saved[name]['custom']['inputs']['scale_multiplier'] = ['1', 0]
+            with pytest.raises(ValueError, match='not a connection'):
+                await service.image_action(item['id'], ALICE, {**body, 'request_id': str(uuid.uuid4()), 'multiplier': 2})
+            assert len(stub.submissions) == 3
+        finally:
+            await service.stop()
+            await upstream.close()
+    asyncio.run(scenario())
+
+
+def test_vram_cleanup_uses_standard_empty_response_api_and_refuses_busy_queue(tmp_path):
+    async def scenario():
+        stub = ImageWorkflowStub()
+        upstream = TestServer(stub.app())
+        await upstream.start_server()
+        service = MobileService(tmp_path / 'data', MobileSettings(comfy_url=str(upstream.make_url('/'))), tmp_path / 'out')
+        http = TestClient(TestServer(MobileHTTP(service).app()))
+        try:
+            with pytest.raises(ValueError, match='Start ComfyUI'):
+                await service.cleanup_vram()
+            await service.start()
+            await until(lambda: service.online)
+            await http.start_server()
+            await http.get('/api/session')
+            origin = str(http.make_url('/')).rstrip('/')
+            assert (await http.post('/api/vram/cleanup', json={}, headers={'Origin': 'https://other.example'})).status == 403
+            assert not stub.free_requests
+            response = await http.post('/api/vram/cleanup', json={}, headers={'Origin': origin})
+            assert response.status == 200
+            assert 'requested' in (await response.json())['message']
+            assert stub.free_requests == [{'unload_models': True, 'free_memory': True}]
+            for queue in (stub.pending, stub.running):
+                queue.append([1, 'desktop-job', {}, {}, []])
+                response = await http.post('/api/vram/cleanup', json={}, headers={'Origin': origin})
+                assert response.status == 400 and 'running or queued' in (await response.json())['error']
+                queue.clear()
+            assert len(stub.free_requests) == 1 and not stub.submissions and not service.jobs
+            service.settings.require_auth = True
+            assert (await http.post('/api/vram/cleanup', json={}, headers={'Origin': origin})).status == 401
+        finally:
+            await http.close()
+            await service.stop()
+            await upstream.close()
+    asyncio.run(scenario())
+
+
+def test_old_action_preset_and_jobs_are_retained_when_multiplier_mapping_is_added(tmp_path):
+    from comfyui_control.mobile.image_actions import workflow_bindings
+    from comfyui_control.mobile.settings import save_json
+    async def scenario():
+        stub = ImageWorkflowStub()
+        upstream = TestServer(stub.app())
+        await upstream.start_server()
+        picture(tmp_path / 'out/one.png')
+        service = MobileService(tmp_path / 'data', MobileSettings(comfy_url=str(upstream.make_url('/'))), tmp_path / 'out')
+        try:
+            await service.start()
+            await until(lambda: service.online)
+            name = IMAGE_WORKFLOWS['upscale']['name'] + '.json'
+            graph = stub.saved[name]
+            old = service.presets.create('Previous upscale preset', graph)
+            old = service.presets.map(old['id'], workflow_bindings('upscale', graph))
+            old['image_workflow'] = dict(action='upscale', source=name)
+            save_json(service.presets.path(old['id']), old)
+            service.jobs['old-job'] = dict(id='old-job', owner=ALICE, preset=old['id'], created=1,
+                scope=service.output_scope, status='complete', images=[])
+            previous_job = deepcopy(service.jobs['old-job'])
+            item = (await service.gallery(ALICE))[0]
+            result = await service.image_action(item['id'], ALICE, dict(action='upscale', multiplier=1.5,
+                request_id=str(uuid.uuid4()), modified=item['modified']))
+            assert result['job']['preset'] != old['id']
+            assert result['job']['values']['action-scale'] == 1.5
+            assert service.presets.get(old['id']) == old and service.jobs['old-job'] == previous_job
+        finally:
+            await service.stop()
+            await upstream.close()
+    asyncio.run(scenario())
+
+
+def test_vram_cleanup_does_not_treat_an_unknown_queue_as_idle(tmp_path):
+    class InvalidQueue:
+        async def request(self, method, path, data=None):
+            assert (method, path) == ('GET', '/queue'), 'Memory release must not be requested without a verifiable empty queue'
+            return {}
+    async def scenario():
+        service = MobileService(tmp_path / 'data', MobileSettings(), tmp_path / 'out')
+        service.online = True
+        service.client = InvalidQueue()
+        with pytest.raises(ValueError, match='Could not verify'):
+            await service.cleanup_vram()
+    asyncio.run(scenario())

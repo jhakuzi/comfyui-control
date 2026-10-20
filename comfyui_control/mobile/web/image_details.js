@@ -8,6 +8,8 @@ class ImageDetails {
     this.loaded = false;
     this.loading = false;
     this.el = (id) => document.getElementById(id);
+    this.copyButton = this.el("copy-image-prompt");
+    this.copyStatus = this.el("copy-prompt-status");
     this.el("image-details").addEventListener("toggle", () => {
       if (this.el("image-details").open) this.load();
     });
@@ -16,7 +18,7 @@ class ImageDetails {
       // the old dialog's close event is delivered.
       if (this.el("image-dialog").contains(this.el("image-details"))) this.select(null);
     });
-    this.el("copy-image-prompt").addEventListener("click", async () => {
+    this.copyButton.addEventListener("click", async () => {
       try {
         let copied = false;
         if (navigator.clipboard?.writeText && window.isSecureContext) {
@@ -39,9 +41,9 @@ class ImageDetails {
           text.remove();
           if (!copied) throw new Error();
         }
-        this.el("copy-prompt-status").textContent = "Prompt copied.";
+        this.copyStatus.textContent = "Prompt copied.";
       } catch {
-        this.el("copy-prompt-status").textContent = "Copy is unavailable. Select the prompt text to copy it.";
+        this.copyStatus.textContent = "Copy is unavailable. Select the prompt text to copy it.";
       }
     });
   }
@@ -51,8 +53,10 @@ class ImageDetails {
     this.item = item;
     this.loaded = this.loading = false;
     this.positive = "";
-    this.el("copy-image-prompt").disabled = true;
-    this.el("copy-prompt-status").textContent = "";
+    this.copyButton.disabled = true;
+    this.copyStatus.textContent = "";
+    this.copyButton.remove();
+    this.copyStatus.remove();
     this.el("image-metadata").textContent = item ? "Loading saved details…" : "";
     if (item && this.el("image-details").open) this.load();
   }
@@ -87,7 +91,7 @@ class ImageDetails {
       return;
     }
     const section = (title, open = true) => {
-      const details = el("details");
+      const details = el("details", undefined, "metadata-card");
       details.open = open;
       details.append(el("summary", title));
       root.append(details);
@@ -101,6 +105,9 @@ class ImageDetails {
     const prompts = [...(data.positive || []), ...(data.negative || [])];
     if (prompts.length) {
       const target = section("Prompts");
+      const tools = el("div", undefined, "metadata-prompt-tools");
+      tools.append(this.copyStatus, this.copyButton);
+      target.append(tools);
       for (const [role, title] of [["positive", "Positive prompt"], ["negative", "Negative prompt"]]) {
         const fields = data[role] || [];
         fields.forEach((field, index) => {
@@ -110,7 +117,7 @@ class ImageDetails {
       }
     }
     this.positive = (data.positive || []).map((field) => field.value).join("\n\n");
-    this.el("copy-image-prompt").disabled = !this.positive;
+    this.copyButton.disabled = !this.positive;
     const modelRoles = new Set(["model", "diffusion_model", "vae", "text_encoder", "lora_model", "lora_strength"]);
     const fields = data.parameters || [];
     const models = fields.filter((field) => modelRoles.has(field.key.split(":")[0]) &&

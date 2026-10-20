@@ -52,6 +52,11 @@ async def main(browser_name, root):
             await page.locator('#preset').select_option(preset['id'])
             prompt = page.locator('[data-role="positive"]')
             await prompt.fill('Keep my unsent main draft')
+            await expect(page.locator('#cleanup-vram')).to_be_enabled()
+            await page.locator('#cleanup-vram').click()
+            await expect(page.locator('#cleanup-vram-status')).to_contain_text('requested')
+            assert stub.free_requests == [{'unload_models': True, 'free_memory': True}]
+            await expect(prompt).to_have_value('Keep my unsent main draft')
             await page.get_by_role('button', name='View older.png', exact=True).click()
             edit = page.locator('#selected-image-actions [data-action="edit"]')
             await expect(edit).to_be_enabled()
@@ -66,6 +71,7 @@ async def main(browser_name, root):
             await expect(page.locator('#job-detail')).to_contain_text(IMAGE_WORKFLOWS['edit']['name'])
             await expect(page.locator('#job-title')).to_have_text('In the queue')
             assert len(stub.submissions) == len(stub.uploads) == 1
+            await expect(page.locator('#cleanup-vram')).to_be_disabled()
             expected = deepcopy(stub.saved[IMAGE_WORKFLOWS['edit']['name'] + '.json'])
             expected['88']['inputs']['image'] = stub.uploads[0]['name']
             expected['89']['inputs']['prompt'] = 'Soft golden light'
@@ -103,6 +109,12 @@ async def main(browser_name, root):
             # Losing the HTTP response after queuing an upscale must reuse the
             # same persistent request UUID, including after a page refresh.
             await page.get_by_role('button', name='View older.png', exact=True).click()
+            await page.locator('#selected-image-actions [data-action="upscale"]').click()
+            await expect(page.locator('#upscale-image-source')).to_have_text('older.png')
+            await expect(page.locator('#upscale-image-multiplier')).to_have_value('')
+            await page.locator('#upscale-image-multiplier').fill('1.5')
+            await page.locator('#cancel-upscale-image').click()
+            assert len(stub.submissions) == 1 and len(stub.uploads) == 1
             lost = {'once': True}
             async def lose_response(route):
                 if route.request.method == 'POST' and lost['once']:
@@ -113,7 +125,10 @@ async def main(browser_name, root):
                     await route.continue_()
             await page.route('**/api/images/*/actions', lose_response)
             await page.locator('#selected-image-actions [data-action="upscale"]').click()
+            await expect(page.locator('#upscale-image-multiplier')).to_have_value('1.5')
+            await page.locator('#upscale-image-form button[type="submit"]').click()
             await until(lambda: len(stub.submissions) == 2)
+            assert stub.submissions[-1]['prompt']['custom']['inputs']['scale_multiplier'] == 1.5
             await page.reload()
             await expect(page.locator('#job-detail')).to_contain_text(IMAGE_WORKFLOWS['upscale']['name'])
             assert len(stub.submissions) == len(stub.uploads) == 2
@@ -123,6 +138,10 @@ async def main(browser_name, root):
             await page.set_viewport_size({'width': 390, 'height': 844})
             await page.locator('#gallery-tab').click()
             await page.get_by_role('button', name='View latest.png', exact=True).click()
+            await page.locator('#viewer-image-actions [data-action="upscale"]').click()
+            await page.screenshot(path=str(root / 'upscale-dialog-phone.png'))
+            assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            await page.locator('#cancel-upscale-image').click()
             await page.locator('#viewer-image-actions [data-action="edit"]').click()
             await expect(page.locator('#edit-image-source')).to_have_text('latest.png')
             await page.locator('#edit-image-prompt').fill('A phone edit draft')
@@ -161,12 +180,16 @@ async def main(browser_name, root):
                 'links': [], 'definitions': {'subgraphs': [{'id': 'custom-editor-subgraph', 'nodes': []}]}}
             await page.get_by_role('button', name='View older.png', exact=True).click()
             await page.locator('#selected-image-actions [data-action="upscale"]').click()
+            await page.locator('#upscale-image-form button[type="submit"]').click()
             await expect(page.locator('#selected-image-actions .image-action-status')).to_contain_text('OfficialComfy-SeedVR_Upscaler.api.json')
             await expect(page.locator('#selected-image-panel')).to_be_visible()
             assert len(stub.submissions) == 3
             stub.saved[upscale_name.removesuffix('.json') + '.api.json'] = upscale_api
             await page.locator('#selected-image-actions [data-action="upscale"]').click()
+            await page.locator('#upscale-image-multiplier').fill('')
+            await page.locator('#upscale-image-form button[type="submit"]').click()
             await until(lambda: len(stub.submissions) == 4)
+            assert stub.submissions[-1]['prompt']['custom']['inputs']['scale_multiplier'] == 2
             assert (output / 'older.png').is_file() and (output / 'latest.png').is_file()
             assert not errors, errors
             await browser.close()
@@ -174,7 +197,7 @@ async def main(browser_name, root):
         await runner.cleanup()
         await service.stop()
         await upstream.close()
-    print(f'{browser_name}: edit/upscale, explicit source, graph preservation, drafts, progress, reload, lost response, persistent format errors and API companion recovery passed')
+    print(f'{browser_name}: edit/upscale, multiplier/cancel/defaults, idle VRAM cleanup, graph preservation, drafts, progress, reload, lost response and API companion recovery passed')
 
 
 if __name__ == '__main__':
