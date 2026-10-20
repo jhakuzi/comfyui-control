@@ -135,6 +135,38 @@ async def main(browser_name, root):
             await expect(page.locator('#edit-image-prompt')).to_have_value('A phone edit draft')
             await page.locator('#cancel-edit-image').click()
             assert len(stub.submissions) == 2
+            # Reproduce both reported editor-format failures. Instructions stay
+            # readable beside the image, rather than vanishing with a toast.
+            edit_name = IMAGE_WORKFLOWS['edit']['name'] + '.json'
+            edit_api = deepcopy(stub.saved[edit_name])
+            stub.saved[edit_name] = {'nodes': [{'id': 88, 'type': 'LoadImage',
+                'widgets_values': ['saved.png', {'custom': 'upload widget'}]}], 'links': []}
+            await page.locator('#viewer-image-actions [data-action="edit"]').click()
+            await page.locator('#edit-image-form button[type="submit"]').click()
+            await expect(page.locator('#viewer-image-actions .image-action-status')).to_contain_text('VeryComfy_Qwen21_Turbo_EDIT_ONLY.api.json')
+            await expect(page.locator('#image-dialog')).to_be_visible()
+            await page.locator('#notice').evaluate('el => el.hidden=true')
+            await expect(page.locator('#viewer-image-actions .image-action-status')).to_be_visible()
+            assert len(stub.submissions) == 2 and len(stub.uploads) == 2
+            stub.saved[edit_name.removesuffix('.json') + '.api.json'] = edit_api
+            await page.locator('#viewer-image-actions [data-action="edit"]').click()
+            await expect(page.locator('#edit-image-prompt')).to_have_value('A phone edit draft')
+            await page.locator('#edit-image-form button[type="submit"]').click()
+            await expect(page.locator('#image-dialog')).to_be_hidden()
+            await until(lambda: len(stub.submissions) == 3)
+            await page.set_viewport_size({'width': 1440, 'height': 1000})
+            upscale_name = IMAGE_WORKFLOWS['upscale']['name'] + '.json'
+            upscale_api = deepcopy(stub.saved[upscale_name])
+            stub.saved[upscale_name] = {'nodes': [{'id': 1, 'type': 'LoadImage', 'widgets_values': ['saved.png']}],
+                'links': [], 'definitions': {'subgraphs': [{'id': 'custom-editor-subgraph', 'nodes': []}]}}
+            await page.get_by_role('button', name='View older.png', exact=True).click()
+            await page.locator('#selected-image-actions [data-action="upscale"]').click()
+            await expect(page.locator('#selected-image-actions .image-action-status')).to_contain_text('OfficialComfy-SeedVR_Upscaler.api.json')
+            await expect(page.locator('#selected-image-panel')).to_be_visible()
+            assert len(stub.submissions) == 3
+            stub.saved[upscale_name.removesuffix('.json') + '.api.json'] = upscale_api
+            await page.locator('#selected-image-actions [data-action="upscale"]').click()
+            await until(lambda: len(stub.submissions) == 4)
             assert (output / 'older.png').is_file() and (output / 'latest.png').is_file()
             assert not errors, errors
             await browser.close()
@@ -142,7 +174,7 @@ async def main(browser_name, root):
         await runner.cleanup()
         await service.stop()
         await upstream.close()
-    print(f'{browser_name}: edit/upscale, explicit source, graph preservation, cancel, draft persistence, progress, reload and lost-response recovery passed')
+    print(f'{browser_name}: edit/upscale, explicit source, graph preservation, drafts, progress, reload, lost response, persistent format errors and API companion recovery passed')
 
 
 if __name__ == '__main__':

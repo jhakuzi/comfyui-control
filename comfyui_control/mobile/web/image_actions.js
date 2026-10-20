@@ -65,7 +65,8 @@ class SavedImageActions {
     if (action === "trash" && !confirm(`Move “${item.filename}” to Trash?${item.kept ? " This image is marked Kept." : ""} You can restore it from Gallery → Trash.`)) return;
     this.pending = true;
     this.buttons.forEach((button) => { button.disabled = true; });
-    this.status.textContent = action === "trash" ? "Moving image to Trash…" : "Saving…";
+    this.status.textContent = action === "trash" ? "Moving image to Trash…"
+      : action === "edit" || action === "upscale" ? "Preparing image…" : "Saving…";
     try {
       if (action === "edit" || action === "upscale") {
         await this.workflow(item, action, capability.modified);

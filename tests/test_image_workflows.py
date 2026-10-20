@@ -150,6 +150,10 @@ def test_binding_name_and_connection_validation():
     assert workflow_name('edit', names) == IMAGE_WORKFLOWS['edit']['name'] + '.json'
     expected = IMAGE_WORKFLOWS['upscale']['name'] + '.json'
     assert workflow_name('upscale', ['nested/' + expected]) == 'nested/' + expected
+    companion = expected.removesuffix('.json') + '.api.json'
+    assert workflow_name('upscale', [expected, companion]) == companion
+    assert workflow_name('upscale', ['nested/' + companion]) == 'nested/' + companion
+    assert workflow_name('upscale', [expected, 'nested/' + companion]) == expected
     with pytest.raises(ValueError, match='Multiple'):
         workflow_name('upscale', ['a/' + expected, 'b/' + expected])
     with pytest.raises(ValueError, match='not configured'):
@@ -161,6 +165,61 @@ def test_binding_name_and_connection_validation():
     graph['88']['inputs']['image'] = ['other', 0]
     with pytest.raises(ValueError, match='image binding'):
         workflow_bindings('edit', graph)
+
+
+@pytest.mark.parametrize('action', ['edit', 'upscale'])
+def test_editor_import_errors_name_api_companion_and_preserve_original(tmp_path, action):
+    async def scenario():
+        stub = ImageWorkflowStub()
+        name = IMAGE_WORKFLOWS[action]['name'] + '.json'
+        api = deepcopy(stub.saved[name])
+        # Reproduce both reported formats: SeedVR editor subgraphs and a
+        # LoadImage node with an extra extension-provided upload widget.
+        node_id = int(IMAGE_WORKFLOWS[action]['image'][0])
+        editor = {'nodes': [{'id': node_id, 'type': 'LoadImage',
+                             'widgets_values': ['saved.png', {'custom': 'upload control'}]}], 'links': []}
+        if action == 'upscale':
+            editor['definitions'] = {'subgraphs': [{'id': 'custom-editor-subgraph', 'nodes': []}]}
+        stub.saved[name] = editor
+        upstream = TestServer(stub.app())
+        await upstream.start_server()
+        output = tmp_path / 'out'
+        picture(output / 'one.png')
+        service = MobileService(tmp_path / 'data', MobileSettings(comfy_url=str(upstream.make_url('/'))), output)
+        try:
+            await service.start()
+            await until(lambda: service.online)
+            item = (await service.gallery(ALICE))[0]
+            request = dict(action=action, request_id=str(uuid.uuid4()), modified=item['modified'], prompt='edit instruction')
+            with pytest.raises(ValueError) as error:
+                await service.image_action(item['id'], ALICE, request)
+            message = str(error.value)
+            assert name in message and 'Nothing was queued' in message
+            assert 'run it once' in message and 'Export (API)' in message
+            assert IMAGE_WORKFLOWS[action]['name'] + '.api.json' in message
+            assert 'Keep the original' in message and 'renaming editor JSON alone' in message
+            assert not stub.uploads and not stub.submissions
+            # Supplying an API companion enables the normal action without
+            # replacing the desktop editor JSON or constructing its subgraphs.
+            companion = name.removesuffix('.json') + '.api.json'
+            stub.saved[companion] = api
+            service.workflow_names_time = 0
+            caps = await service.describe_image_actions(item['id'], ALICE)
+            assert caps['actions'][action]['available']
+            assert caps['actions'][action]['source'] == companion
+            result = await service.image_action(item['id'], ALICE, request)
+            assert result['job']['prompt_id'] and len(stub.submissions) == 1
+            expected = deepcopy(api)
+            source_node, source_input = IMAGE_WORKFLOWS[action]['image']
+            expected[source_node]['inputs'][source_input] = stub.uploads[0]['name']
+            if action == 'edit':
+                expected['89']['inputs']['prompt'] = request['prompt']
+            assert stub.submissions[0]['prompt'] == expected
+            assert stub.saved[name] == editor
+        finally:
+            await service.stop()
+            await upstream.close()
+    asyncio.run(scenario())
 
 
 def test_bad_sources_prompts_graphs_and_output_switch_never_queue(tmp_path):

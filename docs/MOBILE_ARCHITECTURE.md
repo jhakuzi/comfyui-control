@@ -1,6 +1,6 @@
 # Mobile WebUI architecture and verification
 
-## Testing: responsive workspace (1.1.0.dev3)
+## Testing: responsive workspace (1.1.0.dev4)
 
 `testing/webui-workspace` extends the same HTML/JavaScript frontend: settings,
 selected-image preview and gallery/history share a three-column layout on

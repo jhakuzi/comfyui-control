@@ -27,14 +27,29 @@ def workflow_capabilities():
 
 def workflow_name(action, names):
     expected = IMAGE_WORKFLOWS[action]['name']
-    if expected + '.json' in names:
-        return expected + '.json'
-    matches = [name for name in names if PurePosixPath(name).stem == expected]
-    if len(matches) != 1:
+    # An API companion leaves the editable desktop workflow untouched. Prefer
+    # root files, then unique nested copies; never pick an arbitrary duplicate.
+    for filename in (expected + '.api.json', expected + '.json'):
+        if filename in names:
+            return filename
+    for filename in (expected + '.api.json', expected + '.json'):
+        matches = [name for name in names if PurePosixPath(name).name == filename]
+        if len(matches) == 1:
+            return matches[0]
         if matches:
-            raise ValueError(f'Multiple saved workflows are named {expected}. Keep one uniquely named copy.')
-        raise ValueError(workflow_capabilities()[action]['reason'])
-    return matches[0]
+            raise ValueError(f'Multiple saved workflows are named {filename}. Keep one uniquely named copy.')
+    raise ValueError(workflow_capabilities()[action]['reason'])
+
+
+def workflow_import_error(action, name, error):
+    expected = IMAGE_WORKFLOWS[action]['name']
+    return (f'Could not prepare {name}: {error} '
+            'Nothing was queued. First open this exact saved workflow in ComfyUI, run it once, then retry here. '
+            'If it still fails, use ComfyUI\'s Export (API) / Save (API Format) option '
+            '(enable Dev Mode in ComfyUI settings if it is hidden). '
+            f'Save that API export as {expected}.api.json in the same ComfyUI user workflows folder '
+            '(normally ComfyUI/user/default/workflows/), then refresh this WebUI. '
+            'Keep the original editor workflow; renaming editor JSON alone will not convert it.')
 
 
 def workflow_bindings(action, graph):

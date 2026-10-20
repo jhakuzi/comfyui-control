@@ -20,7 +20,7 @@ from .workflow_sources import saved_workflows, saved_workflow_graph
 from ..performance import GenerationPerformance
 from .prompt_history import PromptHistory
 from .image_metadata import generation_details
-from .image_actions import IMAGE_WORKFLOWS, ImageLibrary, workflow_capabilities, workflow_name, workflow_bindings
+from .image_actions import IMAGE_WORKFLOWS, ImageLibrary, workflow_capabilities, workflow_name, workflow_bindings, workflow_import_error
 from .image_pixels import encode_image
 from ..background_process import run_background
 import sys
@@ -777,7 +777,10 @@ class MobileService:
             if body.get('modified') != item['modified']:
                 raise ValueError('This image changed. Refresh the gallery before acting on it.')
             name = workflow_name(action, await self.saved_workflows())
-            graph = await saved_workflow_graph(self.client, name)
+            try:
+                graph = await saved_workflow_graph(self.client, name)
+            except ValueError as exc:
+                raise ValueError(workflow_import_error(action, name, exc)) from None
             bindings = workflow_bindings(action, graph)
             info = await self.metadata()
             missing = {node['class_type'] for node in graph.values()} - set(info)

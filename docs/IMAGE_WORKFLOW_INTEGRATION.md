@@ -25,8 +25,20 @@ API-format saved workflows are supported. For editor-format workflows containing
 custom widgets, run that exact saved workflow once in ComfyUI first so the
 existing importer can find its executable snapshot. If conversion cannot be
 verified, the error requests an API export or exact queued snapshot; custom
-widget values and connections are never guessed. A uniquely named workflow in
-a subfolder is supported; the exact root filename takes precedence.
+widget values and connections are never guessed.
+
+If an action reports subgraphs or custom widgets, use ComfyUI's **Export (API)**
+(or **Save (API Format)**; enable **Dev Mode** in ComfyUI settings if hidden).
+Save the export alongside the original editor file in the same user workflows
+folder (normally `ComfyUI/user/default/workflows/`), with this companion filename:
+
+- Upscale: `OfficialComfy-SeedVR_Upscaler.api.json`
+- Edit: `VeryComfy_Qwen21_Turbo_EDIT_ONLY.api.json`
+
+Refresh the WebUI after adding the file. The app prefers the root API companion,
+then the root original; otherwise it accepts a uniquely named nested API
+companion or original. The original editor workflow stays untouched. Simply
+renaming an editor-format JSON file does not turn it into an API export.
 
 Missing saved workflows disable the action with an explanation. Missing custom
 nodes, changed bindings, upload failures or invalid workflow inputs produce a

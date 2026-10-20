@@ -810,6 +810,7 @@ async function submitGeneration(body) {
         error.message +
           " Tap Retry submission to check the same request safely.",
       );
+    return error;
   } finally {
     busy = false;
     submitting = false;
@@ -851,12 +852,20 @@ async function runImageWorkflow(item, action, modified) {
   if (action === "edit" && prompt === null) return;
   if (busy || pendingSubmission || !connected || recovering || !state.online)
     throw new Error("Connection or submission state changed. Reconnect and try again; your instruction is kept.");
-  if ($("image-dialog").open) $("image-dialog").close();
-  selectTab("create");
   notice(`Preparing “${item.filename}” for ${action === "edit" ? "editing" : "upscaling"}…`);
-  await submitGeneration({ request_id: requestId(), image_action: {
+  const error = await submitGeneration({ request_id: requestId(), image_action: {
     image_id: item.id, action, modified, ...(action === "edit" ? { prompt } : {}),
   } });
+  if (error) {
+    if (selectedImage?.id === item.id) {
+      inspectingSavedImage = true;
+      $("generation-panel").dataset.inspect = "true";
+      syncSelectedPreview();
+    }
+    throw error;
+  }
+  if ($("image-dialog").open) $("image-dialog").close();
+  selectTab("create");
 }
 function refreshFullState() {
   if (fullStatePending) return;
