@@ -1,10 +1,13 @@
 # Mobile WebUI architecture and verification
 
-## Testing: responsive workspace (1.1.0.dev1)
+## Testing: responsive workspace (1.1.0.dev2)
 
 `testing/webui-workspace` extends the same HTML/JavaScript frontend: settings,
-selected-image preview and gallery/history share a three-column layout from
-1280×600 CSS pixels, with the prior layouts retained below that size. Selection,
+selected-image preview and gallery/history share a three-column layout on
+landscape viewports from 1024px (minimum 4:3 aspect ratio), or at least 1440px
+wide, with 600px minimum height. Side columns are bounded, preview height follows
+the viewport, and content expands up to 2560px; prior layouts remain below these
+breakpoints. Selection,
 gallery filter and browser drafts reuse existing UI storage. History renders
 the existing owner-filtered job list; queueing and reconnect recovery are unchanged.
 

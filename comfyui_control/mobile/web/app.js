@@ -8,7 +8,10 @@ const activeStatuses = new Set([
   "unknown",
 ]);
 const wideLayout = window.matchMedia("(min-width: 1000px) and (min-height: 600px)");
-const studioLayout = window.matchMedia("(min-width: 1280px) and (min-height: 600px)");
+const studioLayout = window.matchMedia(
+  "(min-width: 1024px) and (min-height: 600px) and (min-aspect-ratio: 4/3), " +
+  "(min-width: 1440px) and (min-height: 600px)",
+);
 let preset = null,
   draft = {},
   disabledLoras = new Set(),

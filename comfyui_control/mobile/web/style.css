@@ -1042,23 +1042,39 @@ dialog::backdrop {
 }
 /* One set of controls and gallery elements. Three columns are only used when
    there is enough space; iPad Split View and smaller windows keep existing tabs. */
-@media (min-width: 1280px) and (min-height: 600px) {
-  main, .masthead { max-width: 1920px; }
+@media (min-width: 1024px) and (min-height: 600px) and (min-aspect-ratio: 4/3),
+       (min-width: 1440px) and (min-height: 600px) {
+  body {
+    --workspace-panel-top: calc(var(--masthead-height, 74px) + 12px);
+    --workspace-panel-height: calc(100dvh - var(--workspace-panel-top) - 12px - var(--safe-area-bottom));
+  }
+  main, .masthead {
+    max-width: 2560px;
+    padding-left: calc(clamp(16px, 2vw, 32px) + var(--safe-area-left));
+    padding-right: calc(clamp(16px, 2vw, 32px) + var(--safe-area-right));
+  }
+  .masthead {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    background: var(--bg);
+  }
   #workspace[data-layout="studio"] {
     display: grid;
-    grid-template-columns: minmax(280px, .95fr) minmax(360px, 1.55fr) minmax(260px, .85fr);
-    gap: 20px;
+    grid-template-columns: clamp(260px, 24vw, 360px) minmax(300px, 1fr) clamp(220px, 20vw, 340px);
+    gap: clamp(12px, 1.3vw, 24px);
     align-items: start;
   }
-  #workspace[data-layout="studio"] > .tabs { grid-column: 1 / -1; grid-row: 1; margin-bottom: 0; }
-  #workspace[data-layout="studio"] > #output-warning { grid-column: 1 / -1; grid-row: 2; margin: 0; }
-  #workspace[data-layout="studio"] > #create-page { grid-column: 1; grid-row: 3; }
+  #workspace[data-layout="studio"] > .tabs { display: none; }
+  #workspace[data-layout="studio"] > #output-warning { grid-column: 1 / -1; grid-row: 1; margin: 0; }
+  #workspace[data-layout="studio"] > #create-page { grid-column: 1; grid-row: 2; }
   #workspace[data-layout="studio"] > #generation-panel {
-    grid-column: 2; grid-row: 3; position: sticky;
-    top: calc(16px + max(var(--safe-area-top), var(--live-header-height)));
+    grid-column: 2; grid-row: 2; position: sticky;
+    top: var(--workspace-panel-top);
     display: flex; flex-direction: column; min-width: 0; gap: 0;
     padding: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px;
-    max-height: calc(100dvh - 205px - var(--safe-area-top) - var(--safe-area-bottom));
+    height: var(--workspace-panel-height);
+    max-height: var(--workspace-panel-height);
     overflow: auto;
   }
   #workspace[data-layout="studio"] #generation-panel > .wide-screen-only { display: block; }
@@ -1067,26 +1083,44 @@ dialog::backdrop {
   #workspace[data-layout="studio"] #job-output { overflow: visible; flex-shrink: 0; }
   #workspace[data-layout="studio"] #job-output > .job-card { margin: 0 0 12px; padding: 0; border: 0; background: transparent; }
   #workspace[data-layout="studio"] .generate-bar {
-    position: sticky; bottom: -18px; left: auto; right: auto; width: 100%; max-width: none;
-    display: flex; flex-direction: column; margin: 0; padding: 14px 0 0; background: var(--surface);
+    position: static; left: auto; right: auto; width: 100%; max-width: none;
+    display: flex; flex-direction: column; margin: auto 0 0; padding: 12px 0 0; background: var(--surface);
     flex-shrink: 0;
   }
   #workspace[data-layout="studio"] #dock-result { display: none; }
-  #workspace[data-layout="studio"] .generate-bar > .job-card { max-height: 40dvh; }
+  #workspace[data-layout="studio"] .generate-bar > .job-card {
+    display: flex; flex-direction: column; min-height: 0; max-height: none;
+    margin-bottom: 12px; padding: 0 0 12px; border: 0; border-bottom: 1px solid var(--line);
+    background: transparent; box-shadow: none;
+  }
+  #workspace[data-layout="studio"] #generation-panel[data-active="true"]:not([data-inspect="true"]) .generate-bar {
+    flex: 1 1 auto; min-height: 0;
+  }
+  #workspace[data-layout="studio"] #generation-panel[data-active="true"]:not([data-inspect="true"]) .job-card {
+    flex: 1 1 auto;
+  }
+  #workspace[data-layout="studio"] .generate-bar > .job-card .preview {
+    flex: 1 1 auto; width: 100%; height: 100%; min-height: 60px; max-height: none; object-fit: contain;
+  }
   #workspace[data-layout="studio"] > #gallery-page {
-    grid-column: 3; grid-row: 3; position: sticky;
-    top: calc(16px + max(var(--safe-area-top), var(--live-header-height)));
-    max-height: calc(100dvh - 205px - var(--safe-area-top) - var(--safe-area-bottom));
+    grid-column: 3; grid-row: 2; position: sticky;
+    top: var(--workspace-panel-top);
+    max-height: var(--workspace-panel-height);
     overflow: auto; min-width: 0; overscroll-behavior: contain;
     padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px;
   }
-  #workspace[data-layout="studio"] #gallery-page h1 { font-size: 1.1rem; letter-spacing: 0; }
+  #workspace[data-layout="studio"] #gallery-page h1 { font-size: 1rem; letter-spacing: 0; margin: 0; }
+  #workspace[data-layout="studio"] #refresh-gallery { flex-shrink: 0; white-space: nowrap; padding: 8px; font-size: .75rem; }
   #workspace[data-layout="studio"] #gallery-page .eyebrow { display: none; }
-  #workspace[data-layout="studio"] #gallery-page > .hint { font-size: .75rem; }
+  #workspace[data-layout="studio"] #gallery-page > .hint { display: none; }
+  #workspace[data-layout="studio"] .library-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #workspace[data-layout="studio"] .library-filters button { white-space: nowrap; font-size: .8rem; min-height: 44px; }
   #workspace[data-layout="studio"] #gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   #workspace[data-layout="studio"] .comparison-actions { position: sticky; top: -16px; padding: 8px 0; gap: 6px; }
   #workspace[data-layout="studio"] .comparison-actions button { padding: 8px; font-size: .75rem; min-width: 0; }
   #workspace[data-layout="studio"] .card { padding: 18px; }
+  #workspace[data-layout="studio"] textarea.positive { height: clamp(180px, 24dvh, 320px); min-height: 180px; }
+  #workspace[data-layout="studio"] .prompt-editor.expanded textarea.positive { height: clamp(360px, 60dvh, 720px); }
   #workspace[data-layout="studio"] .workflow-actions { flex-wrap: wrap; }
   #workspace[data-layout="studio"] .control-grid { grid-template-columns: minmax(0, 1fr); }
   #workspace[data-layout="studio"] #job-images { grid-template-columns: minmax(0, 1fr); }
@@ -1101,7 +1135,7 @@ dialog::backdrop {
   #workspace[data-layout="studio"] .selected-image-reuse,
   #workspace[data-layout="studio"] #selected-reuse-status { flex-shrink: 0; }
   #workspace[data-layout="studio"] #selected-image-preview {
-    flex: 1 1 auto; min-height: 80px; height: 48dvh; max-height: 650px;
+    flex: 1 1 auto; min-height: 80px; height: var(--workspace-panel-height); max-height: none;
   }
   #workspace[data-layout="studio"] .selected-image-reuse { margin-top: 8px; }
   #workspace[data-layout="studio"] .selected-image-reuse button { font-size: .8rem; padding: 8px; }

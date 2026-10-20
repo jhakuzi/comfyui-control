@@ -78,28 +78,48 @@ async def main(browser_name, root):
             await expect(prompt).to_be_visible()
             await prompt.fill('An unsent draft survives resizing')
 
+            async def select_page(tab, name):
+                # Large layouts show all columns at once; only compact layouts
+                # have navigation tabs. Scrolling a visible column is sufficient.
+                button = tab.locator('#' + name + '-tab')
+                viewport = tab.viewport_size
+                width, height = viewport['width'], viewport['height']
+                studio = height >= 600 and (width >= 1440 or width >= 1024 and width / height >= 4/3)
+                await expect(tab.locator('#workspace')).to_have_attribute('data-layout', 'studio' if studio else 'compact')
+                if studio:
+                    await expect(button).to_be_hidden()
+                    await tab.locator('#' + name + '-page').evaluate('el => el.scrollIntoView({block: "nearest"})')
+                else:
+                    await expect(button).to_be_visible()
+                    await button.click()
+
             async def layout(width, height, wide):
                 await page.set_viewport_size(dict(width=width, height=height))
-                await expect(page.locator('#workspace')).to_have_attribute('data-layout', 'studio' if width >= 1280 and height >= 600 else 'compact')
+                await expect(page.locator('#workspace')).to_have_attribute('data-layout', 'studio' if height >= 600 and (width >= 1440 or width >= 1024 and width / height >= 4/3) else 'compact')
                 await page.evaluate('window.scrollTo(0,0)')
                 await expect(page.locator('#generate')).to_be_visible()
                 assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
                 form = await page.locator('#generate-form').bounding_box()
                 panel = await page.locator('#generation-panel').bounding_box()
                 if wide:
-                    assert panel['x'] >= form['x'] + form['width'] + 20, (form, panel)
+                    assert panel['x'] >= form['x'] + form['width'] + 12, (form, panel)
                     assert panel['width'] >= 350
                     card = await page.locator('#generate-form > .card').first.bounding_box()
                     assert abs(card['y'] - panel['y']) < 1, (card, panel)
-                    if width >= 1280:
+                    if await page.evaluate('studioLayout.matches'):
                         sidebar = await page.locator('#gallery-page').bounding_box()
-                        assert sidebar['x'] >= panel['x'] + panel['width'] + 18, (panel, sidebar)
+                        assert sidebar['x'] >= panel['x'] + panel['width'] + 12, (panel, sidebar)
+                        assert 250 <= form['width'] <= 362, form
+                        assert sidebar['width'] <= 342, sidebar
+                        await expect(page.locator('.tabs')).to_be_hidden()
                 else:
                     assert await page.locator('#generation-dock').evaluate('el => getComputedStyle(el).position') == 'fixed'
                 await expect(prompt).to_have_value('An unsent draft survives resizing')
 
             for width, height, wide in [(320, 568, False), (390, 844, False), (844, 390, False), (834, 1194, False),
-                                         (1024, 1366, True), (1194, 834, True), (1366, 1024, True), (1440, 900, True),
+                                         (1024, 1366, True), (1024, 768, True), (1133, 744, True), (1194, 834, True),
+                                         (1280, 1920, True), (1366, 768, True), (1366, 1024, True), (1440, 900, True),
+                                         (1920, 1080, True), (2560, 1440, True), (3440, 1440, True),
                                          (1000, 600, True), (1440, 500, False)]:
                 await layout(width, height, wide)
             await layout(1440, 900, True)
@@ -152,7 +172,7 @@ async def main(browser_name, root):
                     assert await page.evaluate('({x,y,id}) => !!document.elementFromPoint(x,y)?.closest("#"+id)',
                         dict(id=identifier, x=bounds['x'] + bounds['width']/2, y=bounds['y'] + bounds['height']/2))
 
-            for width, height in [(1024, 1366), (1366, 1024), (1440, 900), (1000, 600), (390, 844)]:
+            for width, height in [(1024, 1366), (1024, 768), (1194, 834), (1366, 768), (1366, 1024), (1440, 900), (2560, 1440), (1000, 600), (390, 844)]:
                 await page.set_viewport_size(dict(width=width, height=height))
                 at_top = width >= 1000 and height >= 600
                 parent = '#header-generation' if at_top else '#job-card'
@@ -177,7 +197,7 @@ async def main(browser_name, root):
             service.output_status = {}
             service.broadcast()
             await page.set_viewport_size(dict(width=1440, height=900))
-            await page.locator('#gallery-tab').click()
+            await select_page(page, 'gallery')
             await expect(page.locator('#gallery-grid button')).to_have_count(17)
             assert await page.locator('#gallery-grid').evaluate('el => getComputedStyle(el).gridTemplateColumns.split(" ").length') == 2
             await page.evaluate('window.scrollTo(0,100000)')
@@ -193,7 +213,7 @@ async def main(browser_name, root):
             await expect(page.locator('#compare-slider')).to_have_value('51')
             await page.screenshot(path=str(root / 'comparison-laptop.png'))
             await page.locator('#close-compare').click()
-            await page.locator('#create-tab').click()
+            await select_page(page, 'create')
             await page.evaluate('window.scrollTo(0,0)')
             # A sign-in screen must not retain job information in the header
             # outside the now-hidden workspace. Reload restores the same job.
@@ -217,6 +237,18 @@ async def main(browser_name, root):
             await expect(page.locator('#selected-image-preview')).to_be_visible()
             await expect(prompt).to_have_value('An unsent draft survives resizing')
             await reachable(('generate', 'reuse-selected-image', 'vary-selected-image'))
+            # The full-size result and its actions fit typical laptop/iPad
+            # landscape sizes and scale up without stretching side controls.
+            for width, height in [(1024, 768), (1194, 834), (1366, 768), (1920, 1080), (3440, 1440)]:
+                await page.set_viewport_size(dict(width=width, height=height))
+                await expect(page.locator('#workspace')).to_have_attribute('data-layout', 'studio')
+                await page.evaluate('window.scrollTo(0,0)')
+                await reachable(('generate', 'open-selected-image', 'reuse-selected-image'))
+                assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+                image_box = await page.locator('#selected-image-preview').bounding_box()
+                assert image_box['height'] >= 200, image_box
+                await page.screenshot(path=str(root / f'large-result-{width}.png'))
+            await page.set_viewport_size(dict(width=1440, height=900))
             assert len(stub.submissions) == 1
             await page.screenshot(path=str(root / 'result-laptop.png'))
             async def view_image(tab, filename):
@@ -234,7 +266,7 @@ async def main(browser_name, root):
             # Both gallery reuse actions must work with a generation saved by
             # this laptop browser, without submitting another job on selection.
             for action, randomize in [('reuse-image', False), ('vary-image', True)]:
-                await page.locator('#gallery-tab').click()
+                await select_page(page, 'gallery')
                 if await page.locator('#select-compare').get_attribute('aria-pressed') == 'true':
                     await page.locator('#select-compare').click()
                 await view_image(page, 'image00.png')
@@ -252,7 +284,7 @@ async def main(browser_name, root):
             # Direct ComfyUI output has no mobile job. Recover its exact mapped
             # values from PNG metadata, retaining the user's custom mappings.
             for action, randomize in [('reuse-image', False), ('vary-image', True)]:
-                await page.locator('#gallery-tab').click()
+                await select_page(page, 'gallery')
                 tile = page.get_by_role('button', name='View desktop.png', exact=True)
                 await tile.scroll_into_view_if_needed()
                 await expect(tile.locator('img')).to_have_js_property('complete', True)
@@ -268,7 +300,7 @@ async def main(browser_name, root):
                 await expect(page.locator('[data-role="seed"]')).to_have_value(str(external['sampler']['inputs']['seed']))
                 assert await page.locator('#random-seed').is_checked() == randomize
                 assert len(stub.submissions) == 1 and len(service.presets.list()) == 1
-            await page.locator('#gallery-tab').click()
+            await select_page(page, 'gallery')
             await view_image(page, 'image01.png')
             await page.locator('#reuse-image').click()
             await expect(page.locator('#image-reuse-status')).to_contain_text('no usable ComfyUI API workflow')
@@ -291,7 +323,7 @@ async def main(browser_name, root):
                 assert await touch.evaluate('document.documentElement.scrollWidth <= innerWidth')
                 assert await touch.locator('#job-card').is_hidden()
             await touch.set_viewport_size(dict(width=1366, height=1024))
-            await touch.locator('#gallery-tab').tap()
+            await select_page(touch, 'gallery')
             high_dpi = touch.get_by_role('button', name='View desktop.png', exact=True)
             await high_dpi.scroll_into_view_if_needed()
             await expect(high_dpi.locator('img')).to_have_js_property('complete', True)
@@ -308,7 +340,7 @@ async def main(browser_name, root):
             await touch.set_viewport_size(dict(width=390, height=844))
             saved_seed = job['values'][next(field['key'] for field in job['controls'] if field['role'] == 'seed')]
             for action, randomize in [('reuse-image', False), ('vary-image', True)]:
-                await touch.locator('#gallery-tab').tap()
+                await select_page(touch, 'gallery')
                 await touch.get_by_role('button', name='View image00.png', exact=True).tap()
                 await expect(touch.locator('#reuse-image')).to_be_enabled()
                 await touch.locator('#' + action).tap()
@@ -320,7 +352,7 @@ async def main(browser_name, root):
                 assert await touch.evaluate('fetch("/api/state").then(r=>r.json()).then(s=>s.jobs.length)') == 0
                 assert await touch.evaluate('fetch("/api/prompts").then(r=>r.json()).then(p=>p.length)') == 0
                 assert len(stub.submissions) == 1
-            await touch.locator('#gallery-tab').tap()
+            await select_page(touch, 'gallery')
             await touch.get_by_role('button', name='View image00.png', exact=True).tap()
             service.settings = replace(service.settings, share_image_settings=False)
             await touch.evaluate('loadGallery(true)')
@@ -400,7 +432,7 @@ async def main(browser_name, root):
             # The same buttons remain available through the existing phone
             # viewer, and the same prompt draft survives viewport changes.
             await page.set_viewport_size(dict(width=390, height=844))
-            await page.locator('#gallery-tab').click()
+            await select_page(page, 'gallery')
             await view_image(page, 'image02.png')
             await expect(page.locator('#viewer-image-actions [data-action="keep"]')).to_have_attribute('aria-pressed', 'true')
             assert await page.locator('#selected-image-preview').get_attribute('src') is None

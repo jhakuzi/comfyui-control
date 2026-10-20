@@ -7,7 +7,9 @@ setting, second server or separate installation is needed.
 - **Desktop / large landscape iPad:** settings and prompts on the left, a large
   selected-image preview in the center, and gallery/history on the right.
   Click a thumbnail to inspect that exact saved image; **Full size** opens the
-  existing viewer. Preview controls remain in view as settings scroll.
+  existing viewer. Preview controls remain in view as settings scroll. The
+  preview fills the available height; side columns stay a readable width even
+  on ultrawide monitors. Redundant Create/Gallery tabs are hidden in this view.
 - **Medium-width windows:** settings on the left; preview and Generate on the right.
   Live progress, s/it, VRAM and GPU
   usage appear in the top header while generating, including in Gallery.
@@ -27,7 +29,10 @@ setting, second server or separate installation is needed.
   is off by default and is also loaded when starting through SSH.
 
 Layout follows available space, not the device name: two columns start at
-1000 × 600 CSS pixels, and three columns at 1280 × 600. iPad Split View, browser zoom, small tablets and short
+1000 × 600 CSS pixels. Three columns fit landscape windows from 1024px wide
+(at least a 4:3 aspect ratio), or windows at least 1440px wide, with a minimum
+height of 600px. Content uses up to 2560px on ultrawide monitors.
+iPad Split View, browser zoom, small tablets and short
 windows can use the compact layout. Controls retain their existing touch sizing.
 Resizing or rotating preserves your prompt, workflow, settings and current job.
 Saved workflows, custom nodes, GGUF models, LoRAs and session recovery use the
@@ -36,7 +41,7 @@ same backend. [Foreground SSH startup](SSH.md) is included in 1.0.
 ## Run from source
 
 The three-column workspace is on **testing/webui-workspace**, version
-**1.1.0.dev1**. It branches from main; the uninstall work remains separate.
+**1.1.0.dev2**. It branches from main; the uninstall work remains separate.
 For an isolated source copy,
 close the running app and install as your usual Linux user:
 

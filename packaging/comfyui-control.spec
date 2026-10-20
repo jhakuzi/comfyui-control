@@ -1,6 +1,6 @@
 Name:           comfyui-control
 Version:        1.1.0
-Release:        0.1.dev1%{?dist}
+Release:        0.2.dev2%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
 License:        MIT
@@ -62,6 +62,10 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Tue Oct 20 2026 ComfyUI Control contributors - 1.1.0-0.2.dev2
+- Fit the large WebUI layout to landscape iPads, laptops and ultrawide monitors.
+- Bound side-column widths, expand preview height and remove redundant desktop tabs.
+
 * Tue Oct 20 2026 ComfyUI Control contributors - 1.1.0-0.1.dev1
 - Testing: responsive three-column WebUI with selected-image actions and job history.
 - Add per-browser Keep marks and recoverable Trash/restore for local and NFS output.
