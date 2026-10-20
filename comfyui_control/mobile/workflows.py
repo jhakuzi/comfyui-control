@@ -9,6 +9,7 @@ import secrets
 import uuid
 
 from .settings import save_json
+from .input_metadata import expanded_inputs
 
 ROLES = {"positive", "negative", "model", "lora_model", "lora_strength", "lora_enabled",
          "diffusion_model", "vae", "text_encoder", "sampler", "scheduler",
@@ -55,6 +56,7 @@ def graph_from(value):
 def input_schema(graph, node_id, name, info):
     node = graph[node_id]
     inputs = info.get(node["class_type"], {}).get("input", {})
+    inputs = expanded_inputs(inputs, node['inputs'])
     definition = inputs.get("required", {}).get(name, inputs.get("optional", {}).get(name, []))
     return definition if isinstance(definition, (list, tuple)) else []
 

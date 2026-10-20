@@ -156,7 +156,7 @@ def test_binding_name_and_connection_validation():
     expected = IMAGE_WORKFLOWS['upscale']['name'] + '.json'
     assert workflow_name('upscale', ['nested/' + expected]) == 'nested/' + expected
     companion = expected.removesuffix('.json') + '.api.json'
-    assert workflow_name('upscale', [expected, companion]) == companion
+    assert workflow_name('upscale', [expected, companion]) == expected
     assert workflow_name('upscale', ['nested/' + companion]) == 'nested/' + companion
     assert workflow_name('upscale', [expected, 'nested/' + companion]) == expected
     with pytest.raises(ValueError, match='Multiple'):
@@ -211,7 +211,7 @@ def test_editor_import_errors_name_api_companion_and_preserve_original(tmp_path,
             service.workflow_names_time = 0
             caps = await service.describe_image_actions(item['id'], ALICE)
             assert caps['actions'][action]['available']
-            assert caps['actions'][action]['source'] == companion
+            assert caps['actions'][action]['source'] == name
             result = await service.image_action(item['id'], ALICE, request)
             assert result['job']['prompt_id'] and len(stub.submissions) == 1
             expected = deepcopy(api)

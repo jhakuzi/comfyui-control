@@ -1,6 +1,15 @@
 # Mobile WebUI architecture and verification
 
-## Testing: responsive workspace (1.1.0.dev5)
+## Testing: responsive workspace (1.1.0.dev6)
+
+The saved-workflow importer now handles the supplied Qwen/SeedVR editor
+structures directly: declared upload UI values, canvas notes, native dynamic
+inputs, and explicit namespaced subgraphs with promoted widget settings.
+Conversion does not embed a model pipeline or rewrite a saved file. Original
+editor files take precedence over API companions; companions remain fallback
+inputs for unsupported serialization. Redacted editor/API pairs verify exact
+connections and the intentional differences between current and exported values.
+
 
 The wide preview reuses the header's monitoring values in its loading placeholder
 and live-preview overlay; no polling, job store or API is added for this display.

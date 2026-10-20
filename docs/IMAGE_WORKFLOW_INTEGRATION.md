@@ -6,7 +6,9 @@ progress, gallery, cancellation and session recovery. The main generation
 workflow and unsent prompt stay selected. Edit opens an instruction dialog;
 cancelling it never submits. Upscale asks for an optional multiplier; leaving
 it blank preserves the saved workflow value. A supplied multiplier maps only
-to a unique numeric `scale_multiplier` input and must satisfy its node's limits.
+to a unique numeric `scale_multiplier` input, or the native resize node's
+`resize_type.multiplier` when its mode is `scale by multiplier`. Node limits
+are checked before upload.
 Ambiguous, missing or connected multiplier inputs are rejected when overridden.
 The original workflow graph and image stay unchanged. Unsent edit instructions are retained per image in
 this browser, including across refreshes.
@@ -25,11 +27,18 @@ connection and leaves it intact. Models, LoRAs, seed defaults, custom nodes and
 all other saved inputs/connections remain as saved in the action workflow.
 These actions do not inherit the main generation form's current settings.
 
-API-format saved workflows are supported. For editor-format workflows containing
-custom widgets, run that exact saved workflow once in ComfyUI first so the
-existing importer can find its executable snapshot. If conversion cannot be
-verified, the error requests an API export or exact queued snapshot; custom
-widget values and connections are never guessed.
+Normal saved editor workflows and API-format workflows are supported. The
+converter understands declared upload controls, native canvas notes, ComfyUI V3
+dynamic choices/image slots, and explicit subgraph connections/promoted widgets.
+Expanded node IDs retain ComfyUI's namespace format, such as `66:57`. Exposed
+subgraph instance settings take precedence over defaults inside its definition.
+Installed ComfyUI input metadata remains authoritative.
+
+An exact executable snapshot from ComfyUI's queue/history is still preferred
+when it matches the complete saved editor data. Unknown widget serialization,
+ambiguous boundary routing, recursive definitions, or muted/bypassed subgraph
+instances require a matching snapshot or API export. No unknown connections
+or widget values are guessed.
 
 If an action reports subgraphs or custom widgets, use ComfyUI's **Export (API)**
 (or **Save (API Format)**; enable **Dev Mode** in ComfyUI settings if hidden).
@@ -39,10 +48,19 @@ folder (normally `ComfyUI/user/default/workflows/`), with this companion filenam
 - Upscale: `OfficialComfy-SeedVR_Upscaler.api.json`
 - Edit: `VeryComfy_Qwen21_Turbo_EDIT_ONLY.api.json`
 
-Refresh the WebUI after adding the file. The app prefers the root API companion,
-then the root original; otherwise it accepts a uniquely named nested API
-companion or original. The original editor workflow stays untouched. Simply
-renaming an editor-format JSON file does not turn it into an API export.
+Refresh the WebUI after adding the file. The normal saved editor workflow is
+preferred (root file first, otherwise a uniquely named nested copy). An API
+companion is used if no original exists or its editor data cannot be converted.
+This prevents an older API export from silently overriding current editor
+settings. Original files are never overwritten. Simply renaming editor-format
+JSON does not turn it into an API export.
+
+The supplied Qwen Edit and SeedVR editor structures are regression-tested. The
+Edit upload control is omitted from API inputs; its `images.image_1` and GGUF
+model/cache links remain connected. The SeedVR subgraph is expanded without
+changing its model, sampler, save paths or default scale. The supplied editor
+and API examples have different settings, so they are not interchangeable copies.
+Tests use redacted fixtures rather than distributing personal workflow values.
 
 Missing saved workflows disable the action with an explanation. Missing custom
 nodes, changed bindings, upload failures or invalid workflow inputs produce a
@@ -70,7 +88,11 @@ output folder is unavailable for these actions.
 ## Implementation boundary
 
 - `mobile/image_actions.py`: exact named workflow bindings, validation and
-  per-browser Keep marks. No generation graph is constructed here.
+  per-browser Keep marks. No model-specific processing pipeline is constructed.
+- `mobile/editor_subgraphs.py`: bounded, explicit subgraph boundary expansion
+  with separate namespaced nodes and promoted literal values.
+- `mobile/input_metadata.py`: shared V3 dynamic metadata expansion used by the
+  importer and mapped-control validation; it respects the selected branch.
 - `MobileService.describe_image_actions()` discovers saved workflow names;
   `run_image_workflow()` validates the graph/source, uploads pixels and reuses
   existing mapped presets plus `submit()`. Job identity and persistence remain

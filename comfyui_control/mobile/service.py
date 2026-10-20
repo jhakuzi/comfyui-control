@@ -792,11 +792,23 @@ class MobileService:
                 raise ValueError('Select a saved image from the configured local or network output folder.')
             if body.get('modified') != item['modified']:
                 raise ValueError('This image changed. Refresh the gallery before acting on it.')
-            name = workflow_name(action, await self.saved_workflows())
+            names = await self.saved_workflows()
+            name = workflow_name(action, names)
             try:
                 graph = await saved_workflow_graph(self.client, name)
             except ValueError as exc:
-                raise ValueError(workflow_import_error(action, name, exc)) from None
+                companions = [entry for entry in names if entry.endswith('.api.json')]
+                if name.endswith('.api.json') or not companions:
+                    raise ValueError(workflow_import_error(action, name, exc)) from None
+                try:
+                    companion = workflow_name(action, companions)
+                except ValueError:
+                    raise ValueError(workflow_import_error(action, name, exc)) from None
+                name = companion
+                try:
+                    graph = await saved_workflow_graph(self.client, name)
+                except ValueError as fallback_error:
+                    raise ValueError(workflow_import_error(action, name, fallback_error)) from None
             bindings = workflow_bindings(action, graph)
             if action == 'upscale':
                 try:

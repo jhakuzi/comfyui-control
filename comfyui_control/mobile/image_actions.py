@@ -27,12 +27,11 @@ def workflow_capabilities():
 
 def workflow_name(action, names):
     expected = IMAGE_WORKFLOWS[action]['name']
-    # An API companion leaves the editable desktop workflow untouched. Prefer
-    # root files, then unique nested copies; never pick an arbitrary duplicate.
-    for filename in (expected + '.api.json', expected + '.json'):
+    # The editable workflow remains the source of truth. API companions are a
+    # fallback for unsupported editor formats, not a replacement for new edits.
+    for filename in (expected + '.json', expected + '.api.json'):
         if filename in names:
             return filename
-    for filename in (expected + '.api.json', expected + '.json'):
         matches = [name for name in names if PurePosixPath(name).name == filename]
         if len(matches) == 1:
             return matches[0]
@@ -76,16 +75,17 @@ def workflow_bindings(action, graph):
 
 
 def upscale_multiplier_binding(graph):
-    targets = [(node_id, node['inputs']['scale_multiplier']) for node_id, node in graph.items()
-               if 'scale_multiplier' in node['inputs']]
+    targets = [(node_id, name, value) for node_id, node in graph.items() for name, value in node['inputs'].items()
+               if name == 'scale_multiplier' or (name == 'resize_type.multiplier'
+                                                and node['inputs'].get('resize_type') == 'scale by multiplier')]
     if len(targets) != 1:
-        raise ValueError('The upscale workflow needs exactly one scale_multiplier input to override its multiplier. '
+        raise ValueError('The upscale workflow needs exactly one multiplier input (scale_multiplier or resize_type.multiplier in scale-by-multiplier mode). '
                          'Leave the multiplier blank to use the saved workflow settings.')
-    node_id, value = targets[0]
+    node_id, name, value = targets[0]
     if type(value) not in (int, float):
-        raise ValueError(f'Node {node_id}: scale_multiplier must be a numeric literal, not a connection. '
+        raise ValueError(f'Node {node_id}: {name} must be a numeric literal, not a connection. '
                          'Leave the multiplier blank to preserve the saved workflow.')
-    return dict(node=node_id, input='scale_multiplier', role='advanced', key='action-scale', label='Upscale multiplier')
+    return dict(node=node_id, input=name, role='advanced', key='action-scale', label='Upscale multiplier')
 
 
 class ImageLibrary:

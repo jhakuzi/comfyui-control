@@ -154,8 +154,8 @@ async def main(browser_name, root):
             await expect(page.locator('#edit-image-prompt')).to_have_value('A phone edit draft')
             await page.locator('#cancel-edit-image').click()
             assert len(stub.submissions) == 2
-            # Reproduce both reported editor-format failures. Instructions stay
-            # readable beside the image, rather than vanishing with a toast.
+            # Unsupported widgets and recursive subgraphs still need an API
+            # fallback. Instructions stay readable beside the selected image.
             edit_name = IMAGE_WORKFLOWS['edit']['name'] + '.json'
             edit_api = deepcopy(stub.saved[edit_name])
             stub.saved[edit_name] = {'nodes': [{'id': 88, 'type': 'LoadImage',
@@ -178,6 +178,9 @@ async def main(browser_name, root):
             upscale_api = deepcopy(stub.saved[upscale_name])
             stub.saved[upscale_name] = {'nodes': [{'id': 1, 'type': 'LoadImage', 'widgets_values': ['saved.png']}],
                 'links': [], 'definitions': {'subgraphs': [{'id': 'custom-editor-subgraph', 'nodes': []}]}}
+            recursive = dict(id=2, type='custom-editor-subgraph', inputs=[], outputs=[], widgets_values=[])
+            stub.saved[upscale_name]['nodes'].append(recursive)
+            stub.saved[upscale_name]['definitions']['subgraphs'][0]['nodes'].append(deepcopy(recursive))
             await page.get_by_role('button', name='View older.png', exact=True).click()
             await page.locator('#selected-image-actions [data-action="upscale"]').click()
             await page.locator('#upscale-image-form button[type="submit"]').click()
