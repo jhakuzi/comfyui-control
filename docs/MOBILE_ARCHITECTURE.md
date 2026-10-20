@@ -1,5 +1,27 @@
 # Mobile WebUI architecture and verification
 
+## Testing: responsive workspace (1.1.0.dev1)
+
+`testing/webui-workspace` extends the same HTML/JavaScript frontend: settings,
+selected-image preview and gallery/history share a three-column layout from
+1280×600 CSS pixels, with the prior layouts retained below that size. Selection,
+gallery filter and browser drafts reuse existing UI storage. History renders
+the existing owner-filtered job list; queueing and reconnect recovery are unchanged.
+
+`mobile/image_actions.py` and `web/image_actions.js` separate image capabilities
+and action controls from generation. Keep marks use a small atomic sidecar.
+Trash/restore reuse the bounded filesystem worker and refuse stale versions,
+symlink paths, replacement overwrites and another browser's mobile output.
+Job/image filtering hides trashed output without deleting the stored journal.
+Edit/upscale are unavailable pending verified workflow bindings; the extension
+contract is in [IMAGE_WORKFLOW_INTEGRATION.md](IMAGE_WORKFLOW_INTEGRATION.md).
+
+Automated checks cover Keep persistence, output/owner isolation, explicit image
+targeting, recoverable moves, restore collisions, path guards and retained jobs.
+Browser checks use Chromium and Linux WebKit with protocol fixtures, including
+draft/reconnect recovery, exact seeds, comparison, selection races and phone
+controls. These do not exercise actual GPU inference or physical NAS mounts.
+
 ## 1.0.0rc2.dev6 optional cross-browser image settings
 
 `MobileSettings.share_image_settings` defaults to false, is strictly validated

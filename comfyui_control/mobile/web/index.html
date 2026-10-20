@@ -24,6 +24,7 @@
     <script src="/comparison.js" defer></script>
     <script src="/prompt_history.js" defer></script>
     <script src="/image_details.js" defer></script>
+    <script src="/image_actions.js" defer></script>
     <script src="/app.js" defer></script>
     <title>comfyui-control Mobile</title>
   </head>
@@ -226,6 +227,19 @@
               </div>
             </section>
           </div>
+          <section id="selected-image-panel" aria-label="Selected saved image" hidden>
+            <div class="heading">
+              <span id="selected-image-name"></span>
+              <button id="open-selected-image" class="small" type="button">Full size</button>
+            </div>
+            <img id="selected-image-preview" alt="Selected saved image" />
+            <div id="selected-image-actions"></div>
+            <div class="actions selected-image-reuse">
+              <button id="reuse-selected-image" type="button">Reuse settings</button>
+              <button id="vary-selected-image" type="button">New variation</button>
+            </div>
+            <p id="selected-reuse-status" class="hint" role="status" hidden></p>
+          </section>
           <div class="generate-bar" id="generation-dock">
             <div class="card" id="dock-submitting" role="status" hidden>
               <p>Sending your idea…</p>
@@ -240,11 +254,11 @@
             </button>
           </div>
         </aside>
-        <section id="gallery-page" hidden>
+        <section id="gallery-page" aria-label="Gallery and generation history" hidden>
           <div class="heading">
             <div>
               <p class="eyebrow">MADE BY YOU</p>
-              <h1>Your gallery</h1>
+              <h1>Gallery & history</h1>
             </div>
             <button id="refresh-gallery" class="small" type="button">
               Refresh
@@ -253,6 +267,18 @@
           <p class="hint">
             Recent images from ComfyUI output. Tap an image to view or save it.
           </p>
+          <div class="actions library-filters" aria-label="Gallery filter">
+            <button id="gallery-all" class="small" type="button" aria-pressed="true">All images</button>
+            <button id="gallery-kept" class="small" type="button" aria-pressed="false">Kept</button>
+            <button id="gallery-jobs" class="small" type="button" aria-pressed="false">History</button>
+            <button id="gallery-trash" class="small" type="button" aria-pressed="false">Trash</button>
+          </div>
+          <div id="trash-panel" hidden>
+            <p class="hint">Recoverable images moved by this browser. Original locations are restored without overwriting existing files.</p>
+            <p id="trash-status" class="hint" role="status"></p>
+            <div id="trash-list"></div>
+          </div>
+          <div id="gallery-images">
           <div class="actions comparison-actions">
             <button id="select-compare" type="button" aria-pressed="false">Select two images</button>
             <button id="compare-images" type="button" disabled>Compare · 0/2</button>
@@ -261,6 +287,12 @@
           <p id="gallery-empty" class="hint" hidden>
             No images yet. Your next idea starts in Create.
           </p>
+          </div>
+          <details id="generation-history" open>
+            <summary>Generation history</summary>
+            <p class="hint">Jobs from this browser. Select one to inspect its progress or saved results.</p>
+            <div id="generation-history-list"></div>
+          </details>
         </section>
       </div>
       <p id="notice" role="alert" hidden></p>
@@ -343,6 +375,7 @@
           <p id="copy-prompt-status" class="hint" role="status"></p>
           <div id="image-metadata"></div>
         </details>
+        <div id="viewer-image-actions"></div>
         <div class="actions">
           <button id="reuse-image" type="button" aria-describedby="image-reuse-status">Reuse settings</button
           ><button id="vary-image" type="button" aria-describedby="image-reuse-status">New variation</button>

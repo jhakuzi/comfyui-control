@@ -1,11 +1,12 @@
 /* Only public shell assets are cached. Authenticated responses never enter CacheStorage. */
-const CACHE = "comfy-control-mobile-1.0.1";
+const CACHE = "comfy-control-mobile-workspace-1";
 const SHELL = [
   "/",
   "/app.js",
   "/comparison.js",
   "/prompt_history.js",
   "/image_details.js",
+  "/image_actions.js",
   "/style.css",
   "/icon.png",
   "/manifest.webmanifest",

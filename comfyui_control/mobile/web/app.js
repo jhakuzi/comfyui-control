@@ -8,6 +8,7 @@ const activeStatuses = new Set([
   "unknown",
 ]);
 const wideLayout = window.matchMedia("(min-width: 1000px) and (min-height: 600px)");
+const studioLayout = window.matchMedia("(min-width: 1280px) and (min-height: 600px)");
 let preset = null,
   draft = {},
   disabledLoras = new Set(),
@@ -24,6 +25,11 @@ let mappingDraft = new Map(),
   viewerIndex = 0;
 let fullStatePending = false;
 let imageReuseEpoch = 0;
+let viewerFromGallery = false;
+let selectedImage = null, galleryFilter = "all", trashEpoch = 0;
+let inspectingSavedImage = false;
+const completedResultsSeen = new Set();
+const observedActiveJobs = new Set();
 let fullStateAgain = false;
 let presetEpoch = 0;
 let connected = false,
@@ -105,6 +111,8 @@ function showLogin() {
   stopGallerySync();
   galleryRevision = "";
   comparison.clearImages();
+  selectedImageActions.select(null);
+  viewerImageActions.select(null);
   if ($("image-dialog").open) $("image-dialog").close();
   if ($("prompt-history-dialog").open) $("prompt-history-dialog").close();
   if ($("compare-dialog").open) $("compare-dialog").close();
@@ -136,7 +144,9 @@ function saveDraft() {
 function saveUI() {
   if (!uiReady) return;
   uiState = {
-    tab: $("gallery-page").hidden ? "create" : "gallery",
+    tab: $("workspace").dataset.page,
+    selectedImage: selectedImage?.id || uiState.selectedImage || null,
+    galleryFilter,
     details: Object.fromEntries(
       [...document.querySelectorAll("details[id]")].map((el) => [
         el.id,
@@ -158,6 +168,8 @@ function restoreUI() {
   $("mapping-search").value = uiState.search || "";
   $("import-name").value = uiState.importName || "";
   renderMappings();
+  galleryFilter = ["all", "kept", "jobs", "trash"].includes(uiState.galleryFilter) ? uiState.galleryFilter : "all";
+  renderLibrary();
   selectTab(uiState.tab === "gallery" ? "gallery" : "create");
   const scroll = uiState.scroll || 0;
   requestAnimationFrame(() => window.scrollTo(0, scroll));
@@ -165,13 +177,14 @@ function restoreUI() {
 }
 function selectTab(name) {
   $("workspace").dataset.page = name;
-  $("create-page").hidden = name !== "create";
-  $("gallery-page").hidden = name !== "gallery";
+  $("workspace").dataset.layout = studioLayout.matches ? "studio" : "compact";
+  $("create-page").hidden = !studioLayout.matches && name !== "create";
+  $("gallery-page").hidden = !studioLayout.matches && name !== "gallery";
   $("create-tab").classList.toggle("selected", name === "create");
   $("gallery-tab").classList.toggle("selected", name === "gallery");
   syncGenerationDock();
   saveUI();
-  if (name === "gallery") loadGallery(true);
+  if (name === "gallery" || studioLayout.matches) loadGallery(true);
   else stopGallerySync();
 }
 function currentJob() {
@@ -198,8 +211,10 @@ function syncGenerationDock() {
     destination = active ? dock : $("job-output");
   renderGenerationStats(job);
   syncJobMetrics(active);
-  $("job-output").hidden = !$("gallery-page").hidden;
-  $("generation-empty").hidden = !!job || submitting;
+  $("generation-panel").dataset.active = String(active || submitting);
+  $("generation-panel").dataset.jobStatus = job?.status || "";
+  $("job-output").hidden = !studioLayout.matches && !$("gallery-page").hidden;
+  $("generation-empty").hidden = !!job || submitting || !!selectedImage;
   if (card.parentElement !== destination) {
     if (active) destination.prepend(card);
     else destination.append(card);
@@ -217,7 +232,7 @@ function syncGenerationDock() {
       ? "Image ready · View result"
       : `${images.length} images ready · View results`;
   }
-  dock.hidden = !active && !submitting && !$("gallery-page").hidden;
+  dock.hidden = !active && !submitting && !studioLayout.matches && !$("gallery-page").hidden;
 }
 function renderGenerationStats(job) {
   $("generation-stats").hidden = !job || !activeStatuses.has(job.status);
@@ -734,6 +749,8 @@ async function generate(event) {
   event.preventDefault();
   if (busy || !preset || !connected || recovering) return;
   busy = true;
+  inspectingSavedImage = false;
+  $("generation-panel").dataset.inspect = "false";
   submitting = true;
   updateGenerate();
   const body = pendingSubmission || {
@@ -892,14 +909,21 @@ function applyState(value) {
     if (preview && !$("preview").src.endsWith(preview))
       $("preview").src = preview;
     renderImages($("job-images"), job.images || []);
+    if (job.status === "complete" && job.images?.length && !completedResultsSeen.has(job.id)) {
+      completedResultsSeen.add(job.id);
+      if ((!selectedImage && !uiState.selectedImage) || observedActiveJobs.has(job.id)) selectSavedImage(job.images[0]);
+      if (studioLayout.matches) loadGallery(true);
+    }
+    if (activeStatuses.has(job.status)) observedActiveJobs.add(job.id);
   }
+  renderGenerationHistory();
   $("reuse-last").hidden =
     !preset || !state.jobs.some((job) => job.preset === preset.id);
   updateGenerate();
 }
 function renderImages(container, items) {
   container.imageItems = items;
-  const signature = JSON.stringify(items.map((item) => [item.id, item.url, item.thumbnail]));
+  const signature = JSON.stringify(items.map((item) => [item.id, item.url, item.thumbnail, item.kept, item.id === selectedImage?.id]));
   if (container.dataset.signature === signature) return;
   container.dataset.signature = signature;
   const existing = new Map([...container.children].map((button) => [button.dataset.imageId, button]));
@@ -909,6 +933,10 @@ function renderImages(container, items) {
   items.forEach((item, index) => {
     const source = item.thumbnail || item.url;
     const previous = existing.get(item.id);
+    if (previous) {
+      previous.classList.toggle("kept-image", !!item.kept);
+      previous.classList.toggle("selected-image", item.id === selectedImage?.id);
+    }
     if (previous?.dataset.source === source && previous.querySelector("img")) {
       if (container.children[index] !== previous) container.insertBefore(previous, container.children[index] || null);
       return;
@@ -917,6 +945,8 @@ function renderImages(container, items) {
     button.type = "button";
     button.dataset.imageId = item.id;
     button.dataset.source = source;
+    button.classList.toggle("kept-image", !!item.kept);
+    button.classList.toggle("selected-image", item.id === selectedImage?.id);
     button.setAttribute("aria-label", "View " + item.filename);
     const image = node("img");
     const picture = node("picture");
@@ -947,7 +977,9 @@ function renderImages(container, items) {
       const currentIndex = currentItems.findIndex((entry) => entry.id === item.id);
       if (currentIndex < 0) return;
       if (container.id === "gallery-grid" && comparison.choose(currentItems[currentIndex])) return;
-      openImage(currentItems, currentIndex);
+      selectSavedImage(currentItems[currentIndex], true);
+      if (studioLayout.matches) return;
+      openImage(currentItems, currentIndex, container.id === "gallery-grid");
     });
     if (previous) previous.replaceWith(button);
     if (container.children[index] !== button) container.insertBefore(button, container.children[index] || null);
@@ -972,24 +1004,28 @@ function loadGallery(force = false) {
       if (result.images) {
         const oldGallery = gallery;
         gallery = result.images;
-        if ($("image-dialog").open && viewerItems === oldGallery) {
+        const selected = gallery.find((item) => item.id === (selectedImage?.id || uiState.selectedImage));
+        if (selected) selectSavedImage(selected);
+        else if (selectedImage && oldGallery.some((item) => item.id === selectedImage.id)) selectSavedImage(null);
+        if ($("image-dialog").open && viewerFromGallery) {
           const previous = viewerItems[viewerIndex];
-          const index = gallery.findIndex((item) => item.id === previous.id);
+          const visible = galleryFilter === "kept" ? gallery.filter((item) => item.kept) : gallery;
+          const index = visible.findIndex((item) => item.id === previous.id);
           if (index < 0) {
             $("image-dialog").close();
-            notice("This image was removed from the output folder.");
-          } else if (gallery[index].url !== previous.url || gallery[index].reuse?.available !== previous.reuse?.available) {
-            openImage(gallery, index);
+            notice("This image is no longer in this gallery view.");
+          } else if (visible[index].url !== previous.url || visible[index].reuse?.available !== previous.reuse?.available || visible[index].kept !== previous.kept) {
+            viewerItems = visible;
+            openImage(viewerItems, index);
           } else {
-            viewerItems = gallery;
+            viewerItems = visible;
             viewerIndex = index;
-            $("previous-image").disabled = $("next-image").disabled = gallery.length < 2;
+            $("previous-image").disabled = $("next-image").disabled = visible.length < 2;
           }
         }
       }
-      renderImages($("gallery-grid"), gallery);
+      renderLibrary();
       comparison.gallery(gallery);
-      $("gallery-empty").hidden = !!gallery.length;
     } catch (error) {
       if (force && epoch === galleryEpoch) notice(error.message);
     } finally {
@@ -1003,7 +1039,9 @@ function loadGallery(force = false) {
   })();
   return galleryPromise;
 }
-function openImage(items, index) {
+function openImage(items, index, fromGallery = null) {
+  if (!items.length) return;
+  viewerFromGallery = fromGallery ?? (items === gallery || items === viewerItems && viewerFromGallery);
   imageReuseEpoch++;
   viewerItems = items;
   viewerIndex = (index + items.length) % items.length;
@@ -1017,7 +1055,146 @@ function openImage(items, index) {
   $("image-reuse-status").textContent = job ? "" : item.reuse?.reason || "";
   $("image-reuse-status").hidden = !$("image-reuse-status").textContent;
   imageDetails.select(item);
+  viewerImageActions.select(item);
   if (!$("image-dialog").open) $("image-dialog").showModal();
+}
+
+function selectSavedImage(item, inspect = false) {
+  const changed = selectedImage?.id !== item?.id || selectedImage?.url !== item?.url ||
+    selectedImage?.kept !== item?.kept || selectedImage?.reuse?.available !== item?.reuse?.available ||
+    selectedImage?.reuse?.reason !== item?.reuse?.reason || selectedImageActions.item?.id !== item?.id;
+  selectedImage = item ? { ...item } : null;
+  if (inspect || !item) inspectingSavedImage = !!item;
+  $("generation-panel").dataset.inspect = String(inspectingSavedImage);
+  uiState.selectedImage = item?.id || null;
+  $("selected-image-panel").hidden = !item;
+  $("generation-panel").dataset.saved = String(!!item);
+  if (item) {
+    $("selected-image-name").textContent = item.filename;
+    const reusable = state.jobs.some((job) => job.id === item.job) || item.reuse?.available;
+    $("reuse-selected-image").disabled = $("vary-selected-image").disabled = !reusable;
+    if (changed) {
+      $("selected-reuse-status").textContent = reusable ? "" : item.reuse?.reason || "";
+      $("selected-reuse-status").hidden = !$("selected-reuse-status").textContent;
+    }
+  }
+  syncSelectedPreview();
+  if (changed) selectedImageActions.select(item);
+  $("generation-empty").hidden = !!item || !!currentJob() || submitting;
+  renderLibrary();
+  saveUI();
+}
+
+function syncSelectedPreview() {
+  const source = wideLayout.matches ? selectedImage?.url : null;
+  if (source) {
+    if ($("selected-image-preview").getAttribute("src") !== source) $("selected-image-preview").src = source;
+  } else $("selected-image-preview").removeAttribute("src");
+}
+
+async function reuseSelectedImage(variation) {
+  const item = selectedImage;
+  if (!item) return;
+  const current = () => selectedImage?.id === item.id && selectedImage?.url === item.url;
+  $("reuse-selected-image").disabled = $("vary-selected-image").disabled = true;
+  try {
+    const job = state.jobs.find((entry) => entry.id === item.job) ||
+      await api(`/api/images/${encodeURIComponent(item.id)}/reuse`, { method: "POST", body: "{}" });
+    if (!current()) return;
+    if (variation && !job.controls?.some((field) => field.role === "seed"))
+      throw new Error("No seed input is mapped in this workflow. Use Reuse settings and map its seed first.");
+    await reuseJob(job, variation, current);
+  } catch (error) {
+    if (current()) {
+      $("selected-reuse-status").textContent = error.message;
+      $("selected-reuse-status").hidden = false;
+    }
+  } finally {
+    if (current()) $("reuse-selected-image").disabled = $("vary-selected-image").disabled = false;
+  }
+}
+
+function renderLibrary() {
+  for (const [id, value] of [["gallery-all", "all"], ["gallery-kept", "kept"], ["gallery-jobs", "jobs"], ["gallery-trash", "trash"]])
+    $(id).setAttribute("aria-pressed", String(galleryFilter === value));
+  $("trash-panel").hidden = galleryFilter !== "trash";
+  $("gallery-images").hidden = ["trash", "jobs"].includes(galleryFilter);
+  $("generation-history").hidden = galleryFilter !== "jobs";
+  const items = galleryFilter === "kept" ? gallery.filter((item) => item.kept) : gallery;
+  renderImages($("gallery-grid"), items);
+  $("gallery-empty").hidden = !!items.length;
+  $("gallery-empty").textContent = galleryFilter === "kept" ? "No kept images yet. Open an image and choose Keep." : "No images yet. Your next idea starts in Create.";
+}
+
+function renderGenerationHistory() {
+  const container = $("generation-history-list");
+  const jobs = [...state.jobs].reverse().slice(0, 30);
+  const signature = JSON.stringify(jobs.map((job) => [job.id, job.status, job.images?.length, job.id === selectedJob]));
+  if (container.dataset.signature === signature) return;
+  container.dataset.signature = signature;
+  container.replaceChildren();
+  if (!jobs.length) container.append(node("p", "No generations from this browser yet.", "hint"));
+  for (const job of jobs) {
+    const button = node("button", undefined, "generation-history-entry");
+    button.type = "button";
+    button.dataset.jobId = job.id;
+    button.setAttribute("aria-pressed", String(job.id === selectedJob));
+    button.append(node("span", job.preset_name || "Workflow"), node("span", `${job.status} · ${new Date(job.created * 1000).toLocaleString()}`, "hint"));
+    button.addEventListener("click", () => {
+      selectedJob = job.id;
+      writeStore("job", job.id);
+      applyState(state);
+      if (job.images?.length) selectSavedImage(gallery.find((image) => image.id === job.images[0].id) || job.images[0]);
+      if (!studioLayout.matches) selectTab("create");
+    });
+    container.append(button);
+  }
+}
+
+async function loadTrash() {
+  const epoch = ++trashEpoch;
+  $("trash-status").textContent = "Loading Trash…";
+  $("trash-list").replaceChildren();
+  try {
+    const entries = await api("/api/trash");
+    if (epoch !== trashEpoch || galleryFilter !== "trash") return;
+    $("trash-status").textContent = entries.length ? "" : "Trash is empty for this browser.";
+    for (const entry of entries) {
+      const row = node("div", undefined, "trash-entry");
+      const button = node("button", "Restore", "small");
+      button.type = "button";
+      button.addEventListener("click", guarded(async () => {
+        button.disabled = true;
+        try {
+          await api(`/api/trash/${encodeURIComponent(entry.token)}/restore`, { method: "POST", body: JSON.stringify({ confirm: true }) });
+          await loadTrash();
+          await loadGallery(true);
+          notice(`Restored ${entry.filename}.`);
+        } finally { button.disabled = false; }
+      }));
+      row.append(node("span", [entry.subfolder, entry.filename].filter(Boolean).join("/")), button);
+      $("trash-list").append(row);
+    }
+  } catch (error) {
+    if (epoch === trashEpoch) $("trash-status").textContent = error.message;
+  }
+}
+
+async function savedImageChanged(item, result) {
+  if (result.trash) {
+    if (selectedImage?.id === item.id) selectSavedImage(null);
+    if (viewerItems[viewerIndex]?.id === item.id && $("image-dialog").open) $("image-dialog").close();
+    gallery = gallery.filter((image) => image.id !== item.id);
+    comparison.gallery(gallery);
+    notice(`Moved ${item.filename} to Trash. Restore it from Gallery → Trash.`);
+  } else {
+    gallery = gallery.map((image) => image.id === item.id ? { ...image, kept: result.kept } : image);
+    if (selectedImage?.id === item.id) selectSavedImage({ ...selectedImage, kept: result.kept });
+    if (viewerItems[viewerIndex]?.id === item.id && $("image-dialog").open)
+      viewerImageActions.select({ ...viewerItems[viewerIndex], kept: result.kept });
+  }
+  renderLibrary();
+  await loadGallery(true);
 }
 async function reuseImage(variation) {
   const epoch = imageReuseEpoch, item = viewerItems[viewerIndex];
@@ -1162,6 +1339,7 @@ async function bootstrap() {
     retryDelay = 500;
     $("offline").hidden = true;
     if (!$("gallery-page").hidden) loadGallery(true);
+    if (galleryFilter === "trash") loadTrash();
   })();
   try {
     await recoveryPromise;
@@ -1243,7 +1421,8 @@ new ResizeObserver(() => {
   const height = $("generation-dock").getBoundingClientRect().height;
   document.documentElement.style.setProperty("--generation-dock-height", `${height}px`);
 }).observe($("generation-dock"));
-wideLayout.addEventListener("change", syncGenerationDock);
+wideLayout.addEventListener("change", () => { syncGenerationDock(); syncSelectedPreview(); });
+studioLayout.addEventListener("change", () => selectTab($("workspace").dataset.page || "create"));
 new ResizeObserver(([entry]) => {
   document.documentElement.style.setProperty("--masthead-height", `${entry.target.getBoundingClientRect().height}px`);
 }).observe(document.querySelector(".masthead"));
@@ -1358,6 +1537,21 @@ $("gallery-tab").addEventListener("click", () => {
   selectTab("gallery");
 });
 $("refresh-gallery").addEventListener("click", () => loadGallery(true));
+for (const [id, filter] of [["gallery-all", "all"], ["gallery-kept", "kept"], ["gallery-jobs", "jobs"], ["gallery-trash", "trash"]]) {
+  $(id).addEventListener("click", () => {
+    galleryFilter = filter;
+    renderLibrary();
+    saveUI();
+    if (filter === "trash") loadTrash();
+  });
+}
+$("open-selected-image").addEventListener("click", () => {
+  if (!selectedImage) return;
+  const items = gallery.some((item) => item.id === selectedImage.id) ? gallery : [selectedImage];
+  openImage(items, items.findIndex((item) => item.id === selectedImage.id));
+});
+$("reuse-selected-image").addEventListener("click", () => reuseSelectedImage(false));
+$("vary-selected-image").addEventListener("click", () => reuseSelectedImage(true));
 $("close-image").addEventListener("click", () => $("image-dialog").close());
 $("image-dialog").addEventListener("close", () => { imageReuseEpoch++; });
 $("previous-image").addEventListener("click", () =>
@@ -1415,6 +1609,11 @@ $("logout").addEventListener(
     preset = null;
     selectedJob = null;
     state = { jobs: [], online: false };
+    selectedImage = null;
+    gallery = [];
+    viewerItems = [];
+    completedResultsSeen.clear();
+    observedActiveJobs.clear();
     uiReady = false;
     uiState = {};
     showLogin();
@@ -1465,6 +1664,8 @@ function connectionFailure(error) {
 }
 const comparison = new ImageComparison({ api, notice, read: readStore, write: writeStore, unauthorized: showLogin });
 const imageDetails = new ImageDetails({ api });
+const selectedImageActions = new SavedImageActions($("selected-image-actions"), { api, changed: savedImageChanged });
+const viewerImageActions = new SavedImageActions($("viewer-image-actions"), { api, changed: savedImageChanged });
 const promptHistory = new PromptHistoryView({ api, reuse: (entry) => {
   if (!preset) throw new Error("Choose a workflow before reusing a prompt.");
   const changes = [];

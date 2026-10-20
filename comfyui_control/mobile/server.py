@@ -22,7 +22,7 @@ from .settings import check_password, lan_address
 ASSETS = Path(__file__).with_name("web")
 ICON = Path(__file__).parents[1] / "assets" / "comfyui-control.png"
 OWNER = web.RequestKey("mobile_owner", str) if hasattr(web, "RequestKey") else "mobile_owner"
-PUBLIC = {"/", "/app.js", "/comparison.js", "/prompt_history.js", "/image_details.js", "/style.css", "/manifest.webmanifest", "/sw.js", "/icon.png", "/icon-192.png", "/icon-512.png", "/api/login", "/api/session"}
+PUBLIC = {"/", "/app.js", "/comparison.js", "/prompt_history.js", "/image_details.js", "/image_actions.js", "/style.css", "/manifest.webmanifest", "/sw.js", "/icon.png", "/icon-192.png", "/icon-512.png", "/api/login", "/api/session"}
 
 
 def json_response(value, **kwargs):
@@ -240,7 +240,23 @@ class MobileHTTP:
         await object_body(request)
         return json_response(await self.service.prepare_image_reuse(request.match_info['id'], request[OWNER]))
 
+    async def image_actions(self, request):
+        if request.method == 'GET':
+            return json_response(self.service.image_action_capabilities(request.match_info['id'], request[OWNER]))
+        return json_response(await self.service.image_action(request.match_info['id'], request[OWNER], await object_body(request)))
+
+    async def trash(self, request):
+        return json_response(await self.service.image_trash(request[OWNER]))
+
+    async def restore_image(self, request):
+        body = await object_body(request)
+        if body.get('confirm') is not True:
+            raise ValueError('Confirm restoring this image.')
+        return json_response(await self.service.image_trash(request[OWNER], request.match_info['token']))
+
     async def image(self, request):
+        if request.match_info['id'] in self.service.unavailable_images:
+            raise web.HTTPNotFound(text='This image is no longer available. Refresh the gallery.')
         thumb_size = int(request.query.get('size', '384')) if request.query.get('thumbnail') == '1' else 384
         if thumb_size not in {384, 768, 1280}:
             raise ValueError('Choose a supported thumbnail size: 384, 768 or 1280.')
@@ -405,6 +421,8 @@ class MobileHTTP:
             web.post('/api/presets/{id}/models', self.refresh_models),
             web.post('/api/generate', self.generate), web.post('/api/jobs/{id}/cancel', self.cancel),
             web.post('/api/images/{id}/reuse', self.image_reuse),
+            web.get('/api/images/{id}/actions', self.image_actions), web.post('/api/images/{id}/actions', self.image_actions),
+            web.get('/api/trash', self.trash), web.post('/api/trash/{token}/restore', self.restore_image),
             web.get('/api/prompts', self.prompts), web.delete('/api/prompts', self.prompts),
             web.put('/api/prompts/{id}', self.prompt), web.delete('/api/prompts/{id}', self.prompt),
             web.get('/api/gallery', self.gallery), web.get('/api/images/{id}', self.image), web.get('/api/preview', self.preview),

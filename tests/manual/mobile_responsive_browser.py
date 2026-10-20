@@ -80,6 +80,7 @@ async def main(browser_name, root):
 
             async def layout(width, height, wide):
                 await page.set_viewport_size(dict(width=width, height=height))
+                await expect(page.locator('#workspace')).to_have_attribute('data-layout', 'studio' if width >= 1280 and height >= 600 else 'compact')
                 await page.evaluate('window.scrollTo(0,0)')
                 await expect(page.locator('#generate')).to_be_visible()
                 assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
@@ -90,6 +91,9 @@ async def main(browser_name, root):
                     assert panel['width'] >= 350
                     card = await page.locator('#generate-form > .card').first.bounding_box()
                     assert abs(card['y'] - panel['y']) < 1, (card, panel)
+                    if width >= 1280:
+                        sidebar = await page.locator('#gallery-page').bounding_box()
+                        assert sidebar['x'] >= panel['x'] + panel['width'] + 18, (panel, sidebar)
                 else:
                     assert await page.locator('#generation-dock').evaluate('el => getComputedStyle(el).position') == 'fixed'
                 await expect(prompt).to_have_value('An unsent draft survives resizing')
@@ -175,7 +179,7 @@ async def main(browser_name, root):
             await page.set_viewport_size(dict(width=1440, height=900))
             await page.locator('#gallery-tab').click()
             await expect(page.locator('#gallery-grid button')).to_have_count(17)
-            assert await page.locator('#gallery-grid').evaluate('el => getComputedStyle(el).gridTemplateColumns.split(" ").length') == 4
+            assert await page.locator('#gallery-grid').evaluate('el => getComputedStyle(el).gridTemplateColumns.split(" ").length') == 2
             await page.evaluate('window.scrollTo(0,100000)')
             await reachable()
             await page.locator('#select-compare').click()
@@ -205,23 +209,35 @@ async def main(browser_name, root):
             await stub.emit('execution_success', dict(prompt_id=job['prompt_id']))
             await asyncio.sleep(.2)
             await context.set_offline(False)
-            await expect(page.locator('#job-output #job-images img')).to_be_visible()
+            await expect(page.locator('#selected-image-preview')).to_be_visible()
             await expect(page.locator('#job-title')).to_have_text('Your image is ready')
             await expect(page.locator('#header-generation')).to_be_hidden()
             assert await page.locator('#job-card #job-metrics').count() == 1
             await page.reload()
-            await expect(page.locator('#job-images img')).to_be_visible()
+            await expect(page.locator('#selected-image-preview')).to_be_visible()
             await expect(prompt).to_have_value('An unsent draft survives resizing')
-            await reachable(('generate', 'same-seed', 'variation'))
+            await reachable(('generate', 'reuse-selected-image', 'vary-selected-image'))
             assert len(stub.submissions) == 1
             await page.screenshot(path=str(root / 'result-laptop.png'))
+            async def view_image(tab, filename):
+                await tab.get_by_role('button', name='View ' + filename, exact=True).click()
+                if await tab.evaluate('studioLayout.matches'):
+                    await tab.locator('#open-selected-image').click()
+            # Center-panel reuse also targets an explicit saved image and only
+            # prepares the existing form; it must not queue another job.
+            await page.locator('#reuse-selected-image').click()
+            await expect(page.locator('#random-seed')).not_to_be_checked()
+            assert len(stub.submissions) == 1
+            await page.locator('#vary-selected-image').click()
+            await expect(page.locator('#random-seed')).to_be_checked()
+            assert len(stub.submissions) == 1
             # Both gallery reuse actions must work with a generation saved by
             # this laptop browser, without submitting another job on selection.
             for action, randomize in [('reuse-image', False), ('vary-image', True)]:
                 await page.locator('#gallery-tab').click()
                 if await page.locator('#select-compare').get_attribute('aria-pressed') == 'true':
                     await page.locator('#select-compare').click()
-                await page.get_by_role('button', name='View image00.png', exact=True).click()
+                await view_image(page, 'image00.png')
                 await expect(page.locator('#reuse-image')).to_be_enabled()
                 await expect(page.locator('#vary-image')).to_be_enabled()
                 await page.locator('#' + action).click()
@@ -243,6 +259,7 @@ async def main(browser_name, root):
                 assert 'size=768' in await tile.locator('img').evaluate('el => el.currentSrc')
                 assert await tile.locator('img').evaluate('el => el.naturalWidth') == 512
                 await tile.click()
+                await page.locator('#open-selected-image').click()
                 await expect(page.locator('#reuse-image')).to_be_enabled()
                 await page.locator('#' + action).click()
                 await expect(page.locator('#image-dialog')).to_be_hidden()
@@ -252,7 +269,7 @@ async def main(browser_name, root):
                 assert await page.locator('#random-seed').is_checked() == randomize
                 assert len(stub.submissions) == 1 and len(service.presets.list()) == 1
             await page.locator('#gallery-tab').click()
-            await page.get_by_role('button', name='View image01.png', exact=True).click()
+            await view_image(page, 'image01.png')
             await page.locator('#reuse-image').click()
             await expect(page.locator('#image-reuse-status')).to_contain_text('no usable ComfyUI API workflow')
             await expect(page.locator('#image-dialog')).to_be_visible()
@@ -279,7 +296,7 @@ async def main(browser_name, root):
             await high_dpi.scroll_into_view_if_needed()
             await expect(high_dpi.locator('img')).to_have_js_property('complete', True)
             assert 'size=1280' in await high_dpi.locator('img').evaluate('el => el.currentSrc')
-            await touch.get_by_role('button', name='View image00.png', exact=True).tap()
+            await view_image(touch, 'image00.png')
             await expect(touch.locator('#reuse-image')).to_be_disabled()
             await expect(touch.locator('#image-reuse-status')).to_contain_text('another browser session')
             # The optional desktop setting shares image settings with a second
@@ -309,13 +326,102 @@ async def main(browser_name, root):
             await touch.evaluate('loadGallery(true)')
             await expect(touch.locator('#reuse-image')).to_be_disabled()
             await tablet.close()
+            # Saved-image actions always target the chosen older file, not the
+            # latest job. Keep and selection survive reload; Trash is reversible.
+            await page.set_viewport_size(dict(width=1440, height=900))
+            await page.locator('#gallery-all').click()
+            if await page.locator('#select-compare').get_attribute('aria-pressed') == 'true':
+                await page.locator('#select-compare').click()
+            await page.get_by_role('button', name='View image02.png', exact=True).click()
+            await expect(page.locator('#selected-image-name')).to_have_text('image02.png')
+            actions = page.locator('#selected-image-actions')
+            await expect(actions.locator('[data-action="keep"]')).to_be_enabled()
+            await expect(actions.locator('[data-action="edit"]')).to_be_disabled()
+            await expect(actions.locator('[data-action="upscale"]')).to_be_disabled()
+            await expect(actions.locator('.image-workflow-status')).to_contain_text('not configured')
+            await reachable(('generate', 'open-selected-image'))
+            for control in ('keep', 'trash'):
+                box = await actions.locator('[data-action="' + control + '"]').bounding_box()
+                assert box and box['y'] + box['height'] <= page.viewport_size['height'], box
+            await actions.locator('[data-action="keep"]').click()
+            await expect(actions.locator('[data-action="keep"]')).to_have_attribute('aria-pressed', 'true')
+            await page.locator('#gallery-kept').click()
+            await expect(page.locator('#gallery-grid button')).to_have_count(1)
+            await page.reload()
+            await expect(page.locator('#selected-image-name')).to_have_text('image02.png')
+            await expect(page.locator('#gallery-kept')).to_have_attribute('aria-pressed', 'true')
+            await expect(prompt).to_have_value(external['text']['inputs']['text'])
+            await page.locator('#gallery-all').click()
+            original = (output / 'image02.png').read_bytes()
+            page.once('dialog', lambda dialog: dialog.accept())
+            await actions.locator('[data-action="trash"]').click()
+            await expect(page.get_by_role('button', name='View image02.png', exact=True)).to_have_count(0)
+            assert not (output / 'image02.png').exists() and (output / 'image00.png').exists()
+            await page.locator('#gallery-trash').click()
+            await expect(page.locator('#trash-list .trash-entry')).to_have_count(1)
+            await page.locator('#trash-list button').click()
+            await expect(page.locator('#trash-status')).to_contain_text('empty')
+            assert (output / 'image02.png').read_bytes() == original
+            await page.locator('#gallery-jobs').click()
+            await expect(page.locator('#generation-history-list button')).to_have_count(1)
+            await page.locator('#generation-history-list button').click()
+            await expect(page.locator('#selected-image-name')).to_have_text('image00.png')
+            assert len(stub.submissions) == 1
+            await page.locator('#gallery-all').click()
+            # A slow action response must not retarget the operation or replace
+            # the image the user selected while waiting for it.
+            posted, release = asyncio.Event(), asyncio.Event()
+            async def delayed_action(route):
+                if route.request.method != 'POST':
+                    await route.continue_()
+                    return
+                response = await route.fetch()
+                posted.set()
+                await release.wait()
+                await route.fulfill(response=response)
+            await page.route('**/api/images/*/actions', delayed_action)
+            await page.get_by_role('button', name='View image01.png', exact=True).click()
+            await expect(actions.locator('[data-action="keep"]')).to_be_enabled()
+            await actions.locator('[data-action="keep"]').click()
+            await asyncio.wait_for(posted.wait(), 5)
+            await page.get_by_role('button', name='View image02.png', exact=True).click()
+            release.set()
+            await expect(page.locator('#selected-image-name')).to_have_text('image02.png')
+            await expect(page.get_by_role('button', name='View image01.png', exact=True)).to_have_class('kept-image')
+            await page.unroute('**/api/images/*/actions', delayed_action)
+            # Returning through sign-in/recovery without a reload restores
+            # capability controls for the same selected image.
+            await page.evaluate('showLogin(); bootstrap()')
+            await expect(page.locator('#workspace')).to_be_visible()
+            await expect(actions.locator('[data-action="keep"]')).to_be_enabled()
+            await page.locator('#advanced').evaluate('el => el.open=false')
+            await page.evaluate('window.scrollTo(0,0)')
+            await page.screenshot(path=str(root / 'workspace-desktop.png'), full_page=True)
+            # The same buttons remain available through the existing phone
+            # viewer, and the same prompt draft survives viewport changes.
+            await page.set_viewport_size(dict(width=390, height=844))
+            await page.locator('#gallery-tab').click()
+            await view_image(page, 'image02.png')
+            await expect(page.locator('#viewer-image-actions [data-action="keep"]')).to_have_attribute('aria-pressed', 'true')
+            assert await page.locator('#selected-image-preview').get_attribute('src') is None
+            await page.screenshot(path=str(root / 'workspace-phone.png'))
+            await page.set_viewport_size(dict(width=320, height=568))
+            assert await page.locator('#image-dialog').evaluate('el => el.scrollWidth <= el.clientWidth')
+            await page.locator('#close-image').click()
+            await page.locator('#gallery-kept').click()
+            await view_image(page, 'image02.png')
+            (output / 'image02.png').unlink()
+            await page.evaluate('loadGallery(true)')
+            await expect(page.locator('#image-dialog')).to_be_hidden()
+            await expect(page.get_by_role('button', name='View image02.png', exact=True)).to_have_count(0)
             assert not errors, errors
             print(json.dumps(dict(browser=browser_name, responsive_layout='phone, tablet portrait/landscape, Split View, laptop, short window',
                 generation='fixture: model loading, progress/preview, sticky controls, offline completion and reload',
                 reuse='mobile jobs and desktop PNG: exact seed, variation, no auto-submit, missing metadata, unchanged files',
                 previews='768px at 1x, 1280px at 2x; private sessions remain isolated',
                 cross_device='opt-in laptop to phone reuse/variation; independent history/jobs; disabling sharing restores image restrictions',
-                gallery='4 columns, keyboard comparison, accessible close', tablet='touch expansion, rotation, isolated draft', javascript_errors=errors)))
+                image_actions='older-image targeting, Keep/filter/reload, unavailable workflow actions, Trash/restore, browser job history and phone viewer',
+                gallery='desktop sidebar, keyboard comparison, accessible close', tablet='touch expansion, rotation, isolated draft', javascript_errors=errors)))
             await browser.close()
     finally:
         await service.stop()

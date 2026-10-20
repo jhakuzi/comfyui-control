@@ -6,6 +6,9 @@ is required. Keep the desktop app open while using it.
 The [responsive interface](RESPONSIVE_WEBUI.md) uses the same address on
 phones, large iPads and laptops. Wider windows show settings beside a pinned
 preview/results column; narrow windows and Split View keep the compact layout.
+The [testing workspace](RESPONSIVE_WEBUI.md) adds three columns on larger screens,
+selected-image Keep/Trash actions and a generation-history view. Edit and Upscale
+remain unavailable until their workflow integration is implemented.
 
 ## Run from source in an isolated environment
 

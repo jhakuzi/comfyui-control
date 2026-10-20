@@ -20,6 +20,7 @@ from .workflow_sources import saved_workflows, saved_workflow_graph
 from ..performance import GenerationPerformance
 from .prompt_history import PromptHistory
 from .image_metadata import generation_details
+from .image_actions import ImageLibrary, workflow_capabilities
 from ..background_process import run_background
 import sys
 
@@ -59,6 +60,7 @@ class MobileService:
         self.output_status = {}
         self.presets = Presets(self.directory / "presets")
         self.prompts = PromptHistory(self.directory / 'prompts')
+        self.image_library = ImageLibrary(self.directory / 'image-library.json')
         self.prompt_lock = asyncio.Lock()
         try:
             saved = json.loads((self.directory / "jobs.json").read_text())
@@ -163,9 +165,11 @@ class MobileService:
             save_json(self.directory / 'image-owners.json', self.image_owners)
             self.ownership_dirty = False
 
-    @staticmethod
-    def public_job(job):
-        return {k: v for k, v in job.items() if k not in {"graph", "scope", "owner", "prompt_history_recorded", "metadata"}}
+    def public_job(self, job):
+        result = {k: v for k, v in job.items() if k not in {"graph", "scope", "owner", "prompt_history_recorded", "metadata"}}
+        if 'images' in result:
+            result['images'] = [item for item in result['images'] if item.get('id') not in self.unavailable_images]
+        return result
 
     def state(self, include_details=True, owner=None):
         jobs = [j for j in self.current_jobs() if owner is None or j.get("owner") == owner][-100:]
@@ -173,7 +177,7 @@ class MobileService:
             public = [self.public_job(job) for job in jobs]
         else:
             keys = {"id", "status", "phase", "progress", "prompt_id", "position", "preset_name", "error", "seconds_per_iteration"}
-            public = [{**{k: v for k, v in job.items() if k in keys}, "image_count": len(job.get("images", []))} for job in jobs]
+            public = [{**{k: v for k, v in job.items() if k in keys}, "image_count": len(self.public_job(job).get("images", []))} for job in jobs]
         preview_allowed = owner is None or any(j["id"] == self.preview_job for j in jobs)
         return json_safe({"instance": self.instance_id, "version": self.state_version,
                 "online": self.online, "connection": self.connection, "desktop": self.desktop_state,
@@ -379,7 +383,7 @@ class MobileService:
         if not isinstance(filename, str) or not isinstance(subfolder, str) or not filename or Path(filename).name != filename or "\\" in filename or "\\" in subfolder:
             return None
         relative = Path(subfolder) / filename
-        if relative.is_absolute() or ".." in relative.parts or relative.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
+        if relative.is_absolute() or ".." in relative.parts or '.comfyui-control-trash' in relative.parts or relative.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
             return None
         image_type = descriptor.get("type", "output")
         key = hashlib.sha256((self.output_scope + ":" + image_type + ":" + str(relative)).encode()).hexdigest()[:32]
@@ -614,7 +618,8 @@ class MobileService:
                 await self.scan_gallery()
             ordered = sorted(self.images.values(), key=lambda item: item.get('created',
                 self.jobs.get(item.get('job'), {}).get('created', 0)), reverse=True)
-            return [{**item, 'reuse': self.image_reuse_status(item, owner), 'job': item.get('job') if owner is None or
+            return [{**item, 'kept': self.image_library.contains(self.output_scope, owner, item),
+                     'reuse': self.image_reuse_status(item, owner), 'job': item.get('job') if owner is None or
                      self.jobs.get(item.get('job'), {}).get('owner') == owner else None}
                     for item in ordered if item['id'] not in self.unavailable_images][:200]
 
@@ -645,7 +650,7 @@ class MobileService:
             if not root.is_dir():
                 return found, valid
             for folder, directories, files in os.walk(root, followlinks=False):
-                directories[:] = [d for d in directories if not (Path(folder) / d).is_symlink()]
+                directories[:] = [d for d in directories if d != '.comfyui-control-trash' and not (Path(folder) / d).is_symlink()]
                 for filename in files:
                     count += 1
                     if count > 10000:
@@ -671,6 +676,7 @@ class MobileService:
         for identifier, item in list(self.images.items()):
             if self.local_comfy and item['type'] == 'output' and identifier in references and identifier not in valid:
                 self.images.pop(identifier, None)
+                self.unavailable_images.add(identifier)
         for created, modified, path in sorted(found, reverse=True)[:200]:
             ref = self.image_ref({"filename": path.name, "subfolder": str(path.parent) if path.parent != Path(".") else "", "type": "output"})
             if ref:
@@ -688,8 +694,84 @@ class MobileService:
             return item.get("created", self.jobs.get(item.get("job"), {}).get("created", 0))
         ordered = sorted(self.images.values(), key=created, reverse=True)
         self.images = {item["id"]: item for item in ordered[:500]}
-        self.unavailable_images.intersection_update(self.images)
+        known = set(self.images) | {item.get('id') for job in self.current_jobs() for item in job.get('images', [])}
+        self.unavailable_images.intersection_update(known)
         self.gallery_time = time.monotonic()
+
+    def image_action_capabilities(self, identifier, owner):
+        """Single extension point for image-specific operations and workflow roles.
+
+        Future edit/upscale preparation must return a draft for the existing
+        preset/submit path, with this explicit source ID and version. Sharing
+        metadata never grants permission to remove another client's image.
+        """
+        item = self.images.get(identifier)
+        if not item or identifier in self.unavailable_images:
+            raise ValueError('This saved image is no longer available. Refresh the gallery.')
+        saved = item.get('type') == 'output'
+        own = self._metadata_allowed(item, owner, allow_shared=False)
+        local = self.local_comfy or self.network_output
+        reason = ('Trash is available only for saved images in the configured local output folder.' if not saved or not local
+                  else 'Only the browser that generated this image can move it to Trash.' if not own else '')
+        return {'image_id': identifier, 'modified': item.get('modified', ''),
+                'kept': self.image_library.contains(self.output_scope, owner, item),
+                'actions': {'keep': {'available': saved, 'reason': '' if saved else 'Keep is available for saved output images.'},
+                            'trash': {'available': not reason, 'reason': reason}, **workflow_capabilities()}}
+
+    async def image_action(self, identifier, owner, body):
+        if not isinstance(body, dict):
+            raise ValueError('Send an image action object.')
+        action = body.get('action')
+        if action not in {'keep', 'trash', 'edit', 'upscale'}:
+            raise ValueError('Unknown image action.')
+        async with self.gallery_lock:
+            scope = self.output_scope
+            capabilities = self.image_action_capabilities(identifier, owner)
+            capability = capabilities['actions'][action]
+            if not capability['available']:
+                raise ValueError(capability['reason'])
+            item = dict(self.images[identifier])
+            if body.get('modified') != item.get('modified', ''):
+                raise ValueError('This image changed. Refresh the gallery before acting on it.')
+            if action == 'keep':
+                await asyncio.to_thread(self.image_library.mark, scope, owner, item, body.get('keep'))
+                result = {'image_id': identifier, 'kept': body['keep']}
+            elif action == 'trash':
+                if body.get('confirm') is not True:
+                    raise ValueError('Confirm moving this specific image to Trash.')
+                if not item.get('modified'):
+                    raise ValueError('Refresh the gallery before moving this image to Trash.')
+                try:
+                    record = json.loads(await self.network_io('trash', dict(image=item, owner=owner, scope=scope, modified=body['modified'])))
+                except OSError as exc:
+                    raise ValueError(f'Could not move this image to Trash: {exc}. Refresh Gallery and Trash to check its location.') from None
+                result = {'image_id': identifier, 'trash': record}
+                if scope == self.output_scope:
+                    self.images.pop(identifier, None)
+                    self.image_unavailable(identifier)
+            else:
+                raise ValueError('This image workflow has no configured execution handler.')
+            self.gallery_time = 0
+            if action == 'trash':
+                self.broadcast()
+            return result
+
+    async def image_trash(self, owner, token=None):
+        if not (self.local_comfy or self.network_output):
+            raise ValueError('Trash is available only for the configured local output folder.')
+        async with self.gallery_lock:
+            scope = self.output_scope
+            data = {'owner': owner, 'scope': scope}
+            if token is not None:
+                data['token'] = token
+            try:
+                result = json.loads(await self.network_io('restore' if token is not None else 'trash-list', data))
+            except OSError as exc:
+                raise ValueError(f'Could not {"restore the image" if token is not None else "read Trash"}: {exc}') from None
+            if token is not None and scope == self.output_scope:
+                self.image_ref(result)
+                self.gallery_time = 0
+            return result
 
     async def image_parameters(self, identifier, owner=None):
         from .image_metadata import parameters, png_parameters
