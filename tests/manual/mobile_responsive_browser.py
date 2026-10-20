@@ -166,7 +166,10 @@ async def main(browser_name, root):
             await page.screenshot(path=str(root / 'create-desktop.png'))
             # Fixed-seed editing must allow clearing/replacing the text without
             # JavaScript rounding the 64-bit value or submitting a generation.
-            await page.locator('#settings-card').evaluate('el => el.open=true')
+            # Restyled disclosure markers retain native keyboard activation.
+            await page.locator('#settings-card > summary').focus()
+            await page.keyboard.press('Enter')
+            await expect(page.locator('#settings-card')).to_have_js_property('open', True)
             await expect(page.locator('[data-role="seed"]')).to_be_disabled()
             await page.locator('#random-seed').uncheck()
             seed = page.locator('[data-role="seed"]')
@@ -179,7 +182,9 @@ async def main(browser_name, root):
             await expect(page.locator('#random-seed')).not_to_be_checked()
             await seed.fill('42')
             await page.locator('#random-seed').check()
-            await page.locator('#settings-card').evaluate('el => el.open=false')
+            await page.locator('#settings-card > summary').focus()
+            await page.keyboard.press('Enter')
+            await expect(page.locator('#settings-card')).to_have_js_property('open', False)
             # Keyboard activation opens a normal control without submitting.
             await page.locator('#prompt-history').focus()
             await page.keyboard.press('Enter')
@@ -363,6 +368,10 @@ async def main(browser_name, root):
                 await expect(touch.locator('[data-role="positive"]')).to_have_value('Tablet draft')
                 assert await touch.evaluate('document.documentElement.scrollWidth <= innerWidth')
                 assert await touch.locator('#job-card').is_hidden()
+            await touch.locator('#lora-card > summary').tap()
+            await expect(touch.locator('#lora-card')).to_have_js_property('open', True)
+            await touch.locator('#lora-card > summary').tap()
+            await expect(touch.locator('#lora-card')).to_have_js_property('open', False)
             await touch.set_viewport_size(dict(width=1366, height=1024))
             await select_page(touch, 'gallery')
             high_dpi = touch.get_by_role('button', name='View desktop.png', exact=True)

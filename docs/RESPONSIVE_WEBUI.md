@@ -43,7 +43,10 @@ same backend. [Foreground SSH startup](SSH.md) is included in 1.0.
 All layouts use the same charcoal surfaces, blue controls and green online
 indicator. Colors, control/panel radii, spacing, typography and shadows are
 defined at the top of `comfyui_control/mobile/web/style.css`. Component rules
-reuse those tokens; the responsive breakpoints and control positions are unchanged.
+reuse those tokens. Restrained highlights separate panels, inputs and raised
+buttons; gallery filters use segmented selection styling. Compact header spacing,
+44px standard controls and collapsed sections leave more room for the preview.
+The three-column structure, component order and responsive breakpoints are unchanged.
 Keyboard focus stays visible, controls retain their touch targets, and reduced
 motion disables the control transitions and loading animation.
 
