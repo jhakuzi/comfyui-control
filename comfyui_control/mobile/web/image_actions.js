@@ -2,10 +2,11 @@
 
 /* One action view for any explicitly selected saved image. No last-job lookup. */
 class SavedImageActions {
-  constructor(container, { api, changed }) {
+  constructor(container, { api, changed, workflow }) {
     this.container = container;
     this.api = api;
     this.changed = changed;
+    this.workflow = workflow;
     this.epoch = 0;
     this.item = null;
     this.buttons = new Map();
@@ -66,6 +67,11 @@ class SavedImageActions {
     this.buttons.forEach((button) => { button.disabled = true; });
     this.status.textContent = action === "trash" ? "Moving image to Trash…" : "Saving…";
     try {
+      if (action === "edit" || action === "upscale") {
+        await this.workflow(item, action, capability.modified);
+        if (epoch === this.epoch) this.status.textContent = "";
+        return;
+      }
       const result = await this.api(`/api/images/${encodeURIComponent(item.id)}/actions`, {
         method: "POST", body: JSON.stringify({ action, modified: capability.modified,
           ...(action === "keep" ? { keep: !item.kept } : { confirm: true }) }),

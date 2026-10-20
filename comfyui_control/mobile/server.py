@@ -242,7 +242,7 @@ class MobileHTTP:
 
     async def image_actions(self, request):
         if request.method == 'GET':
-            return json_response(self.service.image_action_capabilities(request.match_info['id'], request[OWNER]))
+            return json_response(await self.service.describe_image_actions(request.match_info['id'], request[OWNER]))
         return json_response(await self.service.image_action(request.match_info['id'], request[OWNER], await object_body(request)))
 
     async def trash(self, request):
@@ -351,34 +351,8 @@ class MobileHTTP:
         return web.Response(body=self.thumbnails[key], content_type="image/jpeg")
 
     async def encode_image(self, source, thumbnail, size=384):
-        def encode():
-            from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QSize, Qt
-            from PySide6.QtGui import QImageReader
-            buffer = None
-            if isinstance(source, Path):
-                reader = QImageReader(str(source))
-            else:
-                buffer = QBuffer()
-                buffer.setData(source)
-                buffer.open(QIODevice.OpenModeFlag.ReadOnly)
-                reader = QImageReader(buffer)
-            reader.setAutoTransform(True)
-            if thumbnail and max(reader.size().width(), reader.size().height()) > size:
-                reader.setScaledSize(reader.size().scaled(QSize(size, size), Qt.AspectRatioMode.KeepAspectRatio))
-            image = reader.read()
-            if image.isNull():
-                return None
-            # Shared pixels must not bypass ownership via embedded PNG prompts.
-            # Encode only the HTTP response; the original file stays untouched.
-            for key in image.textKeys():
-                image.setText(key, '')
-            data = QByteArray()
-            output = QBuffer(data)
-            output.open(QIODevice.OpenModeFlag.WriteOnly)
-            if not image.save(output, 'JPEG' if thumbnail else 'PNG', (88 if size > 384 else 80) if thumbnail else -1):
-                return None
-            return bytes(data)
-        data = await asyncio.to_thread(encode)
+        from .image_pixels import encode_image
+        data = await encode_image(source, thumbnail, size)
         if data is None:
             raise web.HTTPNotFound(text='Image could not be read. Refresh the gallery.')
         return data

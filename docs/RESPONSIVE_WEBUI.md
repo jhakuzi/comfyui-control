@@ -14,7 +14,9 @@ setting, second server or separate installation is needed.
 - **Medium-width windows:** settings on the left; preview and Generate on the right.
   Live progress, s/it, VRAM and GPU
   usage appear in the top header while generating, including in Gallery.
-  The header stays visible while scrolling. Completed images appear on the right.
+  The header stays visible while scrolling. Active progress has its own compact
+  panel with a short fade (disabled with reduced motion); it disappears when
+  inactive. Completed images appear on the right.
 - **Gallery:** the desktop sidebar has All images, Kept, History and Trash views.
   History lists this browser's jobs; selecting one never submits a generation.
   Phones keep the Gallery tab and full-size viewer. Comparison remains available.
@@ -61,7 +63,7 @@ The existing application icon is retained.
 ## Run from source
 
 The three-column workspace is on **testing/webui-workspace**, version
-**1.1.0.dev2**. It branches from main; the uninstall work remains separate.
+**1.1.0.dev3**. It branches from main; the uninstall work remains separate.
 For an isolated source copy,
 close the running app and install as your usual Linux user:
 
@@ -86,8 +88,14 @@ with `.venv-test/bin/python -m pip install .`.
 - **Keep:** mark/unmark the selected image for this browser's Kept filter in the
   recent gallery. No file is moved. Marks survive app restarts and are scoped to
   browser identity, output folder and file version.
-- **Edit / Upscale:** disabled with an explanation. Workflow execution is not
-  implemented in this branch; no Krea, Qwen or SeedVR graph is embedded.
+- **Edit:** enter an instruction for the selected saved image. Uses the saved
+  `VeryComfy_Qwen21_Turbo_EDIT_ONLY.json` workflow in ComfyUI.
+- **Upscale:** sends the selected saved image to
+  `OfficialComfy-SeedVR_Upscaler.json` in ComfyUI.
+  Both actions retain the original image and use normal generation progress,
+  cancellation and reconnect recovery. Your main workflow and prompt draft stay
+  selected. Missing workflows disable the corresponding action with instructions.
+  See [workflow setup and exact bindings](IMAGE_WORKFLOW_INTEGRATION.md).
 - **Trash:** after confirmation naming the image, move it into the output
   folder's private `.comfyui-control-trash` directory. **Trash → Restore** returns
   it to its original location without overwriting a replacement. There is no

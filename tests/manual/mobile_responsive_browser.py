@@ -372,7 +372,10 @@ async def main(browser_name, root):
                 await expect(prompt).to_have_value(external['text']['inputs']['text'])
                 await page.locator('#settings-card').evaluate('el => el.open=true')
                 await expect(page.locator('[data-role="seed"]')).to_have_value(str(external['sampler']['inputs']['seed']))
-                assert await page.locator('#random-seed').is_checked() == randomize
+                if randomize:
+                    await expect(page.locator('#random-seed')).to_be_checked()
+                else:
+                    await expect(page.locator('#random-seed')).not_to_be_checked()
                 assert len(stub.submissions) == 1 and len(service.presets.list()) == 1
             await select_page(page, 'gallery')
             await view_image(page, 'image01.png')

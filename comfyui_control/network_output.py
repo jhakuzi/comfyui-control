@@ -353,9 +353,15 @@ def read_image(root, descriptor):
             directory = child
         fd = os.open(relative.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
         with os.fdopen(fd, 'rb') as stream:
-            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode):
                 raise ValueError('Image is not a regular file.')
+            expected = descriptor.get('expected_modified')
+            if expected is not None and expected != str(info.st_mtime_ns):
+                raise ValueError('This image changed. Refresh the gallery before acting on it.')
             contents = stream.read(MAX_IMAGE + 1)
+            if expected is not None and expected != str(os.fstat(stream.fileno()).st_mtime_ns):
+                raise ValueError('This image changed while it was being read. Refresh the gallery and try again.')
         if len(contents) > MAX_IMAGE:
             raise ValueError('Image exceeds the 100 MiB network-image limit.')
         return contents

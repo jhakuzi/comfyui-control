@@ -298,6 +298,18 @@
       </div>
       <p id="notice" role="alert" hidden></p>
     </main>
+    <dialog id="edit-image-dialog" aria-labelledby="edit-image-title">
+      <form id="edit-image-form" class="viewer">
+        <h2 id="edit-image-title">Edit image</h2>
+        <p id="edit-image-source" class="hint"></p>
+        <label for="edit-image-prompt">What would you like to change?</label>
+        <textarea id="edit-image-prompt" rows="5" maxlength="20000" required placeholder="Describe your changes. Everything else follows the saved edit workflow."></textarea>
+        <div class="actions">
+          <button id="cancel-edit-image" type="button">Cancel</button>
+          <button class="primary" type="submit">Edit image</button>
+        </div>
+      </form>
+    </dialog>
     <dialog id="prompt-history-dialog" aria-labelledby="prompt-history-title">
       <div class="viewer">
         <div class="heading">

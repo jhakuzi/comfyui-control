@@ -1,47 +1,78 @@
-# Saved-image actions and future workflows
+# Saved-image workflows — testing branch
 
-This branch uses the existing frontend, `MobileService`, preset mappings,
-ComfyUI client, generation queue, SSE progress and session recovery.
+Select a saved image in the preview or phone viewer, then choose **Edit** or
+**Upscale**. Both retain the original image and use the existing queue, live
+progress, gallery, cancellation and session recovery. The main generation
+workflow and unsent prompt stay selected. Edit opens an instruction dialog;
+cancelling it never submits. Unsent edit instructions are retained per image in
+this browser, including across refreshes.
 
-## Current boundary
+## Setup in ComfyUI
 
-- `mobile/image_actions.py`: image workflow role descriptors (`edit`, `upscale`)
-  and atomic per-browser Keep marks. `workflow_capabilities()` reports both
-  workflow roles unavailable, with human-readable reasons.
-- `MobileService.image_action_capabilities(image_id, owner)`: capability query
-  for one registered saved image, including its current file version. This is
-  the shared point for future workflow readiness checks.
-- `GET/POST /api/images/{id}/actions`: explicit image target, action name and
-  expected `modified` version. No client-supplied filesystem path is accepted.
-  Unsupported workflow actions are rejected rather than simulated.
-- `web/image_actions.js`: one action component used in the center preview and
-  existing mobile image viewer. Selection epochs guard late capability responses;
-  mutations capture the image ID/version before awaiting the server.
-- `network_output.py`: the existing bounded filesystem worker handles Trash,
-  listing and restore for local or NFS output. Private trash entries contain the
-  file and a recovery manifest; gallery/path guards exclude that directory.
+Save these tested workflows in ComfyUI's **Workflows** list, then refresh the WebUI:
 
-Keep marks live in `mobile/image-library.json`, independently of jobs, presets
-and prompt favorites. Public job views omit unavailable images; stored jobs are
-not rewritten when an image is trashed. Browser history renders existing jobs.
+| Action | Saved filename | Explicit inputs |
+| --- | --- | --- |
+| Upscale | `OfficialComfy-SeedVR_Upscaler.json` | `1.image` (`LoadImage`) |
+| Edit | `VeryComfy_Qwen21_Turbo_EDIT_ONLY.json` | `88.image` (`LoadImage`), `89.prompt` (`TextEncodeQwenImage21`) |
 
-## Adding edit/upscale execution later
+Qwen node 89 must retain `images.image_1: ["88", 0]`. The app verifies that
+connection and leaves it intact. Models, LoRAs, seed defaults, custom nodes and
+all other saved inputs/connections remain as saved in the action workflow.
+These actions do not inherit the main generation form's current settings.
 
-1. Inspect a tested ComfyUI API workflow and its installed node definitions.
-   Associate the role with an existing preset and explicit image/mask inputs.
-   A configured role must only become available once its bindings are usable.
-2. Resolve the selected source by its registered image ID, current output scope
-   and version. Apply existing ownership/metadata policy. Recheck after I/O; a
-   changed output folder or replaced file must invalidate preparation.
-3. Upload a source copy to ComfyUI using its supported API when required. Keep
-   the original saved image untouched. Do not expose arbitrary local paths.
-4. Prepare a draft using the current preset/mapping renderer. Queue only through
-   `MobileService.submit`, retaining its request UUID/idempotency and browser owner.
-   Store source-image provenance as additive metadata, not a second job journal.
-5. Receive progress, cancellation, reconnect recovery and saved results through
-   the current client/service/SSE/gallery paths. New results get new filenames.
+API-format saved workflows are supported. For editor-format workflows containing
+custom widgets, run that exact saved workflow once in ComfyUI first so the
+existing importer can find its executable snapshot. If conversion cannot be
+verified, the error requests an API export or exact queued snapshot; custom
+widget values and connections are never guessed. A uniquely named workflow in
+a subfolder is supported; the exact root filename takes precedence.
 
-Enabling a capability alone does not install an execution handler: extend the
-explicit action dispatcher when the actual workflow integration is implemented.
-There is intentionally no placeholder graph, alternate queue, browser-session
-system, workflow-purpose migration, or model-specific execution in this branch.
+Missing saved workflows disable the action with an explanation. Missing custom
+nodes, changed bindings, upload failures or invalid workflow inputs produce a
+specific error before queueing. Full workflow graphs and models are supplied by
+the user's ComfyUI installation, not bundled with this app.
+
+## Source images and privacy
+
+Actions support saved images in the configured local or NFS output folder.
+Select an image with a current gallery version; unavailable/replaced files are
+rejected. No client-supplied filesystem path is accepted. The original stays in
+place, and a PNG copy of its pixels is uploaded through ComfyUI's `/upload/image`
+API into `input/` with a unique `comfyui-control-` filename and overwrite
+disabled. This location works with the standard LoadImage file selector.
+These source copies remain in ComfyUI input storage for workflow reuse; they are
+not automatically deleted. An upload followed by a failed validation can also
+leave an unused input copy.
+
+Embedded image metadata is stripped from the uploaded copy. Editing visible
+pixels does not grant access to another browser's prompts/settings, job status
+or cancellation. Existing metadata-sharing preferences and Trash ownership
+checks are unchanged. Remote API-only output without a locally configured
+output folder is unavailable for these actions.
+
+## Implementation boundary
+
+- `mobile/image_actions.py`: exact named workflow bindings, validation and
+  per-browser Keep marks. No generation graph is constructed here.
+- `MobileService.describe_image_actions()` discovers saved workflow names;
+  `run_image_workflow()` validates the graph/source, uploads pixels and reuses
+  existing mapped presets plus `submit()`. Job identity and persistence remain
+  in the existing journal. Retrying an accepted request UUID never uploads or
+  queues it again, including after a service restart.
+- `GET/POST /api/images/{id}/actions`: explicit selected image, current `modified`
+  version, action and request UUID. Edit also supplies an instruction.
+- `web/image_actions.js`: shared preview/viewer actions. `app.js` keeps pending
+  action submissions in the existing recovery store and uses the same live jobs.
+- `mobile/image_pixels.py`: shared metadata-free encoding for HTTP responses
+  and action source uploads. Original image files are never rewritten.
+- `network_output.py`: existing bounded worker validates path/version and reads
+  source pixels without blocking the embedded HTTP event loop.
+
+Keep marks, recoverable Trash and browser-filtered generation history continue
+using their existing stores and guards. No additional service, frontend,
+ComfyUI node package or dependency is introduced.
+
+Automated tests use representative API graphs, Chromium/Linux WebKit and a
+ComfyUI protocol fixture. They do not establish inference compatibility with
+the full SeedVR/Qwen workflows or installed models; verify those on your PC.

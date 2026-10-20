@@ -913,7 +913,7 @@ progress:indeterminate::-webkit-progress-bar {
 }
 @media (prefers-reduced-motion: reduce) {
   progress:indeterminate { animation: none; }
-  button, .button, input, textarea, select { transition: none; }
+  button, .button, input, textarea, select, #header-generation { transition: none; }
 }
 #notice {
   position: fixed;
@@ -1002,6 +1002,7 @@ dialog::backdrop {
   background: var(--selected-sheen) var(--accent-soft);
 }
 #prompt-history-dialog { max-width: 540px; }
+#edit-image-dialog { max-width: 580px; }
 .job-card {
   scroll-margin-top: 20px;
 }
@@ -1108,7 +1109,24 @@ dialog::backdrop {
   #header-generation {
     width: min(48vw, 560px);
     min-width: 0;
+    min-height: 56px;
     margin: 0 auto;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+    background: var(--panel-sheen) var(--surface);
+    box-shadow: var(--shadow-panel);
+    opacity: 1;
+    transition: opacity 180ms ease, display 180ms allow-discrete;
+  }
+  #header-generation[hidden] {
+    opacity: 0;
+  }
+  @starting-style {
+    #header-generation:not([hidden]) { opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #header-generation { transition: none; }
   }
   #header-generation #job-metrics {
     display: grid;

@@ -76,14 +76,15 @@ function notice(message) {
   }, 10000);
 }
 async function api(path, options = {}) {
+  const { timeoutMs = 8000, ...fetchOptions } = options;
   const controller = new AbortController();
   requests.add(controller);
-  const timeout = setTimeout(() => controller.abort(), 8000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   let response, text;
   try {
     response = await fetch(path, {
       credentials: "same-origin",
-      ...options,
+      ...fetchOptions,
       signal: controller.signal,
       headers: { "Content-Type": "application/json", ...options.headers },
     });
@@ -119,6 +120,7 @@ function showLogin() {
   if ($("image-dialog").open) $("image-dialog").close();
   if ($("prompt-history-dialog").open) $("prompt-history-dialog").close();
   if ($("compare-dialog").open) $("compare-dialog").close();
+  if ($("edit-image-dialog").open) $("edit-image-dialog").close();
   $("offline").hidden = true;
   if (events) events.close();
   events = null;
@@ -253,9 +255,9 @@ function updateGenerate() {
     busy ||
     !connected ||
     recovering ||
-    !preset ||
+    (!preset && !pendingSubmission) ||
     !state.online ||
-    preset.missing_nodes.length > 0 ||
+    (!pendingSubmission && preset?.missing_nodes.length > 0) ||
     !!(job && activeStatuses.has(job.status));
   $("generate").textContent = busy
     ? "Submitting"
@@ -765,27 +767,32 @@ function requestId() {
 }
 async function generate(event) {
   event.preventDefault();
-  if (busy || !preset || !connected || recovering) return;
-  busy = true;
-  inspectingSavedImage = false;
-  $("generation-panel").dataset.inspect = "false";
-  submitting = true;
-  updateGenerate();
-  const body = pendingSubmission || {
+  if (busy || (!preset && !pendingSubmission) || !connected || recovering) return;
+  await submitGeneration(pendingSubmission || {
     request_id: requestId(),
     preset: preset.id,
     revision: preset.revision,
     values: draft,
     random_seed: randomSeed,
     disabled_loras: [...disabledLoras],
-  };
+  });
+}
+async function submitGeneration(body) {
+  busy = true;
+  inspectingSavedImage = false;
+  $("generation-panel").dataset.inspect = "false";
+  submitting = true;
+  updateGenerate();
   pendingSubmission = JSON.parse(JSON.stringify(body));
   writeStore("pending", pendingSubmission);
   try {
-    const job = await api("/api/generate", {
+    const action = body.image_action;
+    const response = await api(action ? `/api/images/${encodeURIComponent(action.image_id)}/actions` : "/api/generate", {
       method: "POST",
-      body: JSON.stringify(body),
+      body: JSON.stringify(action ? { ...action, request_id: body.request_id } : body),
+      timeoutMs: action ? 90000 : 8000,
     });
+    const job = action ? response.job : response;
     if (job.prompt_history_notice) notice(job.prompt_history_notice);
     pendingSubmission = null;
     writeStore("pending", null);
@@ -808,6 +815,48 @@ async function generate(event) {
     submitting = false;
     updateGenerate();
   }
+}
+
+function editInstruction(item) {
+  const dialog = $("edit-image-dialog"), input = $("edit-image-prompt"), form = $("edit-image-form");
+  const key = "edit-instruction-" + item.id;
+  input.value = readStore(key, "");
+  $("edit-image-source").textContent = item.filename;
+  return new Promise((resolve) => {
+    let result = null;
+    const save = () => writeStore(key, input.value);
+    const submit = (event) => {
+      event.preventDefault();
+      if (!input.value.trim()) { input.focus(); return; }
+      result = input.value;
+      dialog.close();
+    };
+    const close = () => {
+      save();
+      input.removeEventListener("input", save);
+      form.removeEventListener("submit", submit);
+      resolve(result);
+    };
+    input.addEventListener("input", save);
+    form.addEventListener("submit", submit);
+    dialog.addEventListener("close", close, { once: true });
+    dialog.showModal();
+    input.focus();
+  });
+}
+async function runImageWorkflow(item, action, modified) {
+  if (busy || pendingSubmission) throw new Error("Finish or retry the pending submission before starting an image action.");
+  if (!connected || recovering || !state.online) throw new Error("Reconnect to ComfyUI before starting an image action.");
+  const prompt = action === "edit" ? await editInstruction(item) : null;
+  if (action === "edit" && prompt === null) return;
+  if (busy || pendingSubmission || !connected || recovering || !state.online)
+    throw new Error("Connection or submission state changed. Reconnect and try again; your instruction is kept.");
+  if ($("image-dialog").open) $("image-dialog").close();
+  selectTab("create");
+  notice(`Preparing “${item.filename}” for ${action === "edit" ? "editing" : "upscaling"}…`);
+  await submitGeneration({ request_id: requestId(), image_action: {
+    image_id: item.id, action, modified, ...(action === "edit" ? { prompt } : {}),
+  } });
 }
 function refreshFullState() {
   if (fullStatePending) return;
@@ -841,7 +890,12 @@ function applyState(value) {
       refreshFullState();
     }
   }
+  const onlineChanged = state.online !== value.online;
   state = value;
+  if (onlineChanged) {
+    if (selectedImage) selectedImageActions.select(selectedImage);
+    if ($("image-dialog").open) viewerImageActions.select(viewerItems[viewerIndex]);
+  }
   const output = state.output_status || {};
   $("output-warning").hidden = !["warning", "error"].includes(output.level);
   $("output-warning-title").textContent = output.title || "";
@@ -1613,6 +1667,7 @@ $("open-selected-image").addEventListener("click", () => {
 $("reuse-selected-image").addEventListener("click", () => reuseSelectedImage(false));
 $("vary-selected-image").addEventListener("click", () => reuseSelectedImage(true));
 $("close-image").addEventListener("click", () => $("image-dialog").close());
+$("cancel-edit-image").addEventListener("click", () => $("edit-image-dialog").close());
 $("image-dialog").addEventListener("close", () => { imageReuseEpoch++; });
 $("previous-image").addEventListener("click", () =>
   navigateImage(-1),
@@ -1724,8 +1779,8 @@ function connectionFailure(error) {
 }
 const comparison = new ImageComparison({ api, notice, read: readStore, write: writeStore, unauthorized: showLogin });
 const imageDetails = new ImageDetails({ api });
-const selectedImageActions = new SavedImageActions($("selected-image-actions"), { api, changed: savedImageChanged });
-const viewerImageActions = new SavedImageActions($("viewer-image-actions"), { api, changed: savedImageChanged });
+const selectedImageActions = new SavedImageActions($("selected-image-actions"), { api, changed: savedImageChanged, workflow: runImageWorkflow });
+const viewerImageActions = new SavedImageActions($("viewer-image-actions"), { api, changed: savedImageChanged, workflow: runImageWorkflow });
 const promptHistory = new PromptHistoryView({ api, reuse: (entry) => {
   if (!preset) throw new Error("Choose a workflow before reusing a prompt.");
   const changes = [];

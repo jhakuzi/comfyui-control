@@ -1,23 +1,63 @@
 """Saved-image capabilities and per-browser Keep marks, separate from job state.
 
-Edit/upscale deliberately have no execution handler yet. Future integrations
-must bind a verified source image to an existing preset, then use submit();
-they must never replace the source file or introduce another queue.
+Image workflow names and bindings are explicitly supplied by the user. Graphs
+still come from ComfyUI; only these literal inputs are replaced for an action.
 """
 import hashlib
 import json
+from pathlib import PurePosixPath
 
 from .settings import save_json
 
 
 IMAGE_WORKFLOWS = {
-    'edit': {'label': 'Edit', 'reason': 'Editing workflow is not configured yet.'},
-    'upscale': {'label': 'Upscale', 'reason': 'Upscaling workflow is not configured yet.'},
+    'edit': {'label': 'Edit', 'name': 'VeryComfy_Qwen21_Turbo_EDIT_ONLY',
+             'image': ('88', 'image'), 'prompt': ('89', 'prompt')},
+    'upscale': {'label': 'Upscale', 'name': 'OfficialComfy-SeedVR_Upscaler',
+                'image': ('1', 'image')},
 }
 
 
 def workflow_capabilities():
-    return {key: {'available': False, **value} for key, value in IMAGE_WORKFLOWS.items()}
+    return {key: {'available': False, 'label': value['label'], 'workflow': value['name'],
+                  'reason': f"{'Editing' if key == 'edit' else 'Upscaling'} workflow is not configured yet. "
+                            f"Save {value['name']}.json in ComfyUI's Workflows list, then refresh this page."}
+            for key, value in IMAGE_WORKFLOWS.items()}
+
+
+def workflow_name(action, names):
+    expected = IMAGE_WORKFLOWS[action]['name']
+    if expected + '.json' in names:
+        return expected + '.json'
+    matches = [name for name in names if PurePosixPath(name).stem == expected]
+    if len(matches) != 1:
+        if matches:
+            raise ValueError(f'Multiple saved workflows are named {expected}. Keep one uniquely named copy.')
+        raise ValueError(workflow_capabilities()[action]['reason'])
+    return matches[0]
+
+
+def workflow_bindings(action, graph):
+    """Validate the supplied API entries; never repair/reconnect an unknown graph."""
+    config = IMAGE_WORKFLOWS[action]
+    image_node, image_input = config['image']
+    node = graph.get(image_node, {})
+    if node.get('class_type') != 'LoadImage' or not isinstance(node.get('inputs', {}).get(image_input), str):
+        raise ValueError(f"{config['name']} needs LoadImage node {image_node}, input {image_input}. "
+                         'Its saved inputs differ from the configured image binding.')
+    bindings = [dict(node=image_node, input=image_input, role='advanced', key='action-image', label='Source image')]
+    if action == 'edit':
+        prompt_node, prompt_input = config['prompt']
+        node = graph.get(prompt_node, {})
+        connection = node.get('inputs', {}).get('images.image_1')
+        if (node.get('class_type') != 'TextEncodeQwenImage21'
+                or not isinstance(node.get('inputs', {}).get(prompt_input), str)
+                or not isinstance(connection, list) or len(connection) != 2
+                or str(connection[0]) != image_node or connection[1] != 0):
+            raise ValueError(f"{config['name']} needs TextEncodeQwenImage21 node {prompt_node}, input {prompt_input}, "
+                             f'with images.image_1 connected to node {image_node}, output 0. No connections were changed.')
+        bindings.append(dict(node=prompt_node, input=prompt_input, role='positive', key='action-prompt', label='Edit instruction'))
+    return bindings
 
 
 class ImageLibrary:

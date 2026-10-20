@@ -20,7 +20,8 @@ from .workflow_sources import saved_workflows, saved_workflow_graph
 from ..performance import GenerationPerformance
 from .prompt_history import PromptHistory
 from .image_metadata import generation_details
-from .image_actions import ImageLibrary, workflow_capabilities
+from .image_actions import IMAGE_WORKFLOWS, ImageLibrary, workflow_capabilities, workflow_name, workflow_bindings
+from .image_pixels import encode_image
 from ..background_process import run_background
 import sys
 
@@ -79,6 +80,10 @@ class MobileService:
         self.unavailable_images = set()
         self.gallery_time = 0
         self.gallery_lock = asyncio.Lock()
+        self.image_workflow_lock = asyncio.Lock()
+        self.workflow_names_lock = asyncio.Lock()
+        self.workflow_names = []
+        self.workflow_names_time = 0
         self.image_owners = {}
         self.ownership_available = True
         self.ownership_dirty = False
@@ -283,7 +288,7 @@ class MobileService:
         save_json(self.presets.path(preset["id"]), preset)
         return await self.describe(preset)
 
-    async def submit(self, body, owner=None):
+    async def submit(self, body, owner=None, *, expected_scope=None):
         request_id = body.get("request_id")
         try:
             if str(uuid.UUID(request_id)) != request_id:
@@ -291,6 +296,8 @@ class MobileService:
         except (ValueError, TypeError, AttributeError):
             raise ValueError("A valid request ID is required to prevent duplicate submissions.") from None
         async with self.submit_lock:
+            if expected_scope is not None and expected_scope != self.output_scope:
+                raise ValueError('The output folder changed. No generation was queued; refresh the gallery.')
             if request_id in self.jobs:
                 if owner is not None and self.jobs[request_id].get("owner") != owner:
                     raise ValueError("This request belongs to another browser session.")
@@ -305,6 +312,8 @@ class MobileService:
             if missing:
                 raise ValueError("ComfyUI is missing these nodes: " + ", ".join(sorted(missing)))
             lora_models = await self.lora_choices(preset, info)
+            if expected_scope is not None and expected_scope != self.output_scope:
+                raise ValueError('The output folder changed. No generation was queued; refresh the gallery.')
             graph, actual = render(preset, body.get("values", {}), body.get("random_seed", False), body.get("disabled_loras", []), info, lora_models)
             # Journal before the network request. A lost response never retries a prompt blindly.
             job = {"id": request_id, "owner": owner, "scope": self.output_scope, "preset": preset["id"], "preset_name": preset["name"], "revision": revision(preset),
@@ -699,12 +708,7 @@ class MobileService:
         self.gallery_time = time.monotonic()
 
     def image_action_capabilities(self, identifier, owner):
-        """Single extension point for image-specific operations and workflow roles.
-
-        Future edit/upscale preparation must return a draft for the existing
-        preset/submit path, with this explicit source ID and version. Sharing
-        metadata never grants permission to remove another client's image.
-        """
+        """Sharing pixels/settings never grants permission to remove an image."""
         item = self.images.get(identifier)
         if not item or identifier in self.unavailable_images:
             raise ValueError('This saved image is no longer available. Refresh the gallery.')
@@ -718,12 +722,112 @@ class MobileService:
                 'actions': {'keep': {'available': saved, 'reason': '' if saved else 'Keep is available for saved output images.'},
                             'trash': {'available': not reason, 'reason': reason}, **workflow_capabilities()}}
 
+    async def describe_image_actions(self, identifier, owner):
+        result = self.image_action_capabilities(identifier, owner)
+        if self.client is None or not self.online:
+            return result
+        item = self.images[identifier]
+        source_available = (item.get('type') == 'output' and bool(item.get('modified'))
+                            and (self.local_comfy or self.network_output))
+        try:
+            # Both the inline preview and the phone viewer share this short cache.
+            async with self.workflow_names_lock:
+                if time.monotonic() - self.workflow_names_time > 5:
+                    self.workflow_names = await self.saved_workflows()
+                    self.workflow_names_time = time.monotonic()
+            for action in IMAGE_WORKFLOWS:
+                try:
+                    name = workflow_name(action, self.workflow_names)
+                    reason = '' if source_available else 'Refresh the gallery and select an image from the configured local or network output folder.'
+                    result['actions'][action].update(available=source_available, reason=reason, source=name)
+                except ValueError as exc:
+                    result['actions'][action]['reason'] = str(exc)
+        except ComfyError as exc:
+            for action in IMAGE_WORKFLOWS:
+                result['actions'][action]['reason'] = str(exc)
+        return result
+
+    async def run_image_workflow(self, identifier, owner, body):
+        action = body['action']
+        if self.client is None or not self.online:
+            raise ValueError(workflow_capabilities()[action]['reason'] + ' Start ComfyUI to use it.')
+        request_id = body.get('request_id')
+        try:
+            if str(uuid.UUID(request_id)) != request_id:
+                raise ValueError()
+        except (ValueError, TypeError, AttributeError):
+            raise ValueError('A valid request ID is required to prevent duplicate submissions.') from None
+        instruction = body.get('prompt')
+        if action == 'edit' and (not isinstance(instruction, str) or not instruction.strip() or len(instruction) > 20000):
+            raise ValueError('Enter an edit instruction (1–20,000 characters).')
+        # Serialize only preparation. Execution still uses submit(), its journal,
+        # the shared ComfyUI queue, and the existing WebSocket/session recovery.
+        async with self.image_workflow_lock:
+            existing = self.jobs.get(request_id)
+            if existing:
+                if existing.get('owner') != owner or existing.get('scope') != self.output_scope:
+                    raise ValueError('This request belongs to another browser session or output folder.')
+                return {'image_id': identifier, 'job': self.public_job(existing)}
+            self.image_action_capabilities(identifier, owner)  # Known saved-image ID only.
+            item = dict(self.images[identifier])
+            scope = self.output_scope
+            if (item.get('type') != 'output' or not (self.local_comfy or self.network_output)
+                    or not item.get('modified')):
+                raise ValueError('Select a saved image from the configured local or network output folder.')
+            if body.get('modified') != item['modified']:
+                raise ValueError('This image changed. Refresh the gallery before acting on it.')
+            name = workflow_name(action, await self.saved_workflows())
+            graph = await saved_workflow_graph(self.client, name)
+            bindings = workflow_bindings(action, graph)
+            info = await self.metadata()
+            missing = {node['class_type'] for node in graph.values()} - set(info)
+            if missing:
+                raise ValueError('ComfyUI is missing these nodes: ' + ', '.join(sorted(missing)))
+            if scope != self.output_scope:
+                raise ValueError('The output folder changed. Refresh the gallery before trying again.')
+            try:
+                source = await self.network_io('read', {**item, 'expected_modified': item['modified']})
+            except OSError as exc:
+                raise ValueError(f'Could not read the selected image: {exc}. Refresh the gallery; no generation was queued.') from None
+            pixels = await encode_image(source)
+            if not pixels:
+                raise ValueError('The selected image could not be decoded. No generation was queued.')
+            if scope != self.output_scope:
+                raise ValueError('The output folder changed. Refresh the gallery before trying again.')
+            uploaded = await self.client.upload_image(pixels, 'comfyui-control-' + uuid.uuid4().hex + '.png')
+            # LoadImage's combo list must include the newly uploaded input.
+            await self.metadata(force=True)
+            marker = {'action': action, 'source': name}
+            preset = None
+            for entry in self.presets.list():
+                saved = self.presets.get(entry['id'])
+                if saved.get('image_workflow') == marker and saved['graph'] == graph:
+                    preset = saved
+                    break
+            if preset is None:
+                preset = self.presets.create(IMAGE_WORKFLOWS[action]['name'], graph)
+                targets = {(m['node'], m['input']) for m in bindings}
+                mappings = [m for m in suggested_mappings(graph, self.info) if (m['node'], m['input']) not in targets]
+                preset = self.presets.map(preset['id'], mappings + bindings)
+                preset['image_workflow'] = marker
+                save_json(self.presets.path(preset['id']), preset)
+            values = {'action-image': uploaded}
+            if action == 'edit':
+                values['action-prompt'] = instruction
+            if scope != self.output_scope:
+                raise ValueError('The output folder changed. No generation was queued; refresh the gallery.')
+            job = await self.submit({'request_id': request_id, 'preset': preset['id'], 'revision': revision(preset),
+                                     'values': values, 'random_seed': False, 'disabled_loras': []}, owner, expected_scope=scope)
+            return {'image_id': identifier, 'job': self.public_job(job)}
+
     async def image_action(self, identifier, owner, body):
         if not isinstance(body, dict):
             raise ValueError('Send an image action object.')
         action = body.get('action')
         if action not in {'keep', 'trash', 'edit', 'upscale'}:
             raise ValueError('Unknown image action.')
+        if action in IMAGE_WORKFLOWS:
+            return await self.run_image_workflow(identifier, owner, body)
         async with self.gallery_lock:
             scope = self.output_scope
             capabilities = self.image_action_capabilities(identifier, owner)

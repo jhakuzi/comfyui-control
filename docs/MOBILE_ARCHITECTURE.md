@@ -1,6 +1,6 @@
 # Mobile WebUI architecture and verification
 
-## Testing: responsive workspace (1.1.0.dev2)
+## Testing: responsive workspace (1.1.0.dev3)
 
 `testing/webui-workspace` extends the same HTML/JavaScript frontend: settings,
 selected-image preview and gallery/history share a three-column layout on
@@ -16,8 +16,13 @@ and action controls from generation. Keep marks use a small atomic sidecar.
 Trash/restore reuse the bounded filesystem worker and refuse stale versions,
 symlink paths, replacement overwrites and another browser's mobile output.
 Job/image filtering hides trashed output without deleting the stored journal.
-Edit/upscale are unavailable pending verified workflow bindings; the extension
-contract is in [IMAGE_WORKFLOW_INTEGRATION.md](IMAGE_WORKFLOW_INTEGRATION.md).
+Edit/upscale resolve named saved graphs and validate the user-supplied input
+bindings, upload a metadata-free copy of the selected pixels, and call the same
+`submit()` method. Reusable action presets retain the original saved graph;
+only mapped image/instruction values change per job. A preparation lock avoids
+duplicate uploads on concurrent retries; the existing UUID journal prevents
+repeated queue submissions. The main workflow/draft is unchanged. Setup and
+bindings are in [IMAGE_WORKFLOW_INTEGRATION.md](IMAGE_WORKFLOW_INTEGRATION.md).
 
 Automated checks cover Keep persistence, output/owner isolation, explicit image
 targeting, recoverable moves, restore collisions, path guards and retained jobs.
