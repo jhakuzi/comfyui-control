@@ -170,6 +170,9 @@ async def main(browser_name, root):
             await page.locator('#settings-card > summary').focus()
             await page.keyboard.press('Enter')
             await expect(page.locator('#settings-card')).to_have_js_property('open', True)
+            settings_box = await page.locator('#settings-card').bounding_box()
+            lora_box = await page.locator('#lora-card').bounding_box()
+            assert settings_box['y'] < lora_box['y']
             await expect(page.locator('[data-role="seed"]')).to_be_disabled()
             await page.locator('#random-seed').uncheck()
             seed = page.locator('[data-role="seed"]')
@@ -198,6 +201,9 @@ async def main(browser_name, root):
             assert len(stub.submissions) == 1
             stub.running, stub.pending = stub.pending, []
             job = list(service.jobs.values())[-1]
+            # Drain an in-flight queued snapshot before emitting the fixture's
+            # execution events, as a real queue transition would do.
+            await service.refresh()
             await stub.emit('execution_start', dict(prompt_id=job['prompt_id']))
             await stub.emit('executing', dict(prompt_id=job['prompt_id'], node='model'))
             await expect(page.locator('#job-title')).to_have_text('Preparing / loading models…')
@@ -289,18 +295,28 @@ async def main(browser_name, root):
                 await page.set_viewport_size(dict(width=width, height=height))
                 await expect(page.locator('#workspace')).to_have_attribute('data-layout', 'studio')
                 await page.evaluate('window.scrollTo(0,0)')
-                await reachable(('generate', 'open-selected-image', 'reuse-selected-image'))
+                await reachable(('generate', 'download-image', 'reuse-selected-image'))
                 assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
                 image_box = await page.locator('#selected-image-preview').bounding_box()
                 assert image_box['height'] >= 200, image_box
                 await page.screenshot(path=str(root / f'large-result-{width}.png'))
             await page.set_viewport_size(dict(width=1440, height=900))
             assert len(stub.submissions) == 1
+            await expect(page.locator('#open-selected-image')).to_be_hidden()
+            await expect(page.locator('#selected-image-tools #image-details')).to_be_visible()
+            await expect(page.locator('#image-dialog')).to_be_hidden()
+            selected_id = await page.evaluate('selectedImage.id')
+            await page.locator('#next-image').click()
+            assert await page.evaluate('selectedImage.id') != selected_id
+            assert await page.locator('#download-image').get_attribute('href') == await page.evaluate('selectedImage.download')
+            await page.locator('#previous-image').click()
+            assert await page.evaluate('selectedImage.id') == selected_id
             await page.screenshot(path=str(root / 'result-laptop.png'))
             async def view_image(tab, filename):
                 await tab.get_by_role('button', name='View ' + filename, exact=True).click()
                 if await tab.evaluate('studioLayout.matches'):
-                    await tab.locator('#open-selected-image').click()
+                    await expect(tab.locator('#selected-image-name')).to_have_text(filename)
+                    await expect(tab.locator('#image-dialog')).to_be_hidden()
             # Center-panel reuse also targets an explicit saved image and only
             # prepares the existing form; it must not queue another job.
             await page.locator('#reuse-selected-image').click()
@@ -311,13 +327,13 @@ async def main(browser_name, root):
             assert len(stub.submissions) == 1
             # Both gallery reuse actions must work with a generation saved by
             # this laptop browser, without submitting another job on selection.
-            for action, randomize in [('reuse-image', False), ('vary-image', True)]:
+            for action, randomize in [('reuse-selected-image', False), ('vary-selected-image', True)]:
                 await select_page(page, 'gallery')
                 if await page.locator('#select-compare').get_attribute('aria-pressed') == 'true':
                     await page.locator('#select-compare').click()
                 await view_image(page, 'image00.png')
-                await expect(page.locator('#reuse-image')).to_be_enabled()
-                await expect(page.locator('#vary-image')).to_be_enabled()
+                await expect(page.locator('#reuse-selected-image')).to_be_enabled()
+                await expect(page.locator('#vary-selected-image')).to_be_enabled()
                 await page.locator('#' + action).click()
                 await expect(page.locator('#image-dialog')).to_be_hidden()
                 await expect(prompt).to_have_value('An unsent draft survives resizing')
@@ -329,7 +345,7 @@ async def main(browser_name, root):
                 assert len(stub.submissions) == 1
             # Direct ComfyUI output has no mobile job. Recover its exact mapped
             # values from PNG metadata, retaining the user's custom mappings.
-            for action, randomize in [('reuse-image', False), ('vary-image', True)]:
+            for action, randomize in [('reuse-selected-image', False), ('vary-selected-image', True)]:
                 await select_page(page, 'gallery')
                 tile = page.get_by_role('button', name='View desktop.png', exact=True)
                 await tile.scroll_into_view_if_needed()
@@ -337,8 +353,20 @@ async def main(browser_name, root):
                 assert 'size=768' in await tile.locator('img').evaluate('el => el.currentSrc')
                 assert await tile.locator('img').evaluate('el => el.naturalWidth') == 512
                 await tile.click()
-                await page.locator('#open-selected-image').click()
-                await expect(page.locator('#reuse-image')).to_be_enabled()
+                await expect(page.locator('#reuse-selected-image')).to_be_enabled()
+                await page.locator('#image-details').evaluate('el => el.open=true')
+                await expect(page.locator('#image-metadata')).to_contain_text('Prompt saved directly by ComfyUI')
+                if not randomize:
+                    # LAN HTTP needs selection-copy fallback outside a dialog too.
+                    await page.evaluate('Object.defineProperty(navigator, "clipboard", {configurable: true, value: undefined})')
+                    await page.locator('#copy-image-prompt').click()
+                    await expect(page.locator('#copy-prompt-status')).to_have_text('Prompt copied.')
+                    async with page.expect_download() as download_info:
+                        await page.locator('#download-image').click()
+                    download = await download_info.value
+                    await download.save_as(root / 'download-desktop.png')
+                    assert (root / 'download-desktop.png').read_bytes() == original_png
+                await page.locator('#image-details').evaluate('el => el.open=false')
                 await page.locator('#' + action).click()
                 await expect(page.locator('#image-dialog')).to_be_hidden()
                 await expect(prompt).to_have_value(external['text']['inputs']['text'])
@@ -348,10 +376,9 @@ async def main(browser_name, root):
                 assert len(stub.submissions) == 1 and len(service.presets.list()) == 1
             await select_page(page, 'gallery')
             await view_image(page, 'image01.png')
-            await page.locator('#reuse-image').click()
-            await expect(page.locator('#image-reuse-status')).to_contain_text('no usable ComfyUI API workflow')
-            await expect(page.locator('#image-dialog')).to_be_visible()
-            await page.locator('#close-image').click()
+            await page.locator('#reuse-selected-image').click()
+            await expect(page.locator('#selected-reuse-status')).to_contain_text('no usable ComfyUI API workflow')
+            await expect(page.locator('#image-dialog')).to_be_hidden()
             assert (output / 'desktop.png').read_bytes() == original_png
             # A separate touch-capable tablet client starts clean and rotates
             # between wide and Split View layouts without losing its own draft.
@@ -379,14 +406,17 @@ async def main(browser_name, root):
             await expect(high_dpi.locator('img')).to_have_js_property('complete', True)
             assert 'size=1280' in await high_dpi.locator('img').evaluate('el => el.currentSrc')
             await view_image(touch, 'image00.png')
-            await expect(touch.locator('#reuse-image')).to_be_disabled()
-            await expect(touch.locator('#image-reuse-status')).to_contain_text('another browser session')
+            await expect(touch.locator('#reuse-selected-image')).to_be_disabled()
+            await expect(touch.locator('#selected-reuse-status')).to_contain_text('another browser session')
+            await touch.locator('#image-details').evaluate('el => el.open=true')
+            await expect(touch.locator('#image-metadata')).to_contain_text('unavailable for this browser session')
             # The optional desktop setting shares image settings with a second
             # browser, while its job history and live controls remain isolated.
             service.settings = replace(service.settings, share_image_settings=True)
             await touch.evaluate('loadGallery(true)')
-            await expect(touch.locator('#reuse-image')).to_be_enabled()
-            await touch.locator('#close-image').tap()
+            await expect(touch.locator('#reuse-selected-image')).to_be_enabled()
+            await expect(touch.locator('#image-metadata')).to_contain_text('An unsent draft survives resizing')
+            await touch.locator('#image-details').evaluate('el => el.open=false')
             await touch.set_viewport_size(dict(width=390, height=844))
             saved_seed = job['values'][next(field['key'] for field in job['controls'] if field['role'] == 'seed')]
             for action, randomize in [('reuse-image', False), ('vary-image', True)]:
@@ -421,7 +451,7 @@ async def main(browser_name, root):
             await expect(actions.locator('[data-action="edit"]')).to_be_disabled()
             await expect(actions.locator('[data-action="upscale"]')).to_be_disabled()
             await expect(actions.locator('.image-workflow-status')).to_contain_text('not configured')
-            await reachable(('generate', 'open-selected-image'))
+            await reachable(('generate', 'download-image'))
             for control in ('keep', 'trash'):
                 box = await actions.locator('[data-action="' + control + '"]').bounding_box()
                 assert box and box['y'] + box['height'] <= page.viewport_size['height'], box
@@ -487,6 +517,20 @@ async def main(browser_name, root):
             await expect(page.locator('#viewer-image-actions [data-action="keep"]')).to_have_attribute('aria-pressed', 'true')
             assert await page.locator('#selected-image-preview').get_attribute('src') is None
             await page.screenshot(path=str(root / 'workspace-phone.png'))
+            # One set of tools follows the current photo when moving from the
+            # phone dialog into the wide preview and back; close cannot erase it.
+            await page.locator('#image-details').evaluate('el => el.open=true')
+            await page.set_viewport_size(dict(width=1440, height=900))
+            await expect(page.locator('#image-dialog')).to_be_hidden()
+            await expect(page.locator('#selected-image-tools #image-details')).to_be_visible()
+            await expect(page.locator('#selected-image-name')).to_have_text('image02.png')
+            await expect(page.locator('#image-metadata')).to_contain_text('Image resolution')
+            await page.set_viewport_size(dict(width=390, height=844))
+            await view_image(page, 'image02.png')
+            await expect(page.locator('#image-dialog')).to_be_visible()
+            await expect(page.locator('#viewer-image-tools #image-details')).to_be_visible()
+            assert await page.locator('#image-details').count() == 1
+            assert await page.locator('#download-image').count() == 1
             await page.set_viewport_size(dict(width=320, height=568))
             assert await page.locator('#image-dialog').evaluate('el => el.scrollWidth <= el.clientWidth')
             await page.locator('#close-image').click()

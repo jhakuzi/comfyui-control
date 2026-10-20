@@ -48,6 +48,22 @@ async def main(browser_name, root):
             await expect(first).to_have_value('portraits/one.safetensors')
             assert await first.evaluate('el => el.tagName') == 'SELECT'
             assert await second.evaluate('el => el.tagName') == 'SELECT'
+            first_enabled = page.locator('.lora-group').filter(has=first).get_by_role('checkbox')
+            second_enabled = page.locator('.lora-group').filter(has=second).get_by_role('checkbox')
+            await first_enabled.uncheck()
+            await second_enabled.uncheck()
+            await first.select_option('landscapes/new.safetensors')
+            await expect(first_enabled).to_be_checked()
+            await expect(first_enabled).to_have_accessible_name('landscapes/new.safetensors')
+            await expect(second_enabled).not_to_be_checked()
+            # A native picker that emits only change must commit the choice too.
+            await first_enabled.uncheck()
+            await first.evaluate('''el => {
+                el.value = 'portraits/one.safetensors';
+                el.dispatchEvent(new Event('change', {bubbles: true}));
+            }''')
+            await expect(first_enabled).to_be_checked()
+            await expect(first_enabled).to_have_accessible_name('portraits/one.safetensors')
             for width, height in ((390, 844), (1440, 900)):
                 await page.set_viewport_size(dict(width=width, height=height))
                 await first.select_option('landscapes/new.safetensors')
@@ -59,7 +75,17 @@ async def main(browser_name, root):
             await page.locator('#lora-card').evaluate('el => el.open = true')
             await expect(first).to_have_value('landscapes/new.safetensors')
             await expect(second).to_have_value('None')
+            await expect(first_enabled).to_be_checked()
+            await expect(first_enabled).to_have_accessible_name('landscapes/new.safetensors')
             await expect(page.locator('#control-first-strength')).to_have_value('0.65')
+            # A deliberate uncheck after choosing a file remains authoritative.
+            await first_enabled.uncheck()
+            await page.reload()
+            await page.locator('#lora-card').evaluate('el => el.open = true')
+            await expect(first).to_have_value('landscapes/new.safetensors')
+            await expect(first_enabled).not_to_be_checked()
+            await expect(first_enabled).to_have_accessible_name('landscapes/new.safetensors')
+            await first_enabled.check()
             stub.loras.append('newly-installed.safetensors')
             await page.locator('#refresh-models').click()
             await expect(first.locator('option[value="newly-installed.safetensors"]')).to_have_count(1)

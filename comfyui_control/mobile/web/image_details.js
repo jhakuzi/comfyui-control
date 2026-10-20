@@ -12,11 +12,9 @@ class ImageDetails {
       if (this.el("image-details").open) this.load();
     });
     this.el("image-dialog").addEventListener("close", () => {
-      this.epoch++;
-      this.item = null;
-      this.positive = "";
-      this.el("image-metadata").replaceChildren();
-      this.el("copy-image-prompt").disabled = true;
+      // A resize can move these same controls into the desktop preview before
+      // the old dialog's close event is delivered.
+      if (this.el("image-dialog").contains(this.el("image-details"))) this.select(null);
     });
     this.el("copy-image-prompt").addEventListener("click", async () => {
       try {
@@ -33,7 +31,7 @@ class ImageDetails {
           text.value = this.positive;
           text.readOnly = true;
           text.className = "clipboard-text";
-          this.el("image-dialog").append(text);
+          this.el("image-details").append(text);
           text.focus({ preventScroll: true });
           text.select();
           text.setSelectionRange(0, text.value.length);
@@ -55,8 +53,8 @@ class ImageDetails {
     this.positive = "";
     this.el("copy-image-prompt").disabled = true;
     this.el("copy-prompt-status").textContent = "";
-    this.el("image-metadata").textContent = "Loading saved details…";
-    if (this.el("image-details").open) this.load();
+    this.el("image-metadata").textContent = item ? "Loading saved details…" : "";
+    if (item && this.el("image-details").open) this.load();
   }
 
   async load() {

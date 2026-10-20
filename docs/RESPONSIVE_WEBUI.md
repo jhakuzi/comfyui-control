@@ -6,8 +6,9 @@ setting, second server or separate installation is needed.
 - **Phone / narrow window:** existing compact controls and bottom Generate/progress dock.
 - **Desktop / large landscape iPad:** settings and prompts on the left, a large
   selected-image preview in the center, and gallery/history on the right.
-  Click a thumbnail to inspect that exact saved image; **Full size** opens the
-  existing viewer. Preview controls remain in view as settings scroll. The
+  Click a thumbnail to inspect that exact saved image. Previous/next, **Save image**
+  and collapsible **Details** are integrated below the preview. Phones retain the
+  separate image viewer. Preview controls remain in view as settings scroll. The
   preview fills the available height; side columns stay a readable width even
   on ultrawide monitors. Redundant Create/Gallery tabs are hidden in this view.
 - **Medium-width windows:** settings on the left; preview and Generate on the right.
@@ -35,6 +36,9 @@ height of 600px. Content uses up to 2560px on ultrawide monitors.
 iPad Split View, browser zoom, small tablets and short
 windows can use the compact layout. Controls retain their existing touch sizing.
 Resizing or rotating preserves your prompt, workflow, settings and current job.
+Generation settings appear before LoRAs. Choosing a replacement LoRA updates its
+checkbox label and enables that slot; uncheck it afterward to leave it disabled.
+Other slots and the original workflow retain their settings.
 Saved workflows, custom nodes, GGUF models, LoRAs and session recovery use the
 same backend. [Foreground SSH startup](SSH.md) is included in 1.0.
 
@@ -46,7 +50,7 @@ defined at the top of `comfyui_control/mobile/web/style.css`. Component rules
 reuse those tokens. Restrained highlights separate panels, inputs and raised
 buttons; gallery filters use segmented selection styling. Compact header spacing,
 44px standard controls and collapsed sections leave more room for the preview.
-The three-column structure, component order and responsive breakpoints are unchanged.
+The three-column structure and responsive breakpoints are unchanged.
 Keyboard focus stays visible, controls retain their touch targets, and reduced
 motion disables the control transitions and loading animation.
 

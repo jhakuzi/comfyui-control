@@ -102,15 +102,15 @@
               <div id="model-controls"></div>
               <p id="workflow-source-note" class="hint" hidden></p>
             </section>
+            <details class="card" id="settings-card" hidden>
+              <summary>Generation settings</summary>
+              <div id="basic-controls" class="control-grid"></div>
+            </details>
             <details class="card" id="lora-card" hidden>
               <summary>
                 LoRAs <span id="lora-count" class="muted"></span>
               </summary>
               <div id="lora-controls"></div>
-            </details>
-            <details class="card" id="settings-card" hidden>
-              <summary>Generation settings</summary>
-              <div id="basic-controls" class="control-grid"></div>
             </details>
             <details class="card" id="resolution-card" hidden>
               <summary>Resolution</summary>
@@ -233,6 +233,7 @@
               <button id="open-selected-image" class="small" type="button">Full size</button>
             </div>
             <img id="selected-image-preview" alt="Selected saved image" />
+            <div id="selected-image-tools"></div>
             <div id="selected-image-actions"></div>
             <div class="actions selected-image-reuse">
               <button id="reuse-selected-image" type="button">Reuse settings</button>
@@ -357,24 +358,28 @@
           </button>
         </div>
         <img id="full-image" alt="Generated image" />
-        <div class="actions">
-          <button id="previous-image" type="button" aria-label="Previous image">
-            ←</button
-          ><a id="download-image" class="button primary" download>Save image</a
-          ><button id="next-image" type="button" aria-label="Next image">
-            →
-          </button>
+        <div id="viewer-image-tools">
+          <div id="image-browse-tools">
+            <div class="actions">
+              <button id="previous-image" type="button" aria-label="Previous image">
+                ←</button
+              ><a id="download-image" class="button primary" download>Save image</a
+              ><button id="next-image" type="button" aria-label="Next image">
+                →
+              </button>
+            </div>
+            <p id="image-save-hint" class="hint">
+              On iPhone you can also touch and hold the image to save it to Photos.
+              Swipe left or right to browse.
+            </p>
+            <details id="image-details">
+              <summary>Details</summary>
+              <button id="copy-image-prompt" class="text-button" type="button" disabled>Copy prompt</button>
+              <p id="copy-prompt-status" class="hint" role="status"></p>
+              <div id="image-metadata"></div>
+            </details>
+          </div>
         </div>
-        <p class="hint">
-          On iPhone you can also touch and hold the image to save it to Photos.
-          Swipe left or right to browse.
-        </p>
-        <details id="image-details">
-          <summary>Details</summary>
-          <button id="copy-image-prompt" class="text-button" type="button" disabled>Copy prompt</button>
-          <p id="copy-prompt-status" class="hint" role="status"></p>
-          <div id="image-metadata"></div>
-        </details>
         <div id="viewer-image-actions"></div>
         <div class="actions">
           <button id="reuse-image" type="button" aria-describedby="image-reuse-status">Reuse settings</button

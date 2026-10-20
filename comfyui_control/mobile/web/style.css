@@ -1373,6 +1373,7 @@ dialog::backdrop {
     display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0;
   }
   #workspace[data-layout="studio"] #selected-image-panel > .heading,
+  #workspace[data-layout="studio"] #selected-image-tools,
   #workspace[data-layout="studio"] #selected-image-actions,
   #workspace[data-layout="studio"] .selected-image-reuse,
   #workspace[data-layout="studio"] #selected-reuse-status { flex-shrink: 0; }
@@ -1382,6 +1383,14 @@ dialog::backdrop {
   #workspace[data-layout="studio"] .selected-image-reuse { margin-top: 8px; }
   #workspace[data-layout="studio"] .selected-image-reuse button { font-size: .8rem; padding: 8px; }
   #workspace[data-layout="studio"] #selected-reuse-status { font-size: .75rem; margin: 6px 0 0; }
+  #workspace[data-layout="studio"] #open-selected-image,
+  #workspace[data-layout="studio"] #image-save-hint { display: none; }
+  #workspace[data-layout="studio"] #selected-image-tools .actions { margin: 8px 0; }
+  #workspace[data-layout="studio"] #selected-image-tools #image-details {
+    max-height: min(28dvh, 260px); overflow: auto; overscroll-behavior: contain;
+    font-size: var(--font-small);
+  }
+  #workspace[data-layout="studio"] #selected-image-tools #image-details > summary { padding: 10px 0; }
 }
 @media (max-width: 360px) {
   .saved-image-buttons { grid-template-columns: repeat(2, minmax(0, 1fr)); }

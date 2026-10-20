@@ -127,6 +127,7 @@ function showLogin() {
   connected = false;
   $("login").hidden = false;
   $("workspace").hidden = true;
+  syncSelectedPreview();
   syncJobMetrics(false);
   $("connection").textContent = "Sign in";
   $("connection").classList.remove("online");
@@ -409,7 +410,7 @@ async function choosePreset(id, reuse) {
   saveDraft();
   updateGenerate();
 }
-function control(field, container, hideLabel = false) {
+function control(field, container, hideLabel = false, changed = null) {
   const wrap = node("div", undefined, "control");
   if ((field.kind === "text" && !field.options) || ["seed", "lora_model"].includes(field.role))
     wrap.classList.add("wide");
@@ -494,15 +495,21 @@ function control(field, container, hideLabel = false) {
   input.id = inputId;
   input.dataset.role = field.role;
   if (field.role === "seed") input.disabled = randomSeed;
-  input.addEventListener("input", () => {
-    draft[field.key] =
+  const update = () => {
+    const value =
       field.kind === "bool"
         ? input.checked
         : field.kind === "float"
           ? Number(input.value)
           : input.value;
+    const previous = draft[field.key];
+    draft[field.key] = value;
+    if (previous !== value) changed?.(value);
     saveDraft();
-  });
+  };
+  input.addEventListener("input", update);
+  // Native select implementations may commit through change rather than input.
+  if (input.tagName === "SELECT") input.addEventListener("change", update);
   if (
     ["steps", "cfg", "resolution_mp", "lora_strength"].includes(field.role) &&
     ["int", "float"].includes(field.kind) &&
@@ -564,29 +571,37 @@ function renderFields() {
   const groups = [...new Set(loras.map((field) => field.group))];
   for (const group of groups) {
     const fields = loras.filter((field) => field.group === group),
-      box = node("div", undefined, "lora-group");
+      box = node("div", undefined, "lora-group"),
+      model = fields.find((field) => field.role === "lora_model");
+    let toggle, caption;
     if (
       fields.some((field) => field.role === "lora_strength") &&
       !fields.some((field) => field.role === "lora_enabled")
     ) {
-      const label = node(
-        "label",
-        fields.find((field) => field.role === "lora_model")?.default ||
-          fields[0].label,
-        "check-label",
-      );
-      const toggle = node("input");
+      const label = node("label", undefined, "check-label");
+      caption = node("span", model ? String(draft[model.key] ?? model.default) : fields[0].label);
+      toggle = node("input");
       toggle.type = "checkbox";
       toggle.checked = !disabledLoras.has(group);
       toggle.addEventListener("change", () => {
         toggle.checked ? disabledLoras.delete(group) : disabledLoras.add(group);
         saveDraft();
       });
-      label.prepend(toggle);
+      label.append(toggle, caption);
       box.append(label);
     }
     const grid = node("div", undefined, "control-grid");
-    for (const field of fields) control(field, grid);
+    for (const field of fields) control(field, grid, false, field.role === "lora_model" ? (value) => {
+      if (caption) caption.textContent = String(value);
+      // Selecting a replacement applies that slot. An explicit uncheck after
+      // selection still disables it, and the other slots keep their choices.
+      disabledLoras.delete(group);
+      if (toggle) toggle.checked = true;
+      for (const enabled of fields.filter((item) => item.role === "lora_enabled" && item.kind === "bool")) {
+        draft[enabled.key] = true;
+        $("control-" + enabled.key).checked = true;
+      }
+    } : null);
     box.append(grid);
     $("lora-controls").append(box);
   }
@@ -1044,6 +1059,10 @@ function loadGallery(force = false) {
 }
 function openImage(items, index, fromGallery = null) {
   if (!items.length) return;
+  if (studioLayout.matches) {
+    selectSavedImage(items[(index + items.length) % items.length], true);
+    return;
+  }
   viewerFromGallery = fromGallery ?? (items === gallery || items === viewerItems && viewerFromGallery);
   imageReuseEpoch++;
   viewerItems = items;
@@ -1081,18 +1100,52 @@ function selectSavedImage(item, inspect = false) {
       $("selected-reuse-status").hidden = !$("selected-reuse-status").textContent;
     }
   }
-  syncSelectedPreview();
+  syncSelectedPreview(changed);
   if (changed) selectedImageActions.select(item);
   $("generation-empty").hidden = !!item || !!currentJob() || submitting;
   renderLibrary();
   saveUI();
 }
 
-function syncSelectedPreview() {
+function selectedImageItems() {
+  const items = galleryFilter === "kept" ? gallery.filter((item) => item.kept) : gallery;
+  return items.some((item) => item.id === selectedImage?.id) ? items : selectedImage ? [selectedImage] : [];
+}
+
+function syncSelectedPreview(refreshDetails = false) {
   const source = wideLayout.matches ? selectedImage?.url : null;
   if (source) {
     if ($("selected-image-preview").getAttribute("src") !== source) $("selected-image-preview").src = source;
   } else $("selected-image-preview").removeAttribute("src");
+  const tools = $("image-browse-tools"),
+    destination = studioLayout.matches && selectedImage && !$("workspace").hidden
+      ? $("selected-image-tools") : $("viewer-image-tools"),
+    moved = tools.parentElement !== destination;
+  if (moved) destination.append(tools);
+  if (destination.id === "selected-image-tools") {
+    const items = selectedImageItems();
+    $("download-image").href = selectedImage.download;
+    $("previous-image").disabled = $("next-image").disabled = items.length < 2;
+    if (moved || refreshDetails || imageDetails.item?.id !== selectedImage.id)
+      imageDetails.select(selectedImage);
+  } else if (moved && !$("image-dialog").open) imageDetails.select(null);
+}
+
+function syncImageLayout() {
+  if (studioLayout.matches && $("image-dialog").open) {
+    const item = viewerItems[viewerIndex];
+    if (item) selectSavedImage(item, true);
+    $("image-dialog").close();
+  } else syncSelectedPreview();
+}
+
+function navigateImage(offset) {
+  if ($("image-browse-tools").parentElement === $("selected-image-tools")) {
+    const items = selectedImageItems();
+    if (!items.length) return;
+    const index = items.findIndex((item) => item.id === selectedImage?.id);
+    selectSavedImage(items[(index + offset + items.length) % items.length], true);
+  } else openImage(viewerItems, viewerIndex + offset);
 }
 
 async function reuseSelectedImage(variation) {
@@ -1127,6 +1180,7 @@ function renderLibrary() {
   renderImages($("gallery-grid"), items);
   $("gallery-empty").hidden = !!items.length;
   $("gallery-empty").textContent = galleryFilter === "kept" ? "No kept images yet. Open an image and choose Keep." : "No images yet. Your next idea starts in Create.";
+  syncSelectedPreview();
 }
 
 function renderGenerationHistory() {
@@ -1424,8 +1478,11 @@ new ResizeObserver(() => {
   const height = $("generation-dock").getBoundingClientRect().height;
   document.documentElement.style.setProperty("--generation-dock-height", `${height}px`);
 }).observe($("generation-dock"));
-wideLayout.addEventListener("change", () => { syncGenerationDock(); syncSelectedPreview(); });
-studioLayout.addEventListener("change", () => selectTab($("workspace").dataset.page || "create"));
+wideLayout.addEventListener("change", () => { syncGenerationDock(); syncImageLayout(); });
+studioLayout.addEventListener("change", () => {
+  selectTab($("workspace").dataset.page || "create");
+  syncImageLayout();
+});
 new ResizeObserver(([entry]) => {
   document.documentElement.style.setProperty("--masthead-height", `${entry.target.getBoundingClientRect().height}px`);
 }).observe(document.querySelector(".masthead"));
@@ -1558,10 +1615,10 @@ $("vary-selected-image").addEventListener("click", () => reuseSelectedImage(true
 $("close-image").addEventListener("click", () => $("image-dialog").close());
 $("image-dialog").addEventListener("close", () => { imageReuseEpoch++; });
 $("previous-image").addEventListener("click", () =>
-  openImage(viewerItems, viewerIndex - 1),
+  navigateImage(-1),
 );
 $("next-image").addEventListener("click", () =>
-  openImage(viewerItems, viewerIndex + 1),
+  navigateImage(1),
 );
 $("reuse-image").addEventListener(
   "click",
