@@ -39,7 +39,9 @@ Expand inside the positive editor, and Generate/History/Favourites aligned besid
 them. The positive/negative split is 2.2:1; narrower desktop windows stack the
 prompts. Expanding the positive prompt floats its existing padded editor above the
 workspace with a shadow, retaining the collapsed footprint so other panels do not
-move. Collapse returns it to normal flow. Both modes keep the same live textarea,
+move. Its initial bottom edge tracks the bottom of Batch count through the desktop
+geometry observer; manual textarea resizing remains available. Collapse returns
+it to normal flow. Both modes keep the same live textarea,
 draft and existing Expand/Collapse state. The positive placeholder omits
 its ellipsis only on desktop and restores the original attribute on mobile.
 

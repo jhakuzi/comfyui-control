@@ -84,10 +84,20 @@ window.ComfyDesktopPresentation = (() => {
       if (ComfyPresentation.desktop.matches) $("image-details").open = detailsOpen;
     });
     const observer = new ResizeObserver(() => {
-      if (ComfyPresentation.desktop.matches)
-        $("generation-panel").style.setProperty("--desktop-settings-height", `${Math.max(360, $("settings-stack").getBoundingClientRect().height)}px`);
+      if (!ComfyPresentation.desktop.matches) return;
+      $("generation-panel").style.setProperty("--desktop-settings-height", `${Math.max(360, $("settings-stack").getBoundingClientRect().height)}px`);
+      const batch = $("batch-count");
+      if (batch?.getClientRects().length) {
+        const bottom = batch.getBoundingClientRect().bottom;
+        for (const editor of $("prompt-controls").querySelectorAll(".prompt-editor")) {
+          const height = Math.max(112, bottom - editor.getBoundingClientRect().top);
+          editor.style.setProperty("--desktop-prompt-expanded-height", `${height}px`);
+        }
+      }
     });
     observer.observe($("settings-stack"));
+    observer.observe($("settings-card"));
+    observer.observe($("prompt-controls"));
     const grid = $("gallery-grid");
     const limitGallery = () => {
       if (!ComfyPresentation.desktop.matches || !grid.clientWidth) return;

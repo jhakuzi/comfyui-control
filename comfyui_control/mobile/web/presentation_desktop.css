@@ -158,7 +158,7 @@
   padding-right: 86px;
 }
 :where(html[data-presentation="desktop"]) .prompt-editor.expanded textarea.positive {
-  height: calc(clamp(240px, 40dvh, 480px) - 10px);
+  height: calc(var(--desktop-prompt-expanded-height, clamp(240px, 40dvh, 480px)) - 10px);
 }
 :where(html[data-presentation="desktop"]) textarea.negative {
   height: 62px;

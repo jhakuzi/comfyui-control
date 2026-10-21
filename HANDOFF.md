@@ -1,6 +1,26 @@
 # Session handoff — 2026-10-21
 
-## Latest work: floating desktop prompt editor
+## Latest refinement: expanded prompt aligned with Batch count
+
+After pushed `3b8bfcb`, the user requested that the expanded prompt's initial lower
+border align with the bottom of Batch count and explicitly authorized an immediate
+push after the change. The existing desktop geometry ResizeObserver now measures
+that edge and sets a desktop-only CSS height variable on each prompt editor.
+It observes settings and prompt geometry, so toolbar wrapping, viewport changes
+and workflow fields update the alignment. Manual resizing still overrides the
+initial CSS size until the existing Expand/Collapse handler clears it. No new
+controls, handlers, requests or application state; mobile/shared logic is unchanged.
+The public shell cache is version 7. The desktop browser check now asserts the
+edge alignment within 1px at every desktop size, alongside no layout shift and
+expanded-editor mobile round trips. Chromium and WebKit passed the desktop matrix at all five widths, including the
+new 1px alignment assertion, unchanged workspace bounds, edited draft retention,
+and expanded mobile round trips. Chromium also passed all five compact pixel
+comparisons against `3b8bfcb`. Screenshots, JS/Python syntax, protected-file diffs
+and whitespace checks passed. Artifacts are under `/tmp/control-batch-prompt-*`.
+The Python suite was not rerun for this geometry-only follow-up; the preceding
+run remains documented separately below.
+
+## Previously pushed: floating desktop prompt editor
 
 The user requested Expand to float the positive prompt above surrounding controls
 without shifting the UI, with a shadow, plus more width for positive and less for

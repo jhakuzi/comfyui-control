@@ -266,10 +266,12 @@ async def main(engine, root, baseline, desktop_redesign=False):
                         return {shadow:getComputedStyle(frame).boxShadow,
                             overlaps:b.bottom>settings.top+10, onTop:frame.contains(hit),
                             same:input===document.querySelector('textarea.positive'),
-                            ratio:input.clientWidth/document.querySelector('textarea.negative').clientWidth};
+                            ratio:input.clientWidth/document.querySelector('textarea.negative').clientWidth,
+                            batchGap:b.bottom-document.getElementById('batch-count').getBoundingClientRect().bottom};
                     }""")
                     assert overlay['overlaps'] and overlay['onTop'] and overlay['same'], overlay
                     assert overlay['shadow'] != 'none' and overlay['ratio'] > 2, overlay
+                    assert abs(overlay['batchGap']) <= 1, overlay
                     await page.screenshot(path=str(root / f'{page.viewport_size["width"]}-expanded-prompt.png'))
                     # Editing the floating original is reflected immediately after Collapse.
                     draft = await page.locator('textarea.positive').input_value()
