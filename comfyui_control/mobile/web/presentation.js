@@ -53,6 +53,8 @@ window.ComfyPresentation = (() => {
       return desktop.matches && compactSections.has(el.id) ? compactSections.get(el.id) : el.open;
     },
     forcedOpen(id) { return current().forcedOpen(id); },
+    imageActions(view) { current().imageActions?.(view); },
+    unavailableImageAction(view) { current().unavailableImageAction?.(view); },
     metrics(active) { current().metrics({ active, wide: wide.matches, place }); },
     generation(view) {
       const { job, active, submitting } = view;

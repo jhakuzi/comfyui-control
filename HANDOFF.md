@@ -1,5 +1,65 @@
 # Session handoff — 2026-10-21
 
+## Latest work: screenshot-directed desktop refinements
+
+The initial desktop redesign was pushed as `942f19c` on
+`testing/webui-desktop-forge`. The user subsequently requested compact prompts,
+a shared cutoff for settings/preview, a Details popup, on-demand Trash ownership
+warnings, and cancellation in the toolbar. The user confirmed the desktop-only
+scope and explicitly authorized committing and pushing these verified refinements
+to `testing/webui-desktop-forge`.
+
+- `presentation_desktop.css/js`: visually hide prompt labels while retaining
+  accessible names; omit the positive placeholder ellipsis only on desktop;
+  inset Expand in the prompt corner; align Generate/History/Favourites with the
+  prompt boxes. Reuse last generation moves to toolbar utilities. Reserve space
+  for Cancel Run/Clear Queue at the upper right, avoiding generation-driven
+  toolbar/prompt movement. All shared controls move with reversible `place()`.
+- A ResizeObserver sizes completed/live image previews to the main settings
+  column's bottom edge, preserving image proportions and compact action rows.
+  Advanced remains in the original form but occupies the next full-width row.
+  Idle and loading states remain compact; loading/error cards contain their
+  content within a 360px panel instead of overflowing an auto-height flex box.
+- Details sits beside Edit/Upscale/Trash and opens a native desktop dialog with
+  the original metadata controls and loader. Copy details includes collapsed
+  sections and exact seeds; existing Copy prompt remains available. Escape/Close
+  return focus, and a mobile transition closes the popup/restores controls.
+- Unavoidable shared UI changes: two optional presentation hooks in
+  `presentation.js`, delegated by `image_actions.js`, let desktop display an
+  unavailable Trash reason only after attempted use. Mobile retains the original
+  disabled button/status behavior. No unavailable action sends a mutation request;
+  backend ownership guards are unchanged. The public shell cache is now version 3.
+- Mobile adapters, shared styles/theme, `app.js`, HTML and backend are untouched.
+  Presentation docs and two manual browser scripts reflect the new desktop flow;
+  mobile pixel/isolation assertions remain intact.
+
+Verification for these refinements:
+
+- Final full Python suite: **430 passed, 1 failed**, the same documented old-job
+  fixture equality failure (`seconds_per_iteration: None`). An initial run also
+  hit a statistics disconnect timeout; that test passed alone and in the final
+  full rerun. No backend/test assertion was changed to accommodate it.
+- Chromium and WebKit: responsive/reconnection/privacy/reuse/gallery/history,
+  previews, Favourites/Trash/restore, generation cancellation, Generate fill,
+  unique controls/listeners/live jobs and presentation isolation passed. Chromium
+  generation/seed/batch checks also passed.
+- Both engines passed the desktop matrix at 1280×800, 1440×900, 1512×982,
+  1920×1080, 2560×1440, including empty/offline/running/portrait/landscape results.
+  New checks verify the cutoff, unchanged Generate/toolbar geometry on start,
+  popup keyboard/focus behavior, full metadata copying including collapsed models,
+  exact seeds, no unauthorized image-action POSTs, and popup-open mobile round trips.
+- Both engines passed unchanged mobile/tablet pixel comparisons at 390×844,
+  430×932, 768×1024, 834×1194, 1024×1366 against exported `942f19c`, after desktop
+  round trips. Screenshots were inspected and refined. JS/Python syntax,
+  whitespace and protected-file diffs passed.
+
+Latest artifacts are under `/tmp/control-refinements-*`: `desktop-final-*` contains
+baseline/mobile comparisons and popup screenshots; `layout-complete-*` contains
+final desktop geometry and loading-frame checks; `responsive-final-*` covers
+integrated behavior. `/tmp/control-refinement-baseline/comfyui_control/mobile/web`
+is the pre-refinement export. These are protocol/fixture checks, not real GPU,
+NAS, VPN or physical iOS proof. See the runtime instructions below for browsers.
+
 ## Current work: desktop redesign
 
 The Forge-inspired desktop redesign is on `testing/webui-desktop-forge`, based

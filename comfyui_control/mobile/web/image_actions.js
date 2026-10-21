@@ -29,6 +29,20 @@ class SavedImageActions {
     this.unavailable = document.createElement("p");
     this.unavailable.className = "hint image-workflow-status";
     container.append(row, this.unavailable, this.status);
+    ComfyPresentation.desktop.addEventListener("change", () => this.renderCapabilities());
+  }
+
+  renderCapabilities() {
+    if (!this.capabilities) return;
+    this.buttons.forEach((button, key) => {
+      button.disabled = !!this.pending || !this.capabilities.actions[key]?.available;
+      if (key !== "keep" || !this.capabilities.actions[key]?.available)
+        button.title = this.capabilities.actions[key]?.reason || "";
+    });
+    const trash = this.capabilities.actions.trash;
+    if (!trash.available && !this.pending) this.status.textContent = trash.reason;
+    ComfyPresentation.imageActions({ buttons: this.buttons, capabilities: this.capabilities,
+      status: this.status, pending: !!this.pending });
   }
 
   renderHeart(kept) {
@@ -55,20 +69,20 @@ class SavedImageActions {
       this.capabilities = result;
       this.item.kept = result.kept;
       this.renderHeart(result.kept);
-      this.buttons.forEach((button, key) => {
-        button.disabled = !result.actions[key]?.available;
-        if (key !== "keep" || !result.actions[key]?.available)
-          button.title = result.actions[key]?.reason || "";
-      });
+      this.renderCapabilities();
       this.unavailable.textContent = ["edit", "upscale"].map((key) => result.actions[key]?.reason).filter(Boolean).join(" ");
-      if (!result.actions.trash.available) this.status.textContent = result.actions.trash.reason;
     } catch (error) {
       if (epoch === this.epoch) this.status.textContent = error.message;
     }
   }
 
   async perform(action) {
-    if (!this.item || !this.capabilities?.actions[action]?.available || this.pending) return;
+    if (!this.item || this.pending) return;
+    if (!this.capabilities?.actions[action]?.available) {
+      ComfyPresentation.unavailableImageAction({ action, reason: this.capabilities?.actions[action]?.reason,
+        status: this.status });
+      return;
+    }
     const item = { ...this.item }, capability = this.capabilities, epoch = this.epoch;
     if (action === "trash" && !confirm(`Move “${item.filename}” to Trash?${item.kept ? " This image is in Favourites." : ""} You can restore it from Gallery → Trash.`)) return;
     this.pending = true;
@@ -91,7 +105,7 @@ class SavedImageActions {
     } finally {
       this.pending = false;
       if (epoch === this.epoch) {
-        this.buttons.forEach((button, key) => { button.disabled = !this.capabilities?.actions[key]?.available; });
+        this.renderCapabilities();
       }
     }
   }

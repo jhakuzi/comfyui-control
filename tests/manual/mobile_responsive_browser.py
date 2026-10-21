@@ -129,6 +129,18 @@ async def main(browser_name, root):
                     await expect(button).to_be_visible()
                     await button.click()
 
+            async def show_details(tab, opened=True):
+                if await tab.evaluate('ComfyPresentation.desktop.matches'):
+                    if opened:
+                        if not await tab.locator('#desktop-image-details').is_visible():
+                            await tab.locator('#desktop-show-details').click()
+                        await expect(tab.locator('#desktop-image-details')).to_be_visible()
+                    elif await tab.locator('#desktop-image-details').is_visible():
+                        await tab.locator('#desktop-close-details').click()
+                        await expect(tab.locator('#desktop-image-details')).not_to_be_visible()
+                else:
+                    await tab.locator('#image-details').evaluate('(el, value) => el.open=value', opened)
+
             async def layout(width, height, wide):
                 await page.set_viewport_size(dict(width=width, height=height))
                 await expect(page.locator('#workspace')).to_have_attribute('data-layout', 'studio' if height >= 600 and (width >= 1440 or width >= 1024 and width / height >= 4/3) else 'compact')
@@ -374,7 +386,7 @@ async def main(browser_name, root):
             await page.set_viewport_size(dict(width=1440, height=900))
             assert len(stub.submissions) == 1
             await expect(page.locator('#open-selected-image')).to_be_hidden()
-            await expect(page.locator('#selected-image-tools #image-details')).to_be_visible()
+            await expect(page.locator('#desktop-show-details')).to_be_visible()
             await expect(page.locator('#image-dialog')).to_be_hidden()
             selected_id = await page.evaluate('selectedImage.id')
             await page.locator('#next-image').click()
@@ -425,19 +437,20 @@ async def main(browser_name, root):
                 assert await tile.locator('img').evaluate('el => el.naturalWidth') == 512
                 await tile.click()
                 await expect(page.locator('#reuse-selected-image')).to_be_enabled()
-                await page.locator('#image-details').evaluate('el => el.open=true')
+                await show_details(page, True)
                 await expect(page.locator('#image-metadata')).to_contain_text('Prompt saved directly by ComfyUI')
                 if not randomize:
                     # LAN HTTP needs selection-copy fallback outside a dialog too.
                     await page.evaluate('Object.defineProperty(navigator, "clipboard", {configurable: true, value: undefined})')
                     await page.locator('#copy-image-prompt').click()
                     await expect(page.locator('#copy-prompt-status')).to_have_text('Prompt copied.')
+                    await show_details(page, False)
                     async with page.expect_download() as download_info:
                         await page.locator('#download-image').click()
                     download = await download_info.value
                     await download.save_as(root / 'download-desktop.png')
                     assert (root / 'download-desktop.png').read_bytes() == original_png
-                await page.locator('#image-details').evaluate('el => el.open=false')
+                await show_details(page, False)
                 await page.locator('#' + action).click()
                 await expect(page.locator('#image-dialog')).to_be_hidden()
                 await expect(prompt).to_have_value(external['text']['inputs']['text'])
@@ -482,7 +495,7 @@ async def main(browser_name, root):
             await view_image(touch, 'image00.png')
             await expect(touch.locator('#reuse-selected-image')).to_be_disabled()
             await expect(touch.locator('#selected-reuse-status')).to_contain_text('another browser session')
-            await touch.locator('#image-details').evaluate('el => el.open=true')
+            await show_details(touch, True)
             await expect(touch.locator('#image-metadata')).to_contain_text('unavailable for this browser session')
             # The optional desktop setting shares image settings with a second
             # browser, while its job history and live controls remain isolated.
@@ -490,7 +503,7 @@ async def main(browser_name, root):
             await touch.evaluate('loadGallery(true)')
             await expect(touch.locator('#reuse-selected-image')).to_be_enabled()
             await expect(touch.locator('#image-metadata')).to_contain_text('An unsent draft survives resizing')
-            await touch.locator('#image-details').evaluate('el => el.open=false')
+            await show_details(touch, False)
             await touch.set_viewport_size(dict(width=390, height=844))
             saved_seed = job['values'][next(field['key'] for field in job['controls'] if field['role'] == 'seed')]
             for action, randomize in [('reuse-image', False), ('vary-image', True)]:
@@ -609,11 +622,12 @@ async def main(browser_name, root):
             await page.screenshot(path=str(root / 'workspace-phone.png'))
             # One set of tools follows the current photo when moving from the
             # phone dialog into the wide preview and back; close cannot erase it.
-            await page.locator('#image-details').evaluate('el => el.open=true')
+            await show_details(page, True)
             await page.set_viewport_size(dict(width=1440, height=900))
             await expect(page.locator('#image-dialog')).to_be_hidden()
-            await expect(page.locator('#selected-image-tools #image-details')).to_be_visible()
+            await expect(page.locator('#desktop-show-details')).to_be_visible()
             await expect(page.locator('#selected-image-name')).to_have_text('image02.png')
+            await show_details(page)
             await expect(page.locator('#image-metadata')).to_contain_text('Image resolution')
             await page.set_viewport_size(dict(width=390, height=844))
             await view_image(page, 'image02.png')

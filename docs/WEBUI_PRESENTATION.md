@@ -31,15 +31,33 @@ for this refactor is permitting the additional public CSS/JS assets. Existing
 
 ## Desktop workspace
 
-The desktop adapter now uses a wrapping workflow/model/VAE/encoder toolbar,
-side-by-side prompts from 1280px, and Generate with the existing cancellation
-controls alongside. Narrower desktop windows stack the prompts. Settings occupy
-one bounded column, with generation, resolution, LoRAs and Advanced in reading
-and keyboard order. The image workspace takes the remaining width; empty/loading
-previews stay compact and completed images retain their proportions within 65dvh.
-Gallery/history follows the workspace with bounded thumbnails and normal page
-scrolling. Component skins, mobile/tablet layouts and mode selection are unchanged.
-All control moves use the existing reversible `place()` helper.
+The desktop adapter uses a wrapping workflow/model/VAE/encoder toolbar with a
+reserved cancellation slot at its upper right. Reuse last generation sits with
+the toolbar utilities so queue state cannot change the height of the prompt row.
+Prompts appear side by side from 1280px, with visually hidden accessible labels,
+Expand inside the positive editor, and Generate/History/Favourites aligned beside
+them. Narrower desktop windows stack the prompts. The positive placeholder omits
+its ellipsis only on desktop and restores the original attribute on mobile.
+
+Generation, resolution and LoRAs occupy one bounded column. Completed images and
+live image previews scale to the same bottom edge as those settings, preserving
+aspect ratios and room for compact image actions. Idle/loading placeholders stay
+compact. Advanced sits below that aligned workspace inside the original form;
+gallery/history follows with bounded thumbnails and normal page scrolling.
+
+The desktop Details button opens a native dialog containing the existing metadata
+controls, moved through `place()`. The shared loader still owns all metadata
+requests. Desktop Copy details serializes the rendered metadata, including collapsed
+sections, and retains exact seed strings. Escape/Close restore focus; switching to
+mobile closes the popup and restores the original controls. All new desktop
+containers are marked `data-desktop-slot`.
+
+The coordinator exposes optional image-action presentation hooks. The shared
+renderer delegates only presentation of unavailable Trash actions: desktop shows
+the existing reason on attempted use, while mobile retains its disabled button
+and explanatory text. Unavailable actions still return before any API mutation;
+backend ownership checks are unchanged. Theme/component skins, mobile/tablet
+adapters, application state, mode selection and backend remain unchanged.
 
 ## Mode selection and isolation
 

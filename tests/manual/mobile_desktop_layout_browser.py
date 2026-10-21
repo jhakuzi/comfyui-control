@@ -5,6 +5,7 @@ directory to check mobile pixels and layout restoration after desktop resizing.
 """
 import argparse
 import asyncio
+import json
 from pathlib import Path
 import sys
 from urllib.parse import urlsplit
@@ -31,6 +32,7 @@ async def main(engine, root, baseline, desktop_redesign=False):
     root.mkdir(parents=True, exist_ok=True)
     graph, info = generation_workflow.__wrapped__(controlaltai_resolution.__wrapped__())
     graph['negative'] = dict(class_type='Text', inputs={'text': 'Negative prompt'})
+    graph['3']['inputs']['negative'] = ['negative', 0]
     for key, input_name, role in [('diffusion', 'unet_name', 'diffusion_model'),
                                    ('vae', 'vae_name', 'vae'), ('encoder', 'clip_name', 'text_encoder')]:
         filename = f'{key}/' + 'long_model_filename_with_quantization_and_revision_' * 5 + '.safetensors'
@@ -51,20 +53,24 @@ async def main(engine, root, baseline, desktop_redesign=False):
     for name, width, height in [('portrait', 640, 960), ('landscape', 960, 640)]:
         image = QImage(width, height, QImage.Format.Format_RGB32)
         image.fill(QColor('#456b89'))
+        image.setText('prompt', json.dumps(graph))
         assert image.save(str(output / f'{name}.png'))
-    service = MobileService(root / 'data', MobileSettings(comfy_url=str(upstream.make_url('/'))), output)
+    service = MobileService(root / 'data', MobileSettings(comfy_url=str(upstream.make_url('/')), share_image_settings=True), output)
     preset = service.presets.create('A long saved workflow name for responsive layout checks', graph)
-    mappings = suggested_mappings(graph, info)
+    mappings = [field for field in suggested_mappings(graph, info) if field['node'] != 'negative']
     mappings.append(dict(node='negative', input='text', role='negative', key='negative', label='Negative prompt'))
     service.presets.map(preset['id'], mappings)
     await service.start()
     await until(lambda: service.online)
+    await service.gallery()
+    for item in service.images.values():
+        service.image_owners[service.image_ownership_key(item)] = 'other-browser'
     runner = web.AppRunner(MobileHTTP(service).app(), access_log=None, shutdown_timeout=1)
     await runner.setup()
     site = web.TCPSite(runner, '127.0.0.1', 0)
     await site.start()
     url = f'http://127.0.0.1:{site._server.sockets[0].getsockname()[1]}/'
-    errors = []
+    errors, action_posts = [], []
     try:
         async with async_playwright() as playwright:
             browser = await getattr(playwright, engine).launch()
@@ -73,6 +79,7 @@ async def main(engine, root, baseline, desktop_redesign=False):
                 context = await browser.new_context(viewport={'width': width, 'height': height}, service_workers='block', reduced_motion='reduce')
                 page = await context.new_page()
                 page.on('pageerror', lambda error: errors.append(str(error)))
+                page.on('request', lambda request: action_posts.append(request.url) if request.method == 'POST' and '/api/images/' in request.url and request.url.endswith('/actions') else None)
                 if old:
                     async def assets(route):
                         path = urlsplit(route.request.url).path
@@ -120,8 +127,12 @@ async def main(engine, root, baseline, desktop_redesign=False):
                     # Compare settled skins, not different moments of the same
                     # existing 1.4s completion feedback animation.
                     await expect(page.locator('#generate')).to_have_attribute('data-progress', 'idle')
+                # Compare neutral component skins, not a pointer left over a
+                # differently positioned control by the previous interaction.
+                await page.mouse.move(0, 0)
+                await page.evaluate('document.activeElement?.blur()')
                 report = await page.evaluate('''() => {
-                    const rect = id => document.getElementById(id).getBoundingClientRect().toJSON();
+                    const rect = id => document.getElementById(id)?.getBoundingClientRect().toJSON();
                     const visible = el => !!el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden';
                     const overflow = [...document.querySelectorAll('#workspace button, #workspace input, #workspace select, #workspace textarea')]
                         .filter(visible).filter(el => {const r = el.getBoundingClientRect(); return r.left < -1 || r.right > innerWidth + 1 || r.width < 1;})
@@ -135,7 +146,9 @@ async def main(engine, root, baseline, desktop_redesign=False):
                     return {overflow, overlap, pageWidth: document.documentElement.scrollWidth, width: innerWidth,
                         panel: rect('generation-panel'), stack: rect('settings-stack'), gallery: rect('gallery-page'),
                         toolbar: rect('desktop-toolbar'), prompts: rect('prompt-controls'), actions: rect('desktop-generate-slot'),
-                        panels: ['settings-card', 'resolution-card', 'lora-card', 'advanced'].map(rect),
+                        panels: ['settings-card', 'resolution-card', 'lora-card'].map(rect), advanced: rect('advanced'),
+                        generate: rect('generate'), cancelSlot: rect('desktop-cancel-slot'), preview: rect('preview-stage'),
+                        settingsGap: parseFloat(getComputedStyle(document.getElementById('settings-stack')).rowGap),
                         panelOverflow: getComputedStyle(panel).overflowY, panelPosition: getComputedStyle(panel).position};
                 }''')
                 report['skins'] = await page.evaluate('''() => ['#generate', '#preset', '[data-role="positive"]', '#settings-card', '#generation-panel'].map(selector => {
@@ -160,17 +173,28 @@ async def main(engine, root, baseline, desktop_redesign=False):
                 assert report['panelPosition'] == 'static' and report['panelOverflow'] == 'visible', report
                 assert abs(report['panel']['y'] - report['stack']['y']) < 1, report
                 assert report['panel']['x'] >= report['stack']['right'] + 12, report
-                assert report['gallery']['y'] >= max(report['panel']['bottom'], report['stack']['bottom']), report
+                assert report['gallery']['y'] >= max(report['panel']['bottom'], report['stack']['bottom'], report['advanced']['bottom']), report
                 assert report['prompts']['y'] >= report['toolbar']['bottom'], report
                 assert report['actions']['x'] >= report['prompts']['right'] + 12, report
                 for a, b in zip(report['panels'], report['panels'][1:]):
-                    assert abs(b['top'] - a['bottom'] - (16 if baseline_view else 12)) < 1, report
+                    assert abs(b['top'] - a['bottom'] - report['settingsGap']) < 1, report
                 if not baseline_view:
                     # Bounded controls, both prompts above the settings, and an
                     # unobscured Generate are meaningful redesign requirements.
                     assert report['stack']['width'] <= 680, report
                     assert report['toolbar']['height'] < 240, report
-                    assert report['prompts']['height'] <= 180, report
+                    assert report['prompts']['height'] <= 120, report
+                    assert abs(report['generate']['top'] - report['prompts']['top']) < 1, report
+                    assert abs(report['actions']['bottom'] - report['prompts']['bottom']) < 1, report
+                    assert report['advanced']['top'] >= max(report['panel']['bottom'], report['stack']['bottom']), report
+                    if image:
+                        assert abs(report['panel']['bottom'] - report['stack']['bottom']) < 1, report
+                    if state_name == 'running':
+                        assert 300 <= report['panel']['height'] <= 400, report
+                        assert report['preview']['bottom'] <= report['panel']['bottom'], report
+                        idle = reports[(report['width'], 'online-empty')]
+                        assert report['generate'] == idle['generate'], (idle, report)
+                        assert report['toolbar'] == idle['toolbar'], (idle, report)
                     prompt_boxes = await page.locator('[data-role="positive"], [data-role="negative"]').evaluate_all(
                         'els => els.map(el => el.getBoundingClientRect().toJSON())')
                     assert abs(prompt_boxes[0]['y'] - prompt_boxes[1]['y']) < 1, prompt_boxes
@@ -181,6 +205,38 @@ async def main(engine, root, baseline, desktop_redesign=False):
                 if image:
                     ratio = await page.locator('#selected-image-preview').evaluate('el => ({w:el.clientWidth,h:el.clientHeight,nw:el.naturalWidth,nh:el.naturalHeight})')
                     assert ratio['nw'] > 0 and abs(ratio['w'] / ratio['h'] - ratio['nw'] / ratio['nh']) < .01, ratio
+                if image and not baseline_view:
+                    await expect(page.locator('#selected-image-actions .image-action-status')).to_be_empty()
+                    await page.locator('#selected-image-actions [data-action="trash"]').click()
+                    await expect(page.locator('#selected-image-actions .image-action-status')).to_contain_text('Only the browser')
+                    await page.locator('#desktop-show-details').click()
+                    await expect(page.locator('#desktop-image-details')).to_be_visible()
+                    await expect(page.locator('#image-metadata')).to_contain_text('Image resolution')
+                    await page.evaluate("""() => {
+                        Object.defineProperty(navigator, 'clipboard', {configurable:true, value:undefined});
+                        document.execCommand = () => {window.copiedDetails = document.activeElement.value; return true;};
+                    }""")
+                    await page.locator('#desktop-copy-details').click()
+                    await expect(page.locator('#desktop-copy-status')).to_have_text('Details copied.')
+                    copied = await page.evaluate('copiedDetails')
+                    assert all(value in copied for value in ['Image resolution', 'Negative prompt', '18446744073709551600', 'long_model_filename']), copied
+                    if page.viewport_size['width'] == 1440:
+                        await page.screenshot(path=str(root / f'details-{state_name}.png'))
+                    await page.keyboard.press('Escape')
+                    await expect(page.locator('#desktop-image-details')).not_to_be_visible()
+                    await expect(page.locator('#desktop-show-details')).to_be_focused()
+                    if page.viewport_size['width'] == 1440 and 'portrait' in state_name:
+                        await page.evaluate("window.detailsNode = document.getElementById('image-details')")
+                        await page.locator('#desktop-show-details').click()
+                        await page.set_viewport_size({'width':390, 'height':844})
+                        await expect(page.locator('html')).to_have_attribute('data-presentation', 'mobile')
+                        await expect(page.locator('#desktop-image-details')).not_to_be_visible()
+                        await expect(page.locator('#image-browse-tools > #image-details')).to_have_count(1)
+                        await expect(page.locator('[data-role="positive"]')).to_have_attribute('placeholder', 'Describe your image…')
+                        await page.set_viewport_size({'width':1440, 'height':900})
+                        await expect(page.locator('html')).to_have_attribute('data-presentation', 'desktop')
+                        assert await page.evaluate("detailsNode === document.getElementById('image-details')")
+                        await expect(page.locator('[data-role="positive"]')).to_have_attribute('placeholder', 'Describe your image')
                 for selector in ['#generate', '#advanced > summary', '#gallery-all']:
                     await page.locator(selector).scroll_into_view_if_needed()
                     await expect(page.locator(selector)).to_be_in_viewport()
@@ -229,6 +285,7 @@ async def main(engine, root, baseline, desktop_redesign=False):
                     assert max(abs(a - b) for a, b in zip(before, after)) <= 1, f'Mobile pixels changed at {width}x{height}'
             assert not errors, errors
             assert not stub.submissions
+            assert not action_posts, action_posts
             await browser.close()
     finally:
         await runner.cleanup()

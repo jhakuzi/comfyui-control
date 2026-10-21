@@ -64,6 +64,8 @@
   align-items: end;
   gap: 12px;
   min-width: 0;
+  position: relative;
+  padding-right: 234px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--line);
 }
@@ -100,20 +102,43 @@
   margin: 0;
 }
 
-/* Prompts stay together; Generate and its original cancellation controls sit
-   alongside them. No new inputs or handlers are needed for this arrangement. */
+/* Labels remain available to assistive technology; the editor toggle sits
+   inside the positive prompt. Cancellation has a reserved toolbar position. */
 :where(html[data-presentation="desktop"]) #prompt-controls {
   grid-column: 1;
   grid-row: 2;
   min-width: 0;
 }
 :where(html[data-presentation="desktop"]) #prompt-controls .prompt-editor-heading {
-  min-height: 44px;
-  margin: 0 0 6px;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  min-height: 0;
+  margin: 0;
 }
+:where(html[data-presentation="desktop"]) .prompt-editor { position: relative; }
+:where(html[data-presentation="desktop"]) .prompt-editor-heading label,
+:where(html[data-presentation="desktop"]) #negative-controls > summary {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  margin: -1px;
+  padding: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+:where(html[data-presentation="desktop"]) .prompt-editor-toggle {
+  min-height: 28px;
+  padding: 4px 8px;
+}
+:where(html[data-presentation="desktop"]) #prompt-controls textarea { display: block; }
 :where(html[data-presentation="desktop"]) textarea.positive {
   height: 112px;
   min-height: 112px;
+  padding-right: 86px;
 }
 :where(html[data-presentation="desktop"]) .prompt-editor.expanded textarea.positive {
   height: clamp(240px, 40dvh, 480px);
@@ -127,28 +152,40 @@
   padding: 0;
   border: 0;
 }
-:where(html[data-presentation="desktop"]) #negative-controls > summary {
-  margin: 0 0 6px;
-  padding: 0;
-  min-height: 28px;
-  display: flex;
-  align-items: center;
-}
 :where(html[data-presentation="desktop"]) #desktop-generate-slot {
   grid-column: 2;
   grid-row: 2;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
-  padding-top: 50px;
 }
 :where(html[data-presentation="desktop"]) #generate {
   width: 100%;
-  min-height: 64px;
+  min-height: 60px;
   font-size: 1rem;
 }
-:where(html[data-presentation="desktop"]) #cancel-controls { align-self: end; }
+:where(html[data-presentation="desktop"]) #desktop-cancel-slot {
+  position: absolute;
+  top: 26px;
+  right: 0;
+  width: 222px;
+  height: 44px;
+}
+:where(html[data-presentation="desktop"]) #desktop-cancel-slot #cancel-controls { margin-left: auto; }
+:where(html[data-presentation="desktop"]) #reuse-last {
+  width: 170px;
+  margin: 0;
+}
+/* Reserve the same toolbar geometry before a reusable job exists. */
+:where(html[data-presentation="desktop"]) #reuse-last[hidden] {
+  display: inline-flex !important;
+  visibility: hidden;
+}
+:where(html[data-presentation="desktop"]) #advanced {
+  grid-column: 1 / -1;
+  grid-row: 4;
+}
 :where(html[data-presentation="desktop"]) .prompt-shortcuts { margin: 0; }
 
 /* A compact settings column follows the same reading and keyboard order. */
@@ -184,8 +221,8 @@
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
 }
 
-/* The workspace grows with content, never with an empty preview. Images are
-   contained within a useful viewing size; tools and details use page scrolling. */
+/* The settings define the desktop cutoff. Images flex into the remaining space
+   above their actions; empty previews stay compact. Advanced follows this row. */
 :where(html[data-presentation="desktop"]) #generation-panel,
 :where(html[data-presentation="desktop"]) #gallery-page {
   min-width: 0;
@@ -200,6 +237,24 @@
   grid-row: 3;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+}
+:where(html[data-presentation="desktop"]) #generation-panel[data-active="true"],
+:where(html[data-presentation="desktop"]) #generation-panel[data-job-status]:not([data-job-status=""]) {
+  height: 360px;
+}
+:where(html[data-presentation="desktop"]) #generation-panel[data-active="false"][data-saved="true"],
+:where(html[data-presentation="desktop"]) #generation-panel[data-inspect="true"][data-saved="true"],
+:where(html[data-presentation="desktop"]) #generation-panel:has(.preview-stage[data-preview="true"]:not([hidden])) {
+  height: var(--desktop-settings-height, 640px);
+}
+:where(html[data-presentation="desktop"]) #generation-panel > h2 { flex-shrink: 0; }
+:where(html[data-presentation="desktop"]) #job-output,
+:where(html[data-presentation="desktop"]) #job-output > .job-card {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
 }
 :where(html[data-presentation="desktop"]) #generation-empty {
   padding: 20px 12px;
@@ -228,6 +283,8 @@
 :where(html[data-presentation="desktop"]) .preview-stage {
   position: relative;
   display: flex;
+  flex: 1 1 0;
+  min-height: 0;
   justify-content: center;
   align-items: center;
   margin-top: 12px;
@@ -236,14 +293,14 @@
   overflow: hidden;
 }
 :where(html[data-presentation="desktop"]) .preview-stage[data-preview="false"] {
-  min-height: clamp(180px, 28dvh, 320px);
+  min-height: 180px;
 }
 :where(html[data-presentation="desktop"]) .preview-stage .preview {
   display: block;
   width: auto;
   max-width: 100%;
   height: auto;
-  max-height: 65dvh;
+  max-height: 100%;
   margin: 0;
   object-fit: contain;
 }
@@ -291,6 +348,16 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  flex: 1 1 0;
+}
+:where(html[data-presentation="desktop"]) #selected-image-panel > :not(#desktop-selected-stage) { flex-shrink: 0; }
+:where(html[data-presentation="desktop"]) #desktop-selected-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 0;
+  min-height: 0;
 }
 :where(html[data-presentation="desktop"]) #selected-image-preview {
   display: block;
@@ -298,7 +365,7 @@
   width: auto;
   max-width: 100%;
   height: auto;
-  max-height: 65dvh;
+  max-height: 100%;
 }
 :where(html[data-presentation="desktop"]) #generation-panel[data-active="true"]:not([data-inspect="true"]) #selected-image-panel,
 :where(html[data-presentation="desktop"]) #generation-panel[data-inspect="true"] #preview-stage,
@@ -308,13 +375,40 @@
 :where(html[data-presentation="desktop"]) #open-selected-image { display: none; }
 :where(html[data-presentation="desktop"]) #selected-image-tools .actions,
 :where(html[data-presentation="desktop"]) .selected-image-reuse { margin-top: 8px; }
-:where(html[data-presentation="desktop"]) #selected-image-tools #image-details > summary { padding: 10px 0; }
+:where(html[data-presentation="desktop"]) #selected-image-tools .actions {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  gap: 6px;
+  margin: 6px 0 0;
+}
+:where(html[data-presentation="desktop"]) #selected-image-actions .saved-image-buttons {
+  grid-template-columns: 44px repeat(4, minmax(0, 1fr));
+}
+:where(html[data-presentation="desktop"]) .saved-image-buttons,
+:where(html[data-presentation="desktop"]) .selected-image-reuse {
+  gap: 6px;
+  margin-top: 6px;
+}
+:where(html[data-presentation="desktop"]) #selected-image-panel button,
+:where(html[data-presentation="desktop"]) #selected-image-panel .button { min-height: 36px; padding: 6px 8px; }
+:where(html[data-presentation="desktop"]) #selected-image-panel > .heading { margin-bottom: 6px; }
+:where(html[data-presentation="desktop"]) #desktop-image-details { width: min(860px, calc(100% - 48px)); }
+:where(html[data-presentation="desktop"]) #desktop-image-details > .viewer > .heading {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface);
+}
+:where(html[data-presentation="desktop"]) #desktop-details-content > #image-details { margin: 0; padding: 0; border: 0; }
+:where(html[data-presentation="desktop"]) #desktop-details-content > #image-details > summary { display: none; }
+:where(html[data-presentation="desktop"]) #desktop-copy-status:empty { display: none; }
+:where(html[data-presentation="desktop"]) .image-action-status:not(:empty) { color: var(--warning); }
 :where(html[data-presentation="desktop"]) #selected-reuse-status { margin-bottom: 0; }
 
 /* The library stays directly below the working area, with bounded thumbnails. */
 :where(html[data-presentation="desktop"]) #gallery-page {
   grid-column: 1 / -1;
-  grid-row: 4;
+  grid-row: 5;
 }
 :where(html[data-presentation="desktop"]) #gallery-page h1 { font-size: 1rem; margin: 0; }
 :where(html[data-presentation="desktop"]) #gallery-page .eyebrow,
@@ -356,7 +450,6 @@
     grid-column: 2;
     grid-row: 1;
   }
-  :where(html[data-presentation="desktop"]) #negative-controls > summary { min-height: 44px; }
   :where(html[data-presentation="desktop"]) textarea.negative { height: 112px; min-height: 112px; }
 }
 @media (min-width: 1920px) {
