@@ -1,6 +1,67 @@
 # Session handoff — 2026-10-21
 
-## Latest work: screenshot-directed desktop refinements
+## Latest work: desktop gallery, History and control polish
+
+The user requested inset scrollbars, centered text in all buttons, larger gallery
+thumbnails filling the width, a unified gallery/comparison bar without the desktop
+History shortcut, eight gallery rows before internal scrolling, Advanced below the
+gallery, and a wider prompt History popup with six cards and inset Delete buttons.
+The user authorized committing and pushing these verified refinements to
+`testing/webui-desktop-forge`, following the previous push at `4342d8e`.
+
+- Product changes are confined to `presentation_desktop.css/js` and the public
+  shell-cache version bump from 3 to 4 in `sw.js`. Mobile adapters, shared skins,
+  theme, HTML, application/feature code and backend remain untouched.
+- Textareas keep their IDs/listeners inside padded desktop frames through reversible
+  `place()`. Dialog scroll areas are inset; desktop action labels are centered,
+  including Expand and Clear Queue. Prompt excerpts remain left-aligned content.
+- Gallery columns use a 200px minimum and flexible widths. A desktop-only geometry
+  observer limits the grid to eight complete rows; `max-content` implicit rows
+  prevent WebKit from shrinking unloaded-image rows inside that limit. Existing
+  comparison buttons move reversibly into the filter bar. Only the desktop gallery
+  job-History shortcut is hidden; prompt History and mobile history remain intact.
+- Advanced stays in its original form and occupies the full-width row below the
+  gallery. Prompt History is up to 1080px wide with six cards before list scrolling,
+  responsive excerpt lengths, and inset top-right Delete buttons.
+- Added `tests/manual/desktop_gallery_browser.py` (110 images, 15 private prompts);
+  adapted desktop geometry/outer-input skin expectations and moved the responsive
+  job-history shortcut check to mobile, retaining its original functional coverage.
+  No mobile pixel/isolation assertions were removed. Updated presentation docs.
+
+Verification of this work:
+
+- Full Python suite: **430 passed, 1 failed**, the documented old-job equality
+  failure involving `seconds_per_iteration: None`; no assertion/backend workaround.
+- Chromium and WebKit passed desktop layout/component skins at five sizes, idle,
+  offline, running and portrait/landscape results, plus unchanged mobile/tablet
+  pixels at five compact sizes against exported `4342d8e` after desktop round trips.
+- Both engines passed presentation isolation, unique controls/listeners, drafts,
+  exact seeds and live-job continuity, responsive/reconnection/privacy/image-action
+  regressions, and Generate fill/recovery/cancellation/reduced-motion checks.
+- Both engines passed the new gallery/History check at 1280×800, 1440×900,
+  1920×1080, 2560×1440: full-width larger tiles, eight complete rows, unified bar
+  and actual comparison, six cards, Delete bounds/search/reuse/deletion, centered
+  button labels, and restored mobile placements. Screenshots were inspected and
+  WebKit row sizing/excerpt clipping corrected before the final focused runs.
+- Chromium generation/seed/batch checks passed. WebKit's additional generation
+  script reached its final no-page-errors assertion after all functional checks,
+  then reported two `/api/state due to access control checks` errors during reload.
+  The identical failure was reproduced with unchanged `4342d8e` assets served
+  directly through the existing asset handler (no route interception), proving it
+  predates these changes. An earlier concurrent run also hit a submission timeout.
+  Neither app code nor browser error assertions were changed to hide these results.
+  JS/Python syntax, whitespace and protected-file diffs passed.
+
+Artifacts: `/tmp/control-gallery-polish-{chromium,webkit}` contains the final
+focused screenshots; `/tmp/control-gallery-desktop-final-{chromium,webkit}` has
+layout/mobile baseline comparisons. `/tmp/control-gallery-final-*` contains broad
+browser logs/screenshots; `/tmp/control-gallery-pytest.log` records the suite.
+The baseline export is `/tmp/control-gallery-baseline/comfyui_control/mobile/web`.
+`/tmp/control-gallery-generation-baseline-direct-webkit.log` records the matching
+baseline reload errors; its temporary runner overrides only server `ASSETS`.
+Protocol checks do not establish GPU, NAS, VPN or physical-device compatibility.
+
+## Previously pushed work: screenshot-directed desktop refinements
 
 The initial desktop redesign was pushed as `942f19c` on
 `testing/webui-desktop-forge`. The user subsequently requested compact prompts,

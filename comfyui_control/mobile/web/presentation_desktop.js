@@ -5,6 +5,7 @@ window.ComfyDesktopPresentation = (() => {
   const $ = (id) => document.getElementById(id);
   const openSections = new Set(["settings-card", "resolution-card", "lora-card", "negative-controls"]);
   const placeholders = new Map();
+  const scrollFrames = new WeakMap();
   let initialized = false, detailsOpen = false;
   const desktopNode = (tag, id, text, className) => {
     const node = document.createElement(tag);
@@ -87,6 +88,20 @@ window.ComfyDesktopPresentation = (() => {
         $("generation-panel").style.setProperty("--desktop-settings-height", `${Math.max(360, $("settings-stack").getBoundingClientRect().height)}px`);
     });
     observer.observe($("settings-stack"));
+    const grid = $("gallery-grid");
+    const limitGallery = () => {
+      if (!ComfyPresentation.desktop.matches || !grid.clientWidth) return;
+      const tile = grid.querySelector("button");
+      if (!tile) return;
+      const css = getComputedStyle(grid);
+      const height = tile.getBoundingClientRect().height * 8 + parseFloat(css.rowGap) * 7
+        + parseFloat(css.paddingTop) + parseFloat(css.paddingBottom);
+      const value = `${height}px`;
+      if (grid.style.getPropertyValue("--desktop-gallery-limit") !== value)
+        grid.style.setProperty("--desktop-gallery-limit", value);
+    };
+    new ResizeObserver(limitGallery).observe(grid);
+    new MutationObserver(limitGallery).observe(grid, { childList: true });
     ComfyPresentation.desktop.addEventListener("change", ({ matches }) => {
       if (matches) return;
       if (dialog.open) dialog.close();
@@ -120,6 +135,18 @@ window.ComfyDesktopPresentation = (() => {
     for (const input of document.querySelectorAll('textarea.positive')) {
       if (!placeholders.has(input)) placeholders.set(input, input.getAttribute("placeholder"));
       input.placeholder = input.placeholder.replace(/(?:…|\.\.\.)$/, "");
+    }
+    const filters = document.querySelector(".library-filters");
+    for (const id of ["select-compare", "compare-images"])
+      if ($(id).parentElement !== filters) place($(id), filters);
+    for (const input of document.querySelectorAll("textarea:not(.clipboard-text)")) {
+      let frame = scrollFrames.get(input);
+      if (!frame) {
+        frame = desktopNode("div", null, null, "desktop-scroll-frame");
+        input.before(frame);
+        scrollFrames.set(input, frame);
+      }
+      if (input.parentElement !== frame) place(input, frame);
     }
     // Match the visual reading order without changing the mobile control tree.
     if ($("resolution-card").nextElementSibling !== $("lora-card"))

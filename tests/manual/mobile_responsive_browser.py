@@ -575,9 +575,14 @@ async def main(browser_name, root):
             await expect(page.locator('#gallery-grid button')).to_have_count(0)
             assert (output / 'image02.png').read_bytes() == original
             assert len(stub.submissions) == 1
+            # The redundant job-history shortcut remains a mobile control.
+            await page.set_viewport_size(dict(width=390, height=844))
+            await select_page(page, 'gallery')
             await page.locator('#gallery-jobs').click()
             await expect(page.locator('#generation-history-list button')).to_have_count(1)
             await page.locator('#generation-history-list button').click()
+            await page.set_viewport_size(dict(width=1440, height=900))
+            await expect(page.locator('html')).to_have_attribute('data-presentation', 'desktop')
             await expect(page.locator('#selected-image-name')).to_have_text('image00.png')
             assert len(stub.submissions) == 1
             await page.locator('#gallery-all').click()

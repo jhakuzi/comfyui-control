@@ -42,8 +42,20 @@ its ellipsis only on desktop and restores the original attribute on mobile.
 Generation, resolution and LoRAs occupy one bounded column. Completed images and
 live image previews scale to the same bottom edge as those settings, preserving
 aspect ratios and room for compact image actions. Idle/loading placeholders stay
-compact. Advanced sits below that aligned workspace inside the original form;
-gallery/history follows with bounded thumbnails and normal page scrolling.
+compact. The gallery follows the aligned workspace, with Advanced & workflows
+below it while remaining inside the original form. Gallery thumbnails use flexible
+columns of at least 200px, filling the available width. A desktop ResizeObserver
+caps the grid at eight complete rows plus gaps/padding; additional rows scroll
+inside the grid. The existing comparison controls move into the gallery filter
+bar through `place()`. The redundant gallery History shortcut is hidden on desktop;
+the prompt History shortcut and mobile job-history controls remain available.
+
+Desktop textareas retain their original elements inside reversible padded frames,
+keeping native scrollbars and resize grips clear of rounded borders. Dialogs scroll
+inside an inset viewer, and action button labels are centered consistently. Prompt
+History is up to 1080px wide with six larger cards visible before internal scrolling;
+Delete sits inside each card's upper-right corner. Search, reuse and deletion still
+use the shared prompt-history component.
 
 The desktop Details button opens a native dialog containing the existing metadata
 controls, moved through `place()`. The shared loader still owns all metadata
@@ -121,6 +133,7 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 .venv/bin/python tests/manual/mobile_presentation_browser.py --browser chromium --output /tmp/control-presentation-check
 .venv/bin/python tests/manual/mobile_responsive_browser.py --browser chromium --output /tmp/control-responsive-check
 .venv/bin/python tests/manual/mobile_generation_browser.py --browser chromium --output /tmp/control-generation-check
+.venv/bin/python tests/manual/desktop_gallery_browser.py --browser chromium --output /tmp/control-desktop-gallery-check
 ```
 
 Use `--browser webkit` for the other supported test engine. Playwright browser
@@ -145,6 +158,12 @@ mobile geometry/content changes. The completed separation baseline is `3a7ae41`.
 shared skins and mobile pixel comparisons mandatory. Without the flag, desktop
 geometry parity also applies. Running the layout check without a baseline validates
 the current desktop geometry alone.
+
+The desktop gallery check uses 110 fixture images and 15 private prompt records.
+It verifies full-width tiles and the exact eight-row cap at all four target widths,
+unified comparison controls and their behavior, Advanced below the gallery, six
+prompt cards with inset Delete buttons, search/reuse/deletion, centered labels and
+a mobile restoration check. It does not replace the mobile pixel/isolation checks.
 
 The dedicated isolation check disables the inactive presentation stylesheet and
 verifies the active UI is unchanged, checks unique/live controls, and exercises a

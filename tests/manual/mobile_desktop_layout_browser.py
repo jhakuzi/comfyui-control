@@ -152,7 +152,8 @@ async def main(engine, root, baseline, desktop_redesign=False):
                         panelOverflow: getComputedStyle(panel).overflowY, panelPosition: getComputedStyle(panel).position};
                 }''')
                 report['skins'] = await page.evaluate('''() => ['#generate', '#preset', '[data-role="positive"]', '#settings-card', '#generation-panel'].map(selector => {
-                    const css = getComputedStyle(document.querySelector(selector));
+                    const input = document.querySelector(selector);
+                    const css = getComputedStyle(input.closest('.desktop-scroll-frame') || input);
                     return [css.color, css.backgroundColor, css.fontFamily, css.fontSize, css.fontWeight,
                         css.borderRadius, css.borderColor, css.boxShadow];
                 })''')
@@ -173,7 +174,11 @@ async def main(engine, root, baseline, desktop_redesign=False):
                 assert report['panelPosition'] == 'static' and report['panelOverflow'] == 'visible', report
                 assert abs(report['panel']['y'] - report['stack']['y']) < 1, report
                 assert report['panel']['x'] >= report['stack']['right'] + 12, report
-                assert report['gallery']['y'] >= max(report['panel']['bottom'], report['stack']['bottom'], report['advanced']['bottom']), report
+                assert report['gallery']['y'] >= max(report['panel']['bottom'], report['stack']['bottom']), report
+                if baseline_view:
+                    assert report['gallery']['y'] >= report['advanced']['bottom'], report
+                else:
+                    assert report['advanced']['y'] >= report['gallery']['bottom'], report
                 assert report['prompts']['y'] >= report['toolbar']['bottom'], report
                 assert report['actions']['x'] >= report['prompts']['right'] + 12, report
                 for a, b in zip(report['panels'], report['panels'][1:]):
