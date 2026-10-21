@@ -574,8 +574,39 @@ main {
   border-radius: var(--radius-control);
   box-shadow: var(--shadow-control);
 }
-.generate-bar .primary span {
-  font-size: 1.3rem;
+#generate {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+#generate-label {
+  position: relative;
+  z-index: 1;
+}
+#generate::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #215fae;
+  transform: scaleX(var(--generation-progress, 0));
+  transform-origin: left;
+  pointer-events: none;
+}
+#generate[data-progress="determinate"]::before {
+  transition: transform 220ms ease-out;
+}
+#generate[data-progress]:not([data-progress="idle"]) {
+  background: #172c47;
+  color: var(--accent-text);
+  opacity: 1;
+}
+#generate[data-progress="indeterminate"]::before {
+  width: 35%;
+  animation: generate-wait 1.6s ease-in-out infinite alternate;
+}
+@keyframes generate-wait {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(286%); }
 }
 .text-button {
   background: transparent;
@@ -678,6 +709,7 @@ summary::before {
   border-bottom: 1.5px solid currentColor;
   color: var(--muted);
   transform: rotate(-45deg);
+  transition: transform var(--transition-control), color var(--transition-control);
   vertical-align: 1px;
 }
 details[open] > summary::before {
@@ -925,7 +957,10 @@ progress:indeterminate::-webkit-progress-bar {
 @media (prefers-reduced-motion: reduce) {
   progress:indeterminate { animation: none; }
   .loading-spinner { animation: none; }
-  button, .button, input, textarea, select, #header-generation { transition: none; }
+  button, .button, input, textarea, select, #header-generation,
+  summary::before, #generate::before { transition: none !important; }
+  #generate::before { animation: none !important; }
+  #generate[data-progress="indeterminate"]::before { transform: none; }
 }
 #notice {
   position: fixed;
@@ -970,6 +1005,22 @@ dialog {
 }
 dialog::backdrop {
   background: var(--backdrop);
+}
+/* Discrete transitions retain the native dialog's top layer during its fade. */
+@media (prefers-reduced-motion: no-preference) {
+  dialog {
+    opacity: 0;
+    transition: opacity 160ms ease, display 160ms allow-discrete, overlay 160ms allow-discrete;
+  }
+  dialog[open] { opacity: 1; }
+  dialog::backdrop {
+    opacity: 0;
+    transition: opacity 160ms ease, display 160ms allow-discrete, overlay 160ms allow-discrete;
+  }
+  dialog[open]::backdrop { opacity: 1; }
+  @starting-style {
+    dialog[open], dialog[open]::backdrop { opacity: 0; }
+  }
 }
 .viewer {
   padding: var(--panel-padding);
@@ -1388,7 +1439,7 @@ dialog::backdrop {
   }
   #workspace[data-layout="studio"] {
     display: grid;
-    grid-template-columns: clamp(260px, 24vw, 360px) minmax(300px, 1fr) clamp(220px, 20vw, 340px);
+    grid-template-columns: minmax(260px, 1fr) minmax(300px, 1.35fr) minmax(220px, 1fr);
     gap: var(--space-3) clamp(12px, 1.3vw, 24px);
     align-items: start;
   }

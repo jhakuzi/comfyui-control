@@ -277,11 +277,34 @@ function updateGenerate() {
     !state.online ||
     (!pendingSubmission && preset?.missing_nodes.length > 0) ||
     !!(job && activeStatuses.has(job.status));
-  $("generate").textContent = busy
+  let label = busy || submitting
     ? "Submitting"
     : pendingSubmission
       ? "Retry submission"
       : "✦ Generate";
+  const active = !!job && activeStatuses.has(job.status);
+  const button = $("generate");
+  button.dataset.progress = "idle";
+  button.style.removeProperty("--generation-progress");
+  if (busy || submitting || active) {
+    button.dataset.progress = "indeterminate";
+    if (!connected || recovering || !state.online) {
+      label = "Reconnecting";
+      button.dataset.progress = "paused";
+    } else if (!busy && !submitting && job) {
+      label = { submitting: "Submitting", queued: "Queued", cancelling: "Stopping",
+        unknown: "Checking submission" }[job.status] ||
+        (job.phase === "processing" ? "Processing" : "Loading models");
+      const value = job.progress?.value, max = job.progress?.max;
+      if (job.status === "running" && Number.isFinite(value) && Number.isFinite(max) && max > 0) {
+        const fraction = Math.max(0, Math.min(1, value / max));
+        button.dataset.progress = "determinate";
+        button.style.setProperty("--generation-progress", fraction);
+        label = `Sampling · ${Math.floor(fraction * 100)}%`;
+      }
+    }
+  }
+  $("generate-label").textContent = label;
   syncGenerationDock();
 }
 async function loadPresets(selectId) {
@@ -1829,6 +1852,49 @@ window.addEventListener("offline", () => {
   connectionFailure(new Error("Offline. Reconnect to your LAN or VPN."));
 });
 window.addEventListener("online", foreground);
+// Animate native disclosures without replacing their keyboard/touch semantics.
+// Closing keeps the content present only until the short fade has finished.
+const disclosureMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+const disclosureAnimations = new Map();
+document.addEventListener("click", (event) => {
+  const summary = event.target.closest("summary");
+  if (!summary || event.defaultPrevented || event.button !== 0 ||
+      event.target.closest("a, button, input, select, textarea")) return;
+  const details = summary.parentElement;
+  if (details.tagName !== "DETAILS") return;
+  const previous = disclosureAnimations.get(details);
+  const opening = !(previous?.opening ?? details.open);
+  if (!previous && (disclosureMotion.matches || !details.animate)) return;
+  event.preventDefault();
+  const height = details.getBoundingClientRect().height;
+  const children = [...details.children].filter((child) => child !== summary && !child.hidden);
+  const opacity = children.map((child) => details.open ? getComputedStyle(child).opacity : 0);
+  previous?.cancel();
+  details.open = opening;
+  if (disclosureMotion.matches || !details.animate) return;
+  const target = details.getBoundingClientRect().height;
+  details.open = true;
+  const options = { duration: 180, easing: "ease-out", fill: "both" };
+  const size = details.animate([
+    { height: `${height}px`, overflow: "hidden" },
+    { height: `${target}px`, overflow: "hidden" },
+  ], options);
+  const fades = children.map((child, index) => child.animate([
+    { opacity: opacity[index] }, { opacity: opening ? 1 : 0 },
+  ], options));
+  const cancel = () => {
+    size.cancel();
+    fades.forEach((animation) => animation.cancel());
+    disclosureAnimations.delete(details);
+  };
+  const finish = () => { details.open = opening; cancel(); };
+  disclosureAnimations.set(details, { opening, cancel, finish });
+  size.onfinish = finish;
+});
+disclosureMotion.addEventListener("change", () => {
+  if (disclosureMotion.matches)
+    [...disclosureAnimations.values()].forEach((animation) => animation.finish());
+});
 document.addEventListener(
   "toggle",
   (event) => {

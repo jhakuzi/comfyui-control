@@ -145,8 +145,10 @@ async def main(browser_name, root):
                     if await page.evaluate('studioLayout.matches'):
                         sidebar = await page.locator('#gallery-page').bounding_box()
                         assert sidebar['x'] >= panel['x'] + panel['width'] + 12, (panel, sidebar)
-                        assert 250 <= form['width'] <= 362, form
-                        assert sidebar['width'] <= 342, sidebar
+                        total = form['width'] + panel['width'] + sidebar['width']
+                        assert .28 <= form['width'] / total <= .32, (form, panel, sidebar)
+                        assert .28 <= sidebar['width'] / total <= .32, (form, panel, sidebar)
+                        assert .38 <= panel['width'] / total <= .43, (form, panel, sidebar)
                         await expect(page.locator('.tabs')).to_be_hidden()
                 else:
                     assert await page.locator('#generation-dock').evaluate('el => getComputedStyle(el).position') == 'fixed'
@@ -170,6 +172,21 @@ async def main(browser_name, root):
             await page.locator('#settings-card > summary').focus()
             await page.keyboard.press('Enter')
             await expect(page.locator('#settings-card')).to_have_js_property('open', True)
+            await page.wait_for_function('() => !disclosureAnimations.size')
+            # Closing fades while native content is retained; rapid reversal
+            # must leave it open and usable, with no stale animation styles.
+            await page.locator('#settings-card > summary').evaluate('el => el.click()')
+            assert await page.evaluate('disclosureAnimations.get(document.querySelector("#settings-card"))?.opening === false')
+            await page.locator('#settings-card > summary').evaluate('el => el.click()')
+            await page.wait_for_function('() => !disclosureAnimations.size')
+            await expect(page.locator('#settings-card')).to_have_js_property('open', True)
+            await page.locator('#settings-card > summary').click()
+            await expect(page.locator('#settings-card')).to_have_js_property('open', False)
+            await page.emulate_media(reduced_motion='reduce')
+            await page.locator('#settings-card > summary').click()
+            await expect(page.locator('#settings-card')).to_have_js_property('open', True)
+            assert await page.evaluate('disclosureAnimations.size') == 0
+            await page.emulate_media(reduced_motion='no-preference')
             settings_box = await page.locator('#settings-card').bounding_box()
             lora_box = await page.locator('#lora-card').bounding_box()
             assert settings_box['y'] < lora_box['y']
@@ -202,14 +219,19 @@ async def main(browser_name, root):
             await page.locator('#generate').click()
             await expect(page.locator('#preview-loading')).to_be_visible()
             await expect(page.locator('#preview-loading-phase')).to_have_text('Submitting workflow…')
+            await expect(page.locator('#generate')).to_have_attribute('data-progress', 'indeterminate')
+            await expect(page.locator('#generate-label')).to_have_text('Submitting')
             await page.screenshot(path=str(root / 'submitting-placeholder.png'))
             submission_gate.set()
             await expect(page.locator('#job-title')).to_have_text('In the queue')
+            await expect(page.locator('#generate-label')).to_have_text('Queued')
+            await expect(page.locator('#generate')).to_be_disabled()
             await expect(page.locator('#header-generation #progress')).to_be_visible()
             await expect(page.locator('#preview-loading')).to_be_visible()
             await expect(page.locator('#preview-stage')).to_have_attribute('data-preview', 'false')
             await page.emulate_media(reduced_motion='reduce')
             assert await page.locator('#preview-loading .loading-spinner').evaluate('el => getComputedStyle(el).animationName') == 'none'
+            assert await page.locator('#generate').evaluate('el => getComputedStyle(el, "::before").animationName') == 'none'
             await page.emulate_media(reduced_motion='no-preference')
             assert await page.locator('#preview-loading .loading-spinner').evaluate('el => getComputedStyle(el).animationName') == 'loading-spin'
             assert await page.locator('#progress').count() == 1
@@ -222,7 +244,17 @@ async def main(browser_name, root):
             await stub.emit('execution_start', dict(prompt_id=job['prompt_id']))
             await stub.emit('executing', dict(prompt_id=job['prompt_id'], node='model'))
             await expect(page.locator('#job-title')).to_have_text('Preparing / loading models…')
+            await expect(page.locator('#generate-label')).to_have_text('Loading models')
             await stub.emit('progress', dict(prompt_id=job['prompt_id'], value=4, max=20))
+            await expect(page.locator('#generate-label')).to_have_text('Sampling · 20%')
+            await expect(page.locator('#generate')).to_have_attribute('data-progress', 'determinate')
+            assert await page.locator('#generate').evaluate('el => el.style.getPropertyValue("--generation-progress")') == '0.2'
+            # A new sampling stage can restart its progress. It must not retain
+            # the old stage's fraction or submit any additional generation.
+            await stub.emit('progress', dict(prompt_id=job['prompt_id'], value=1, max=10))
+            await expect(page.locator('#generate-label')).to_have_text('Sampling · 10%')
+            await stub.emit('progress', dict(prompt_id=job['prompt_id'], value=4, max=20))
+            await expect(page.locator('#generate-label')).to_have_text('Sampling · 20%')
             service.update_hardware(dict(utilization=73, vram_used=6 * 2**30))
             await expect(page.locator('#stat-gpu')).to_have_text('73%')
             await expect(page.locator('#stat-vram')).to_have_text('6.0 GiB')
@@ -294,6 +326,8 @@ async def main(browser_name, root):
             await expect(page.locator('#header-generation #progress')).to_be_visible()
             assert len(stub.submissions) == 1
             await context.set_offline(True)
+            await expect(page.locator('#generate')).to_have_attribute('data-progress', 'paused')
+            await expect(page.locator('#generate-label')).to_have_text('Reconnecting')
             stub.history[job['prompt_id']] = dict(prompt=stub.running[0], status=dict(status_str='success'),
                 outputs=dict(save=dict(images=[dict(filename='image00.png', subfolder='', type='output')])))
             stub.running = []
@@ -302,6 +336,8 @@ async def main(browser_name, root):
             await context.set_offline(False)
             await expect(page.locator('#selected-image-preview')).to_be_visible()
             await expect(page.locator('#job-title')).to_have_text('Your image is ready')
+            await expect(page.locator('#generate')).to_have_attribute('data-progress', 'idle')
+            await expect(page.locator('#generate-label')).to_have_text('✦ Generate')
             await expect(page.locator('#header-generation')).to_be_hidden()
             assert await page.locator('#job-card #job-metrics').count() == 1
             await page.reload()
@@ -563,7 +599,9 @@ async def main(browser_name, root):
             await expect(page.locator('#image-dialog')).to_be_hidden()
             await expect(page.get_by_role('button', name='View image02.png', exact=True)).to_have_count(0)
             assert not errors, errors
-            print(json.dumps(dict(browser=browser_name, responsive_layout='phone, tablet portrait/landscape, Split View, laptop, short window',
+            print(json.dumps(dict(browser=browser_name, responsive_layout='phone, tablet portrait/landscape, Split View, laptop, short window; 30/40/30 studio columns',
+                motion='disclosure open/close, reversal, keyboard and reduced motion',
+                button_progress='submission, queue, loading, actual sampling fraction, new stage, reconnect pause and completion reset',
                 generation='fixture: model loading, progress/preview, sticky controls, offline completion and reload',
                 reuse='mobile jobs and desktop PNG: exact seed, variation, no auto-submit, missing metadata, unchanged files',
                 previews='768px at 1x, 1280px at 2x; private sessions remain isolated',

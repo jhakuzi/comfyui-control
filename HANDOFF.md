@@ -1,5 +1,32 @@
 # Session handoff — 2026-10-21
 
+## Current follow-up — wide workspace and motion
+
+- The user likes the phone UI and plans further real-device testing. Keep its
+  layout intact. Editing and the existing Upscale fixture failure remain pending
+  verification; uninstall remains deferred.
+- Wide studio columns now grow at approximately 30% / 40% / 30%, replacing the
+  fixed 360px/340px sidebar caps that left excess space in the middle.
+- Generate has a progress backdrop driven by existing job state. Sampling shows
+  the current stage's actual step fraction; submission/loading/queueing use an
+  indeterminate highlight. Reconnection pauses it; terminal states reset it.
+  No backend, queue, persistence or monitoring changes were made.
+- Native disclosures fade/resize in both directions, support rapid reversals and
+  keyboard activation, and skip animation with reduced motion. Native dialogs
+  use progressive CSS fades; native select popups retain browser/OS behavior.
+- The service-worker shell cache version was refreshed for the UI changes.
+- Verification: Chromium and Linux WebKit responsive/recovery browser checks
+  passed at phone, tablet, desktop and ultrawide sizes, including column ratios,
+  disclosure reversal/reduced motion and button submission/loading/stage/
+  reconnect/reset. No JavaScript errors. The 31 focused mobile integration/core,
+  image-details and image-sharing tests passed; JavaScript syntax checks and
+  `git diff --check` passed. These use protocol fixtures, not GPU inference or
+  physical Apple devices. The full suite was not rerun for these frontend changes.
+- Screenshots and browser artifacts are in `/workspace/workspace-motion-chromium-v2`
+  and `/workspace/workspace-motion-webkit-v2` in this workspace. WebKit needed
+  runtime libraries extracted under `/tmp/comfy-browser-libs` and linked into
+  its downloaded browser bundle; no system packages or app dependencies changed.
+
 ## Current follow-up — demo removal
 
 - The user confirmed that the demo worked and requested its removal. The demo

@@ -9,8 +9,9 @@ setting, second server or separate installation is needed.
   Click a thumbnail to inspect that exact saved image. Previous/next, **Save image**
   and collapsible **Details** are integrated below the preview. Phones retain the
   separate image viewer. Preview controls remain in view as settings scroll. The
-  preview fills the available height; side columns stay a readable width even
-  on ultrawide monitors. Redundant Create/Gallery tabs are hidden in this view.
+  preview fills the available height. Columns share the width at roughly
+  30% settings / 40% preview / 30% gallery, so both sidebars grow on wider screens.
+  Redundant Create/Gallery tabs are hidden in this view.
 - **Medium-width windows:** settings on the left; preview and Generate on the right.
   Live progress, s/it, VRAM and GPU
   usage appear in the top header while generating, including in Gallery.
@@ -21,6 +22,11 @@ setting, second server or separate installation is needed.
   they become a small overlay; completion clears them. Reduced motion disables
   the spinner animation. No extra monitoring requests are made.
   Completed images appear on the right.
+- **Generate button:** a blue backdrop fills behind the label during sampling,
+  using the current stage's reported step percentage. Model loading, queueing
+  and processing use a moving highlight without inventing a percentage. It pauses
+  while reconnecting and resets when the job ends. The button remains disabled
+  during an active job; Cancel retains its existing behavior.
 - **Gallery:** the desktop sidebar has All images, Kept, History and Trash views.
   History lists this browser's jobs; selecting one never submits a generation.
   Phones keep the Gallery tab and full-size viewer. Comparison remains available.
@@ -62,6 +68,12 @@ buttons; gallery filters use segmented selection styling. Compact header spacing
 The three-column structure and responsive breakpoints are unchanged.
 Keyboard focus stays visible, controls retain their touch targets, and reduced
 motion disables the control transitions and loading animation.
+
+Expandable sections fade and resize over 180ms on opening and closing, including
+keyboard activation and reversing an in-progress transition. Dialogs also fade
+where the browser supports native discrete transitions. Reduced motion disables
+these effects. Model/workflow dropdowns retain the browser's native menus and
+keyboard/touch behavior; their popup animation is controlled by the browser/OS.
 
 Browser chrome and the PWA manifest use the same background color. The shell
 cache version is updated for this theme; reload an existing tab to get the styles.
