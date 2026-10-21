@@ -40,6 +40,21 @@ Then install as your normal user, **without sudo**:
 bash install.sh
 ```
 
+**Headless / minimal Debian 13 server**
+
+SSH mode still uses shared Qt libraries. Pip installs `PySide6-Essentials`,
+`aiohttp` and `qrcode` automatically; these system libraries must be installed
+separately (no desktop login needed):
+
+```bash
+sudo apt update
+sudo apt install --no-install-recommends libegl1 libgl1 libopengl0 \
+  libglib2.0-0t64 libdbus-1-3 libxkbcommon0 libfontconfig1 libatomic1
+```
+
+Then start with `comfyui-control --start-server --start-webui`.
+[Headless setup, dependency checks and Qt errors](docs/SSH.md#headless-system-dependencies).
+
 ## Use
 
 Open **ComfyUI Control** from the application menu. Select your existing ComfyUI

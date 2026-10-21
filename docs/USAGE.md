@@ -31,6 +31,10 @@ sudo apt update
 sudo apt install python3 python3-pip python3-venv git
 ```
 
+On a minimal/headless Debian 13 installation, also install the
+[Qt system libraries and check SSH startup](SSH.md#headless-system-dependencies).
+Pip installs the Python dependencies but cannot install these OS packages.
+
 **Arch Linux**
 
 ```bash

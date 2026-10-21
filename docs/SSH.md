@@ -21,6 +21,72 @@ Without flags, the application opens its normal desktop window.
 | `--start-webui` | Start Mobile WebUI only; use the saved API URL for an existing ComfyUI server. That external server is left running on exit. |
 | `--help` / `--version` | Print information without opening a window. |
 
+## Headless system dependencies
+
+The Python dependencies (`PySide6-Essentials`, `aiohttp`, `qrcode`) are installed
+by pip. PySide6 bundles Qt, but its Linux libraries also depend on system packages
+that may be missing on a minimal server. Terminal mode uses `QCoreApplication`
+and shared components that import QtWidgets/QtGui; it does not open a window or
+load an X11/Wayland platform plugin. Installing the runtime libraries does not
+require installing KDE, GNOME, an X server or a display manager.
+
+For **Debian 13 (Trixie)**, install the source-install prerequisites and Qt runtime:
+
+```bash
+sudo apt update
+sudo apt install --no-install-recommends python3 python3-pip python3-venv git \
+  libegl1 libgl1 libopengl0 libglib2.0-0t64 libdbus-1-3 libxkbcommon0 \
+  libfontconfig1 libatomic1
+```
+
+APT resolves the dependent X11, font and graphics libraries automatically. These
+are controller runtime dependencies, separate from ComfyUI's GPU drivers, PyTorch,
+models and custom-node requirements. Older Debian/Ubuntu releases may call the
+GLib package `libglib2.0-0` instead of `libglib2.0-0t64`; use your release's package.
+Optional integrated NFS output also needs `nfs-common` on Debian.
+
+Verified in a clean Debian 13 amd64 container with Python 3.13 and PySide6 6.12:
+Qt imports, foreground server/WebUI startup and Ctrl+C cleanup passed using a
+stub ComfyUI process. This check does not test GPU inference.
+
+After installing the app, check the actual headless imports without starting a
+server or requiring a saved configuration. Run from the source checkout:
+
+```bash
+.venv-test/bin/python -c 'import comfyui_control.headless; print("Headless Qt dependencies OK")'
+.venv-test/bin/comfyui-control --start-server --start-webui
+```
+
+For a ZIP install, the Python path is
+`~/.local/share/comfyui-control/venv/bin/python` (under `XDG_DATA_HOME` if customized).
+`--help` and `--version` alone do not check Qt imports.
+
+### Common startup errors
+
+| Error | Meaning / fix |
+| --- | --- |
+| `libEGL.so.1`, `libGL.so.1` or `libOpenGL.so.0: cannot open shared object file` | Install `libegl1`, `libgl1` and `libopengl0`. Pip cannot install these OS libraries. |
+| `libglib-2.0.so.0` / `libgthread-2.0.so.0` missing | Install `libglib2.0-0t64` on Debian 13. |
+| `libdbus-1.so.3`, `libxkbcommon.so.0`, `libfontconfig.so.1` or `libatomic.so.1` missing | Install `libdbus-1-3`, `libxkbcommon0`, `libfontconfig1` or `libatomic1`, respectively. |
+| `ModuleNotFoundError: PySide6` | Use the executable from the environment where the app was installed; reinstall with that environment's `python -m pip install .` if needed. |
+| `qt.qpa.xcb: could not connect to display` / platform plugin initialization failure | You started the desktop path. Over SSH, include `--start-server --start-webui` and use the current app executable. Terminal mode needs no `DISPLAY`, X forwarding, Xvfb or `QT_QPA_PLATFORM=offscreen`. |
+| Installation must be configured first | System libraries loaded successfully, but this Linux account needs its own valid saved ComfyUI configuration; see Settings and output below. |
+
+If you intentionally want the **desktop window** in an X11 session on Debian 13,
+its xcb plugin also needs these libraries:
+
+```bash
+sudo apt install --no-install-recommends libxcb-cursor0 libxkbcommon-x11-0 \
+  libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 \
+  libxcb-xinerama0 libxcb-xkb1 libxcb-randr0 libxcb-shape0 libxcb-sync1 \
+  libxcb-xfixes0 libx11-xcb1
+```
+
+This extra command fixes missing desktop-plugin libraries; it does not provide a
+display for an SSH-only server. For desktop plugin diagnostics, run
+`QT_DEBUG_PLUGINS=1 comfyui-control` from a graphical session and look for the
+specific missing library rather than the generic xcb message.
+
 ## Settings and output
 
 - Configure the installation, Python or launch script, workflow and mobile
