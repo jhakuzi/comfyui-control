@@ -24,6 +24,16 @@ window.ComfyDesktopPresentation = (() => {
     node.dataset.desktopSlot = "";
     return node;
   };
+  function placePreview(place) {
+    const zoom = $("desktop-image-zoom"), enlarged = zoom.open;
+    const destination = enlarged ? $("desktop-zoom-stage") : $("desktop-selected-stage");
+    const image = $("selected-image-preview");
+    if (image.parentElement !== destination) place(image, destination);
+    const heart = document.querySelector("#selected-image-actions .image-heart, #desktop-selected-stage .image-heart, #desktop-zoom-controls .image-heart");
+    const controls = enlarged ? $("desktop-zoom-controls") : destination;
+    if (heart && heart.parentElement !== controls)
+      place(heart, controls, enlarged ? $("desktop-close-zoom") : null);
+  }
   async function copyDetails() {
     const root = $("image-metadata");
     const fields = [...root.querySelectorAll("summary, h3, .metadata-prompt, dt")];
@@ -60,6 +70,24 @@ window.ComfyDesktopPresentation = (() => {
     $("desktop-toolbar").append(cancel);
     const stage = desktopNode("div", "desktop-selected-stage");
     $("selected-image-preview").before(stage);
+    const zoom = desktopNode("dialog", "desktop-image-zoom");
+    zoom.setAttribute("aria-label", "Enlarged image preview");
+    const zoomStage = desktopNode("div", "desktop-zoom-stage");
+    const zoomControls = desktopNode("div", "desktop-zoom-controls");
+    const closeZoom = desktopNode("button", "desktop-close-zoom", "Close", "small");
+    closeZoom.type = "button";
+    zoomControls.append(closeZoom);
+    zoomStage.append(zoomControls);
+    zoom.append(zoomStage);
+    document.body.append(zoom);
+    closeZoom.addEventListener("click", () => zoom.close());
+    zoom.addEventListener("close", () => {
+      if (!ComfyPresentation.desktop.matches || zoom.open) return;
+      placePreview(ComfyPresentation.place);
+      positionHeart();
+      if ($("selected-image-preview").getClientRects().length)
+        $("selected-image-preview").focus({ preventScroll: true });
+    });
     const button = desktopNode("button", "desktop-show-details", "Details");
     button.type = "button";
     button.setAttribute("aria-haspopup", "dialog");
@@ -108,21 +136,30 @@ window.ComfyDesktopPresentation = (() => {
     observer.observe($("settings-card"));
     observer.observe($("prompt-controls"));
     const image = $("selected-image-preview");
-    let heartFrame = 0;
-    const imageObserver = new ResizeObserver(() => {
-      if (heartFrame) return;
-      heartFrame = requestAnimationFrame(() => {
-        heartFrame = 0;
-        if (!ComfyPresentation.desktop.matches || !image.getClientRects().length) return;
-        const bounds = image.getBoundingClientRect(), container = stage.getBoundingClientRect();
-        for (const [property, value] of [
-          ["--desktop-heart-top", `${bounds.top - container.top + 8}px`],
-          ["--desktop-heart-right", `${container.right - bounds.right + 8}px`],
-        ]) {
-          if (stage.style.getPropertyValue(property) !== value) stage.style.setProperty(property, value);
-        }
-      });
+    const enlarge = () => {
+      if (!ComfyPresentation.desktop.matches || !image.naturalWidth || !image.getAttribute("src") || zoom.open) return;
+      zoomStage.style.setProperty("--desktop-zoom-ratio", String(image.naturalWidth / image.naturalHeight));
+      zoom.showModal();
+      placePreview(ComfyPresentation.place);
+    };
+    image.addEventListener("dblclick", enlarge);
+    image.addEventListener("keydown", (event) => {
+      if (ComfyPresentation.desktop.matches && ["Enter", " "].includes(event.key)) {
+        event.preventDefault();
+        enlarge();
+      }
     });
+    const positionHeart = afterLayout(() => {
+      if (!ComfyPresentation.desktop.matches || image.parentElement !== stage || !image.getClientRects().length) return;
+      const bounds = image.getBoundingClientRect(), container = stage.getBoundingClientRect();
+      for (const [property, value] of [
+        ["--desktop-heart-top", `${bounds.top - container.top + 8}px`],
+        ["--desktop-heart-right", `${container.right - bounds.right + 8}px`],
+      ]) {
+        if (stage.style.getPropertyValue(property) !== value) stage.style.setProperty(property, value);
+      }
+    });
+    const imageObserver = new ResizeObserver(positionHeart);
     imageObserver.observe(image);
     imageObserver.observe(stage);
     const grid = $("gallery-grid");
@@ -142,6 +179,9 @@ window.ComfyDesktopPresentation = (() => {
     ComfyPresentation.desktop.addEventListener("change", ({ matches }) => {
       if (matches) return;
       if (dialog.open) dialog.close();
+      if (zoom.open) zoom.close();
+      for (const attribute of ["tabindex", "role", "aria-label", "aria-haspopup", "aria-controls"])
+        image.removeAttribute(attribute);
       for (const [input, placeholder] of placeholders) input.setAttribute("placeholder", placeholder);
       placeholders.clear();
     });
@@ -158,8 +198,13 @@ window.ComfyDesktopPresentation = (() => {
       place($("prompt-actions"), $("desktop-generate-slot"));
     }
     const actions = $("selected-image-actions").querySelector(".saved-image-buttons");
-    const heart = actions?.querySelector(".image-heart");
-    if (heart) place(heart, $("desktop-selected-stage"));
+    placePreview(place);
+    const image = $("selected-image-preview");
+    image.tabIndex = 0;
+    image.setAttribute("role", "button");
+    image.setAttribute("aria-label", "Enlarge image preview");
+    image.setAttribute("aria-haspopup", "dialog");
+    image.setAttribute("aria-controls", "desktop-image-zoom");
     if (actions && $("desktop-show-details").parentElement !== actions)
       place($("desktop-show-details"), actions, actions.querySelector('[data-action="trash"]'));
     for (const input of placeholders.keys()) if (!input.isConnected) placeholders.delete(input);
@@ -169,8 +214,6 @@ window.ComfyDesktopPresentation = (() => {
       place($("advanced"), $("generate-form"));
     if ($("image-details").parentElement !== $("desktop-details-content"))
       place($("image-details"), $("desktop-details-content"));
-    if ($("selected-image-preview").parentElement !== $("desktop-selected-stage"))
-      place($("selected-image-preview"), $("desktop-selected-stage"));
     for (const input of document.querySelectorAll('textarea.positive')) {
       if (!placeholders.has(input)) placeholders.set(input, input.getAttribute("placeholder"));
       input.placeholder = input.placeholder.replace(/(?:…|\.\.\.)$/, "");
@@ -224,6 +267,10 @@ window.ComfyDesktopPresentation = (() => {
     dock.hidden = false;
   }
   function selectedPreview({ item, place }) {
+    if ($("desktop-image-zoom")?.open && ($("workspace").hidden || !item || $("selected-image-preview").getAttribute("src") !== item.url)) {
+      $("desktop-image-zoom").close();
+      placePreview(place);
+    }
     if ($("desktop-image-details")?.open && (!item || $("selected-image-preview").getAttribute("src") !== item.url))
       $("desktop-image-details").close();
     if (item?.url) {

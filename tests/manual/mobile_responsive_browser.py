@@ -543,7 +543,12 @@ async def main(browser_name, root):
                 await actions.locator('[data-action="' + control + '"]').scroll_into_view_if_needed()
                 box = await actions.locator('[data-action="' + control + '"]').bounding_box()
                 assert box and box['y'] + box['height'] <= page.viewport_size['height'], box
-            await actions.locator('[data-action="keep"]').click()
+            await page.locator('#selected-image-preview').dblclick()
+            await expect(page.locator('#desktop-image-zoom')).to_be_visible()
+            await page.locator('#desktop-zoom-controls [data-action="keep"]').click()
+            await expect(page.locator('#desktop-zoom-controls [data-action="keep"]')).to_have_attribute('aria-pressed', 'true')
+            await page.locator('#desktop-close-zoom').click()
+            await expect(page.locator('#desktop-image-zoom')).not_to_be_visible()
             await expect(actions.locator('[data-action="keep"]')).to_have_attribute('aria-pressed', 'true')
             await expect(actions.locator('[data-action="keep"]')).to_have_text('♥')
             await expect(actions.locator('[data-action="keep"]')).to_have_attribute('aria-label', 'Remove image from Favourites')
@@ -609,7 +614,10 @@ async def main(browser_name, root):
             await page.unroute('**/api/images/*/actions', delayed_action)
             # Returning through sign-in/recovery without a reload restores
             # capability controls for the same selected image.
+            await page.locator('#selected-image-preview').dblclick()
+            await expect(page.locator('#desktop-image-zoom')).to_be_visible()
             await page.evaluate('showLogin(); bootstrap()')
+            await expect(page.locator('#desktop-image-zoom')).not_to_be_visible()
             await expect(page.locator('#workspace')).to_be_visible()
             await expect(actions.locator('[data-action="keep"]')).to_be_enabled()
             await page.locator('#advanced').evaluate('el => el.open=false')

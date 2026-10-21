@@ -51,7 +51,8 @@ aspect ratios and room for compact image actions. The existing Favourites heart
 moves reversibly to the image's upper-right corner, following its rendered bounds
 rather than the surrounding letterbox. Edit/Upscale/Details/Trash use four equal
 columns, and Reuse settings/New variation use two aligned columns. The Save image
-and arrow row retains its existing layout. While viewing a saved image, an empty
+and arrow row retains its existing layout. Empty workflow-status text is hidden
+on desktop so the gaps between Save/actions/reuse rows are consistently 6px. While viewing a saved image, an empty
 or previous job output must not reserve flex space above it; live generation still
 uses the original preview when the user is not inspecting a saved result.
 Idle/loading placeholders stay compact. The gallery follows the aligned workspace, with Advanced & workflows
@@ -68,6 +69,14 @@ inside an inset viewer, and action button labels are centered consistently. Prom
 History is up to 1080px wide with six larger cards visible before internal scrolling;
 Delete sits inside each card's upper-right corner. Search, reuse and deletion still
 use the shared prompt-history component.
+
+Double-clicking the desktop saved-image preview opens a centered native dialog
+with a dimmed backdrop and the existing shadow token. Enter/Space on the focused
+preview also opens it. The original image and Favourites heart move through
+`place()` into the popup, preserving the same action handler and state. Close or
+Escape restores them and returns keyboard focus; desktop viewport resizing keeps
+the image contained. Changing the selected image, returning to sign-in, or
+switching to mobile closes the popup. All preview accessibility attributes are restored on mobile.
 
 The desktop Details button opens a native dialog containing the existing metadata
 controls, moved through `place()`. The shared loader still owns all metadata

@@ -1,6 +1,44 @@
 # Session handoff — 2026-10-21
 
-## Latest work: preview heart, action rows and small-preview fix
+## Latest work: enlarged desktop preview and equal row gaps
+
+The user requested equal spacing between Save/actions/reuse rows and double-click
+on the desktop preview to enlarge it in a centered floating box, with a shadow,
+dimmed page, heart and Close button. They explicitly authorized pushing the result
+to testing after completion. This follows `e263485` on `testing/webui-desktop-forge`.
+
+- Hide the empty desktop workflow-status paragraph, whose 8px margin created the
+  extra gap. The two action-row gaps are now 6px when no status message is present.
+- Desktop CSS/JS create a native dialog with viewport-bounded image dimensions,
+  the existing dialog shadow/backdrop tokens, heart and Close controls. The original
+  image and heart move with reversible `place()`; there is no duplicate image,
+  action handler, API call or application state. Enter/Space provide keyboard
+  opening, Close/Escape restore focus, and the same Favourites action works inside.
+- Popup resize uses the image aspect ratio and viewport CSS. Close explicitly
+  refreshes inline heart positioning. Selection changes close the popup before
+  updating the image. Returning to sign-in also closes it. A desktop-to-mobile
+  transition closes it and restores the
+  original mobile controls and image attributes; no mobile/shared styles or logic
+  changed. Public shell cache version is 9.
+- Added checks for exact row gaps, centered/bounded portrait/landscape popup,
+  backdrop/shadow, original-node identity, Escape/focus/keyboard, resizing while
+  open, and an open-popup mobile round trip. The responsive check toggles the
+  existing heart inside the popup, closes it, and verifies inline/reloaded state.
+- Chromium and WebKit passed the desktop matrix at five widths and all five
+  compact pixel comparisons against `e263485`. Final desktop reruns also passed
+  resizing an open popup and restoring the heart position afterward. Both engines
+  passed responsive/reconnect/privacy/image actions, including the popup heart,
+  inline state, reload, Trash/restore, and mobile restoration. Chromium additionally
+  verified an open popup closes through sign-in/recovery without resetting state.
+  Chromium isolation passed unique controls/listeners, exact seeds, live jobs and
+  cancellation. Screenshots were inspected; syntax, protected-file and whitespace
+  checks passed. No shared/backend code changed; the Python suite was not rerun
+  for this presentation-only change.
+
+Artifacts: `/tmp/control-zoom-*`; baseline export is `e263485` at
+`/tmp/control-zoom-baseline/comfyui_control/mobile/web`.
+
+## Previously pushed: preview heart, action rows and small-preview fix
 
 The user requested the desktop Favourites heart on the image corner, even action
 rows (Edit/Upscale/Details/Trash and Reuse settings/New variation), with Save image

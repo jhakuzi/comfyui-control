@@ -231,6 +231,65 @@ async def main(engine, root, baseline, desktop_redesign=False):
                     assert controls['count']==4 and max(controls['widths'])-min(controls['widths'])<1, controls
                     assert all(abs(controls[key])<1 for key in ['leftGap','rightGap','middleGap']), controls
                     assert controls['previewHeight'] > controls['panelHeight']*.55, controls
+                    # With no status message, both action-row gaps must match.
+                    saved_hint = await page.locator('#selected-image-actions .image-workflow-status').text_content()
+                    await page.locator('#selected-image-actions .image-workflow-status').evaluate("el => el.textContent=''")
+                    gaps = await page.evaluate("""() => {
+                        const save=document.querySelector('#selected-image-tools .actions').getBoundingClientRect();
+                        const edit=document.querySelector('#selected-image-actions .saved-image-buttons').getBoundingClientRect();
+                        const reuse=document.querySelector('.selected-image-reuse').getBoundingClientRect();
+                        return [edit.top-save.bottom,reuse.top-edit.bottom];
+                    }""")
+                    assert abs(gaps[0]-6)<1 and abs(gaps[1]-gaps[0])<1, gaps
+                    await page.locator('#selected-image-actions .image-workflow-status').evaluate('(el,text) => el.textContent=text', saved_hint)
+                    await page.evaluate("""() => {
+                        window.zoomOriginalImage=document.getElementById('selected-image-preview');
+                        window.zoomOriginalHeart=document.querySelector('#desktop-selected-stage .image-heart');
+                    }""")
+                    await page.locator('#selected-image-preview').dblclick()
+                    await expect(page.locator('#desktop-image-zoom')).to_be_visible()
+                    await expect(page.locator('#desktop-close-zoom')).to_be_focused()
+                    popup = await page.evaluate("""() => {
+                        const dialog=document.getElementById('desktop-image-zoom'), b=dialog.getBoundingClientRect();
+                        const image=document.getElementById('selected-image-preview'), i=image.getBoundingClientRect();
+                        return {x:b.x,y:b.y,right:b.right,bottom:b.bottom,cx:b.x+b.width/2,cy:b.y+b.height/2,
+                            width:innerWidth,height:innerHeight,shadow:getComputedStyle(dialog).boxShadow,
+                            backdrop:getComputedStyle(dialog,'::backdrop').backgroundColor,
+                            same:image===window.zoomOriginalImage && document.querySelector('#desktop-zoom-controls .image-heart')===window.zoomOriginalHeart,
+                            ratio:i.width/i.height,imageRatio:image.naturalWidth/image.naturalHeight};
+                    }""")
+                    assert popup['same'] and abs(popup['ratio']-popup['imageRatio'])<.01, popup
+                    assert abs(popup['cx']-popup['width']/2)<1 and abs(popup['cy']-popup['height']/2)<1, popup
+                    assert popup['x']>=23 and popup['y']>=23 and popup['right']<=popup['width']-23 and popup['bottom']<=popup['height']-23, popup
+                    assert popup['shadow']!='none' and popup['backdrop'] not in ['transparent','rgba(0, 0, 0, 0)'], popup
+                    if page.viewport_size['width']==1440 and state_name.startswith('generated-'):
+                        await page.screenshot(path=str(root / f'zoom-{state_name}.png'))
+                    if page.viewport_size['width']==1440 and state_name=='generated-portrait':
+                        await page.set_viewport_size({'width':1920,'height':1080})
+                        await expect(page.locator('#desktop-image-zoom')).to_be_visible()
+                        await page.set_viewport_size({'width':1440,'height':900})
+                    await page.keyboard.press('Escape')
+                    await expect(page.locator('#desktop-image-zoom')).not_to_be_visible()
+                    await expect(page.locator('#desktop-selected-stage > #selected-image-preview')).to_be_focused()
+                    assert await page.evaluate("document.querySelector('#desktop-selected-stage .image-heart') === window.zoomOriginalHeart")
+                    await page.wait_for_function("""() => {
+                        const i=document.getElementById('selected-image-preview').getBoundingClientRect();
+                        const h=document.querySelector('#desktop-selected-stage .image-heart').getBoundingClientRect();
+                        return Math.abs(i.right-h.right-8)<1 && Math.abs(h.top-i.top-8)<1;
+                    }""")
+                    if page.viewport_size['width']==1440 and state_name=='generated-portrait':
+                        # Enter is the keyboard equivalent; switching with the popup
+                        # open must restore the original mobile controls and attributes.
+                        await page.keyboard.press('Enter')
+                        await expect(page.locator('#desktop-image-zoom')).to_be_visible()
+                        await page.set_viewport_size({'width':390,'height':844})
+                        await expect(page.locator('html')).to_have_attribute('data-presentation','mobile')
+                        await expect(page.locator('#desktop-image-zoom')).not_to_be_visible()
+                        await expect(page.locator('#selected-image-actions .image-heart')).to_have_count(1)
+                        assert await page.locator('#selected-image-preview').get_attribute('role') is None
+                        await page.set_viewport_size({'width':1440,'height':900})
+                        await expect(page.locator('html')).to_have_attribute('data-presentation','desktop')
+                        await page.evaluate('window.scrollTo(0,0)')
                     await expect(page.locator('#selected-image-actions .image-action-status')).to_be_empty()
                     await page.locator('#selected-image-actions [data-action="trash"]').click()
                     await expect(page.locator('#selected-image-actions .image-action-status')).to_contain_text('Only the browser')
