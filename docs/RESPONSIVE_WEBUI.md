@@ -70,7 +70,7 @@ The existing application icon is retained.
 ## Run from source
 
 The three-column workspace is on **testing/webui-workspace**, version
-**1.1.0.dev6**. It branches from main; the uninstall work remains separate.
+**1.1.0.dev7**. It branches from main; the uninstall work remains separate.
 For an isolated source copy,
 close the running app and install as your usual Linux user:
 
