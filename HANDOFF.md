@@ -1,10 +1,10 @@
 # Session handoff — 2026-10-21
 
-## Current update: independent presentation layers
+## Completed: independent presentation layers
 
 - Active work branch: `testing/webui-presentation-layers`, created from pushed
-  `testing/webui-workspace` commit `cddb86b`. Use Git for the final commit/ref;
-  the older branch/application descriptions below are historical context.
+  `testing/webui-workspace` commit `cddb86b`. Separation committed and pushed as
+  `3a7ae41`. Older branch/application descriptions below are historical context.
 - User explicitly requested an architecture-only separation of mobile/desktop
   presentation. Appearance and existing breakpoints are preserved. No additional
   Forge-inspired redesign, workflow/API change or generation change is included.
@@ -24,7 +24,22 @@
   breakpoints and baseline-comparison commands. `AGENTS.md` now explicitly
   protects mobile and directs desktop-only work to the desktop CSS/JS adapter.
 
-Verification on this refactor:
+## Next task: Forge-inspired desktop layout
+
+Refine desktop/laptop arrangement using AUTOMATIC1111 / Forge as a layout
+reference; preserve our colors, typography, component styling, animated Generate
+and cancel controls. Use the desktop CSS/JS adapters described in
+`docs/WEBUI_PRESENTATION.md`; retain the shared application and generation logic.
+**Mobile/tablet layout, styling and behavior must remain unchanged.** Compare
+against the completed separation baseline and rerun mobile isolation/regressions
+alongside desktop responsive checks. The redesign has not been implemented by
+the separation commit. Installation-specific checks below remain outstanding.
+
+After every push, include the full fresh-clone testing command for the pushed
+branch: clone, cd, create `.venv-test`, install with its Python, then launch
+`.venv-test/bin/comfyui-control`.
+
+Verification recorded for the completed refactor (not rerun for this doc update):
 
 - Full Python suite: **430 passed, 1 failed**. The failure is still
   `tests/test_image_workflows.py::test_old_action_preset_and_jobs_are_retained_when_multiplier_mapping_is_added`.
@@ -50,7 +65,7 @@ Verification on this refactor:
   Real Editing verification and the installation-specific outstanding work below
   remain relevant. No release, version bump, tag or main merge was performed.
 
-Current uncommitted artifacts are under `/tmp/presentation-*`, including the
+Transient verification artifacts are under `/tmp/presentation-*`, including the
 pre-change `web/` snapshot and per-engine screenshots. They may not survive
 an environment replacement. The comparison baseline can be recreated from Git.
 
