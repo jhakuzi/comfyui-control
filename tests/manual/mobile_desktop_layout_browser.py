@@ -27,7 +27,7 @@ from test_resolution_controls import controlaltai_resolution
 SIZES = [(1280, 800), (1440, 900), (1512, 982), (1920, 1080), (2560, 1440)]
 
 
-async def main(engine, root, baseline):
+async def main(engine, root, baseline, desktop_redesign=False):
     root.mkdir(parents=True, exist_ok=True)
     graph, info = generation_workflow.__wrapped__(controlaltai_resolution.__wrapped__())
     graph['negative'] = dict(class_type='Text', inputs={'text': 'Negative prompt'})
@@ -145,7 +145,12 @@ async def main(engine, root, baseline):
                 })''')
                 key = (page.viewport_size['width'], state_name)
                 if baseline_view:
-                    assert reports[key] == report, (key, reports[key], report)
+                    if desktop_redesign:
+                        # Geometry is intentionally new; component skins and the
+                        # mobile pixel comparison below must still match exactly.
+                        assert reports[key]['skins'] == report['skins'], (key, reports[key]['skins'], report['skins'])
+                    else:
+                        assert reports[key] == report, (key, reports[key], report)
                 else:
                     reports[key] = report
                 assert not report['overflow'] and not report['overlap'], report
@@ -159,7 +164,18 @@ async def main(engine, root, baseline):
                 assert report['prompts']['y'] >= report['toolbar']['bottom'], report
                 assert report['actions']['x'] >= report['prompts']['right'] + 12, report
                 for a, b in zip(report['panels'], report['panels'][1:]):
-                    assert abs(b['top'] - a['bottom'] - 16) < 1, report
+                    assert abs(b['top'] - a['bottom'] - (16 if baseline_view else 12)) < 1, report
+                if not baseline_view:
+                    # Bounded controls, both prompts above the settings, and an
+                    # unobscured Generate are meaningful redesign requirements.
+                    assert report['stack']['width'] <= 680, report
+                    assert report['toolbar']['height'] < 240, report
+                    assert report['prompts']['height'] <= 180, report
+                    prompt_boxes = await page.locator('[data-role="positive"], [data-role="negative"]').evaluate_all(
+                        'els => els.map(el => el.getBoundingClientRect().toJSON())')
+                    assert abs(prompt_boxes[0]['y'] - prompt_boxes[1]['y']) < 1, prompt_boxes
+                    assert prompt_boxes[1]['x'] >= prompt_boxes[0]['right'] + 12, prompt_boxes
+                    await expect(page.locator('#generate')).to_be_in_viewport()
                 if state_name in {'online-empty', 'offline'}:
                     assert report['panel']['height'] < 240, report
                 if image:
@@ -189,7 +205,12 @@ async def main(engine, root, baseline):
                         mobile_context, mobile = await open_page(width, height, old)
                         if not old:
                             await mobile.set_viewport_size({'width': 1440, 'height': 900})
+                            await expect(mobile.locator('html')).to_have_attribute('data-presentation', 'desktop')
+                            await expect(mobile.locator('#workspace')).to_have_attribute('data-layout', 'studio')
                             await mobile.set_viewport_size({'width': width, 'height': height})
+                            await expect(mobile.locator('html')).to_have_attribute('data-presentation', 'mobile')
+                            await expect(mobile.locator('#workspace')).to_have_attribute('data-layout', 'compact')
+                            await expect(mobile.locator('#generation-dock > #generate')).to_have_count(1)
                         # Textarea caret scrolling changes naturally with width;
                         # compare the same unfocused content position in both shells.
                         await mobile.evaluate('''() => {
@@ -221,5 +242,6 @@ if __name__ == '__main__':
     parser.add_argument('--browser', choices=['chromium', 'webkit'], default='chromium')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--baseline-web', type=Path)
+    parser.add_argument('--desktop-redesign', action='store_true', help='Compare shared skins and mobile pixels, but validate the new desktop geometry independently')
     args = parser.parse_args()
-    asyncio.run(main(args.browser, args.output, args.baseline_web))
+    asyncio.run(main(args.browser, args.output, args.baseline_web, args.desktop_redesign))

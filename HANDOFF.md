@@ -1,5 +1,62 @@
 # Session handoff — 2026-10-21
 
+## Current work: desktop redesign
+
+The Forge-inspired desktop redesign is on `testing/webui-desktop-forge`, based
+on `testing/webui-presentation-layers` at `5240e59`. The user authorized committing
+and pushing the redesign to a dedicated testing branch. This section supersedes
+the earlier “Next task” below.
+
+- `presentation_desktop.css` consolidates the old overlapping layout rules into
+  a wrapping, bounded workflow/model toolbar, side-by-side prompts at 1280px+
+  (a lone prompt takes the full prompt area), Generate/cancel actions alongside,
+  compact slider/value rows and settings left, image workspace right, gallery
+  below. Empty/loading previews are compact; saved images preserve their aspect
+  ratio within 65dvh. Desktop content is capped at 2240px with settings up to 680px.
+- `presentation_desktop.js` uses reversible `place()` for resolution/LoRA reading
+  order and toolbar connection hints. Active/completed job cards stay in the
+  image workspace. No controls, event handlers, requests or state are duplicated.
+- Shared change: only the public `sw.js` cache version was incremented so installed
+  shells receive changed desktop assets. Mobile CSS/JS, shared skins/tokens,
+  markup, coordinator, application logic and backend remain untouched.
+- `docs/WEBUI_PRESENTATION.md` documents the layout and `--desktop-redesign`
+  comparison flag. Four manual browser scripts have updated desktop geometry
+  expectations or explicit waits for WebKit presentation selection after resizing.
+  Mobile isolation and pixel assertions are unchanged.
+
+Verification for this work:
+
+- Full Python suite: **430 passed, 1 failed**, the previously documented
+  `test_old_action_preset_and_jobs_are_retained_when_multiplier_mapping_is_added`
+  equality failure (`seconds_per_iteration: None`). The focused public shell/cache
+  test passed again after the cache change. No timing normalization was changed.
+- Chromium: final desktop layout/skin and mobile baseline comparison, isolation,
+  responsive/reconnection/gallery/privacy/reuse, generation/seed/batch and Generate
+  fill/cancellation checks passed. Supplied editor workflow check also passed.
+- WebKit: desktop layout/skin and mobile baseline comparison, isolation, responsive,
+  generation/seed/batch and Generate fill/cancellation checks passed. Mobile pixels
+  match after waiting for each presentation selection and control restoration.
+- Actual screenshots were inspected and used to refine the offline toolbar and
+  compact settings. JS/Python syntax, whitespace and protected-file diffs pass.
+- Desktop matrix: 1280×800, 1440×900, 1512×982, 1920×1080, 2560×1440.
+  Mobile pixel baseline: 390×844, 430×932, 768×1024, 834×1194, 1024×1366,
+  including desktop round trips. Protocol fixtures do not establish real GPU,
+  NAS, VPN or physical iOS behavior.
+
+Artifacts are under `/tmp/control-*`. The exported pre-change web assets are in
+`/tmp/control-desktop-baseline/comfyui_control/mobile/web`. Final screenshot/check
+outputs include `/tmp/control-desktop-v5-chromium`,
+`/tmp/control-desktop-v6-webkit`, `/tmp/control-responsive-v3-chromium`, and
+`/tmp/control-responsive-final-webkit`. They may not survive environment replacement.
+For WebKit here, downloaded system libraries are extracted under
+`/tmp/control-browser-libs/root` and linked into the browser's local `sys/lib`.
+Use `PLAYWRIGHT_BROWSERS_PATH=/workspace/.playwright-browsers`,
+`QT_QPA_PLATFORM=offscreen`, `XDG_CACHE_HOME=/tmp/control-cache`, plus
+`PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=1` and
+`LD_LIBRARY_PATH=/tmp/control-browser-libs/root/usr/lib/x86_64-linux-gnu` for WebKit.
+The latter bypasses only Playwright's system-library discovery; the libraries
+are present in the local browser bundle.
+
 ## Completed: independent presentation layers
 
 - Active work branch: `testing/webui-presentation-layers`, created from pushed

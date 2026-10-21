@@ -6,13 +6,17 @@ window.ComfyDesktopPresentation = (() => {
   const openSections = new Set(["settings-card", "resolution-card", "lora-card", "negative-controls"]);
   function arrange({ compactSections, uiState, place }) {
     if ($("workflow-picker").parentElement !== $("desktop-toolbar")) {
-      for (const node of [$("workflow-picker"), $("model-controls"), document.querySelector(".model-tools")])
+      for (const node of [$("workflow-picker"), $("model-controls"), document.querySelector(".model-tools"),
+        $("empty-presets"), $("comfy-offline")])
         place(node, $("desktop-toolbar"));
     }
     if ($("generate").parentElement !== $("desktop-generate-slot")) {
       place($("generate"), $("desktop-generate-slot"));
       place($("prompt-actions"), $("desktop-generate-slot"));
     }
+    // Match the visual reading order without changing the mobile control tree.
+    if ($("resolution-card").nextElementSibling !== $("lora-card"))
+      place($("resolution-card"), $("settings-stack"), $("lora-card"));
     for (const id of openSections) {
       const section = $(id);
       if (!section) continue;
@@ -36,12 +40,12 @@ window.ComfyDesktopPresentation = (() => {
   }
   function generation({ job, active, submitting, inspectingSavedImage, place }) {
     const dock = $("generation-dock"), card = $("job-card");
-    const destination = active || submitting ? dock : $("job-output");
+    const destination = $("job-output");
     card.hidden = !job && !submitting;
     $("preview-stage").hidden = !(active || submitting) || inspectingSavedImage;
     $("job-output").hidden = false;
     if (card.parentElement !== destination) {
-      place(card, destination, active ? destination.firstChild : null);
+      place(card, destination);
     }
     dock.hidden = false;
   }

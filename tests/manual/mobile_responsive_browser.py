@@ -142,7 +142,10 @@ async def main(browser_name, root):
                     library = await page.locator('#gallery-page').bounding_box()
                     assert panel['x'] >= settings['x'] + settings['width'] + 12
                     assert abs(panel['y'] - settings['y']) < 1
-                    assert card['width'] > panel['width'] * 1.8
+                    # The redesigned desktop bounds settings and gives images
+                    # the remaining width; the toolbar spans both columns.
+                    assert abs(card['x'] - settings['x']) < 1
+                    assert abs(card['x'] + card['width'] - panel['x'] - panel['width']) < 1
                     assert abs(library['x'] - card['x']) < 1 and abs(library['width'] - card['width']) < 1
                     assert library['y'] >= panel['y'] + panel['height']
                     for section in ('settings-card', 'resolution-card', 'lora-card'):

@@ -82,6 +82,7 @@ async def main(engine, root):
             await page.screenshot(path=str(root / 'generation-desktop.png'), full_page=True)
             for width, height in [(320, 844), (390, 844), (1024, 768), (1440, 900)]:
                 await page.set_viewport_size({'width': width, 'height': height})
+                await expect(page.locator('html')).to_have_attribute('data-presentation', 'desktop' if width >= 1024 else 'mobile')
                 assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
                 await expect(page.locator('#batch-count')).to_have_value('2')
             await page.locator('#generate').click()

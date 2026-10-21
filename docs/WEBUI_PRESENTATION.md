@@ -1,8 +1,10 @@
 # WebUI presentation layers
 
 ComfyUI Control serves one buildless application, with independent mobile and
-desktop presentation adapters. This separation preserves the appearance and
-behavior at `cddb86b`; it does not introduce another desktop design or backend.
+desktop presentation adapters. The initial separation preserved the appearance
+and behavior at `cddb86b`. The desktop workspace described below evolves only
+the desktop adapter; mobile/tablet presentation and the shared backend remain
+unchanged.
 
 ## File responsibilities
 
@@ -26,6 +28,18 @@ The Python service, workflow bindings, generation queue, API routes and persiste
 are shared and unchanged by presentation selection. The only server adjustment
 for this refactor is permitting the additional public CSS/JS assets. Existing
 `web/*` package data includes them without a new build step or dependency.
+
+## Desktop workspace
+
+The desktop adapter now uses a wrapping workflow/model/VAE/encoder toolbar,
+side-by-side prompts from 1280px, and Generate with the existing cancellation
+controls alongside. Narrower desktop windows stack the prompts. Settings occupy
+one bounded column, with generation, resolution, LoRAs and Advanced in reading
+and keyboard order. The image workspace takes the remaining width; empty/loading
+previews stay compact and completed images retain their proportions within 65dvh.
+Gallery/history follows the workspace with bounded thumbnails and normal page
+scrolling. Component skins, mobile/tablet layouts and mode selection are unchanged.
+All control moves use the existing reversible `place()` helper.
 
 ## Mode selection and isolation
 
@@ -99,14 +113,21 @@ without modifying your working checkout:
 
 ```bash
 mkdir -p /tmp/control-presentation-baseline
-git archive cddb86b comfyui_control/mobile/web | tar -x -C /tmp/control-presentation-baseline
-.venv/bin/python tests/manual/mobile_desktop_layout_browser.py --browser chromium --output /tmp/control-presentation-parity --baseline-web /tmp/control-presentation-baseline/comfyui_control/mobile/web
+git archive 3a7ae41 comfyui_control/mobile/web | tar -x -C /tmp/control-presentation-baseline
+.venv/bin/python tests/manual/mobile_desktop_layout_browser.py --browser chromium --output /tmp/control-presentation-parity --desktop-redesign --baseline-web /tmp/control-presentation-baseline/comfyui_control/mobile/web
 ```
 
-That check compares desktop geometry and component skins before/after for empty,
-offline, running and portrait/landscape-result states, and compares compact
-screenshots after a desktop round trip. A one-channel-level antialiasing tolerance
-allows browser compositor rounding without permitting geometry/content changes.
+That check compares desktop component skins before/after for empty, offline,
+running and portrait/landscape-result states, validates the new desktop geometry,
+and compares compact screenshots after a desktop round trip. A one-channel-level
+antialiasing tolerance allows browser compositor rounding without permitting
+mobile geometry/content changes. The completed separation baseline is `3a7ae41`.
+
+`--desktop-redesign` allows the intentional desktop geometry changes while keeping
+shared skins and mobile pixel comparisons mandatory. Without the flag, desktop
+geometry parity also applies. Running the layout check without a baseline validates
+the current desktop geometry alone.
+
 The dedicated isolation check disables the inactive presentation stylesheet and
 verifies the active UI is unchanged, checks unique/live controls, and exercises a
 desktop-only placement unknown to mobile followed by automatic restoration.

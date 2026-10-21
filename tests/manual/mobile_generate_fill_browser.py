@@ -114,6 +114,7 @@ async def main(engine, root):
             await page.wait_for_function('() => document.getElementById("cancel-controls").getBoundingClientRect().width >= 221')
             await page.screenshot(path=str(root / 'cancel-expanded.png'))
             await page.set_viewport_size({'width': 390, 'height': 844})
+            await expect(page.locator('html')).to_have_attribute('data-presentation', 'mobile')
             await expect(queue_button).to_be_visible()
             assert await queue_button.evaluate('el => el.getBoundingClientRect().right <= innerWidth')
             await page.screenshot(path=str(root / 'cancel-phone.png'))
