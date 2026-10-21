@@ -118,6 +118,8 @@ the user's authorization; follow `docs/MAINTAINING.md` and `packaging/README.md`
   snapshots, then verified metadata conversion; otherwise request an API export.
   Preserve unknown nodes/connections and alter only explicitly mapped literals.
   Never overwrite the user's original workflows or guess custom widget order.
+  The picker lists live ComfyUI files first, manual imports separately, and hides
+  retained/internal snapshots except the explicitly reused current settings.
 - General workflow handling must remain generic. Named image-action bindings in
   `IMAGE_WORKFLOWS` are an explicit user-approved exception; their graphs still
   come from ComfyUI. Do not hardcode replacement Qwen/SeedVR/model pipelines.
@@ -128,19 +130,28 @@ the user's authorization; follow `docs/MAINTAINING.md` and `packaging/README.md`
   per generation is the normal default, with fixed seeds explicitly selectable.
   Resolution calculators can expose megapixels/rounding as string dropdowns:
   preserve metadata choices and native types, and retain linked latent dimensions.
+  Control discovery adds missing recognized literal inputs without replacing
+  existing mapping keys/roles or unsent drafts. Explicit mapping saves suppress
+  repeated additions on normal loads; presentation roles expose existing Advanced
+  controls in their proper panel without rewriting stored mappings. Do not
+  fabricate controls for inputs absent from a workflow.
 - Reuse job request UUIDs, output scoping, queue/history recovery and foreground
   reconnect behavior. Phone lock/disconnection does not stop ComfyUI generation.
   Batch count queues normal persisted jobs under one request group; retries never
   requeue that group. Stop on uncertain submissions/output changes, and cancel
   batch members through safe per-job cancellation with owner/scope checks.
-  Batch size remains a mapped graph input. Seed-only reuse preserves other edits.
+  Batch size remains a mapped graph input; count is limited by the existing
+  20-unfinished-job cap. Random mode chooses a seed per run; fixed mode retains
+  the seed. Seed-only reuse uses the latest matching completed job and preserves
+  other edits; whole-settings reuse resets batch count to 1.
   Actions must identify a specific current saved image, not the latest result.
 - Retain originals for Edit/Upscale; uploaded pixel copies strip PNG metadata.
   Image Favourites reuse the existing private Keep sidecar and `keep`/`kept` API
   fields; preserve those for compatibility. Image hearts are the only Favourites
   UI; prompt history has no separate star/favourites controls. Retain legacy
-  prompt records and flags without migration or data loss. Trash is recoverable app-managed storage, not
-  permanent deletion. Guard image version, ownership, traversal and symlinks.
+  prompt records and flags without migration or data loss. Trash is recoverable
+  app-managed storage, not permanent deletion. Guard image version, ownership,
+  traversal and symlinks.
 - Preserve Host/Origin validation, CSP, request limits, optional authentication
   and per-client privacy. Opt-in image metadata sharing must not expose another
   client's live jobs, cancellation or prompt history. QR URLs contain no secrets.
