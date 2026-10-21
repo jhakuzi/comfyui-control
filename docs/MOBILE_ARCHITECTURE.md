@@ -2,13 +2,6 @@
 
 ## Testing: responsive workspace (1.1.0.dev7)
 
-`--demo-webui` previews the real WebUI without desktop/ComfyUI configuration.
-Its isolated `mobile/demo.py` runner uses an in-process loopback protocol
-simulator plus the existing MobileService/MobileHTTP and frontend. A temporary
-directory owns all sample images, presets, sessions and jobs; normal config,
-mount/process management and real output paths are never loaded. The demo is
-clearly labeled and binds only to loopback unless `--demo-host` is supplied.
-
 The saved-workflow importer now handles the supplied Qwen/SeedVR editor
 structures directly: declared upload UI values, canvas notes, native dynamic
 inputs, and explicit namespaced subgraphs with promoted widget settings.

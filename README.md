@@ -64,11 +64,6 @@ Use **Settings** for Python, scripts, flags, and the application style.
 Over SSH: `comfyui-control --start-server --start-webui`. **Ctrl+C** stops both
 servers. Uses your saved configuration; no desktop login is needed.
 
-To preview the WebUI on a headless server **without configuring ComfyUI**, run
-`comfyui-control --demo-webui --demo-host 0.0.0.0`. Open `http://SERVER_IP:8190`
-on your LAN/VPN. This uses temporary sample images and simulated generation;
-Ctrl+C stops it and discards demo data. [Demo details](docs/SSH.md#webui-demo-without-comfyui).
-
 ## Mobile UI
 
 Generate from your phone, iPad or laptop over your LAN or VPN using saved workflows.

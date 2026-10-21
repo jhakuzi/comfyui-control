@@ -21,48 +21,6 @@ Without flags, the application opens its normal desktop window.
 | `--start-webui` | Start Mobile WebUI only; use the saved API URL for an existing ComfyUI server. That external server is left running on exit. |
 | `--help` / `--version` | Print information without opening a window. |
 
-## WebUI demo without ComfyUI
-
-For UI testing on a fresh headless server, use the same application in demo mode:
-
-```bash
-comfyui-control --demo-webui --demo-host 0.0.0.0
-```
-
-Open `http://YOUR_SERVER_IP:8190/` from your laptop, iPad or phone on the same
-LAN/VPN. If your firewall blocks it, allow that port for your trusted network.
-The command prints the detected URL. Use `--demo-port 8191` if 8190 is occupied,
-or `--demo-host YOUR_VPN_IP` to bind only to that interface. Without `--demo-host`,
-the demo listens on `127.0.0.1` for local-only access. Its default port 8190
-keeps browser drafts separate from the normal WebUI on 8189; use a separate
-browser profile if you override it to an origin you already use for real jobs.
-
-- No desktop setup, ComfyUI installation, GPU, models or saved configuration is needed.
-- This serves the existing responsive WebUI with sample prompts, model/LoRA
-  choices and abstract gallery images. Generate simulates progress and creates
-  another sample image; it does not run a model or interpret your prompt.
-- History, favorites, comparison, image details and reuse use their normal code.
-  Refresh/reconnection works while the demo command is running.
-- Edit/Upscale remain unavailable because real action workflows are not configured.
-  GPU statistics stay unavailable; no real monitoring or VRAM cleanup occurs.
-- A visible demo notice distinguishes this from a real connected ComfyUI server.
-- All demo files are temporary. Ctrl+C/SIGTERM stops both listeners and discards
-  the demo's images, jobs and server-side history. Your real app settings,
-  session data, NFS mounts and output folders are untouched. Forced termination
-  such as SIGKILL can leave the OS temporary directory for system cleanup.
-
-Demo mode has no password; keep access within a trusted LAN/VPN. It cannot be
-combined with `--start-server` or `--start-webui`. The Qt system libraries listed
-below are still required. For real generation, use the normal configured mode.
-
-From an existing testing checkout, update and launch with:
-
-```bash
-git pull --ff-only
-.venv-test/bin/python -m pip install .
-.venv-test/bin/comfyui-control --demo-webui --demo-host 0.0.0.0
-```
-
 ## Headless system dependencies
 
 The Python dependencies (`PySide6-Essentials`, `aiohttp`, `qrcode`) are installed

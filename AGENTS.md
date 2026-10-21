@@ -19,7 +19,7 @@ and presents simpler controls on phones, tablets and desktops.
 
 | Location | Responsibility |
 | --- | --- |
-| `comfyui_control/cli.py` | Entry point; desktop, configured SSH and isolated demo modes. Imports runtime code lazily. |
+| `comfyui_control/cli.py` | Entry point; desktop and configured SSH modes. Imports runtime code lazily. |
 | `app.py`, `*_widgets.py` | PySide6 desktop window, dialogs, monitoring, mobile settings and tray interaction. |
 | `config.py`, `flags.py`, `script_flags.py`, `launch_script.py` | Validated configuration, argv construction, safe script inspection/adaptation. |
 | `controller.py` | Asynchronous QProcess ownership, start/stop/restart, updates and crash recovery. |
@@ -34,7 +34,6 @@ and presents simpler controls on phones, tablets and desktops.
 | `mobile/workflows.py`, `workflow_sources.py` | Immutable API graphs, explicit mappings, metadata-described controls, saved workflow discovery/import. |
 | `mobile/editor_subgraphs.py`, `input_metadata.py` | Bounded subgraph expansion and shared ComfyUI V3 dynamic-input metadata interpretation. |
 | `mobile/image_actions.py`, `image_pixels.py`, `image_metadata.py`, `prompt_history.py` | Saved-image actions/Keep marks, pixel encoding, metadata and private prompt history. |
-| `mobile/demo.py` | Explicit opt-in simulator serving the real WebUI with disposable sample data; no real ComfyUI configuration. |
 | `mobile/web/` | Buildless HTML/CSS/JavaScript; `app.js` coordinates existing views; comparison, history, details and actions have separate modules. |
 | `tests/`, `tests/manual/`, `tests/fixtures/` | pytest regression suite, explicit browser/real-server checks and redacted workflow fixtures. |
 | `packaging/`, `.github/workflows/`, `downloads/` | ZIP/SRPM builders, Fedora packaging, controlled release automation and downloadable artifacts. |
@@ -63,7 +62,6 @@ python3 -m venv .venv
 .venv/bin/python -m pip install -e . pytest
 .venv/bin/comfyui-control                         # Desktop
 .venv/bin/comfyui-control --start-server --start-webui
-.venv/bin/comfyui-control --demo-webui --demo-host 0.0.0.0
 ```
 
 Normal SSH startup requires saved configuration for the same Linux account.
@@ -71,9 +69,7 @@ Normal SSH startup requires saved configuration for the same Linux account.
 configured installation. Ctrl+C stops owned components. Do not start a second
 desktop/SSH instance against the same configuration; both use an instance lock.
 
-Demo mode requires no configured installation: default `127.0.0.1:8190`, optional
-`--demo-host`/`--demo-port`; no password, so use a trusted LAN/VPN. It uses temporary
-server data and simulated generation. Normal WebUI defaults to port 8189.
+The WebUI defaults to port 8189.
 
 For a non-editable testing install, use `.venv-test/bin/python -m pip install .`
 after each pull and run that environment's executable. `bash install.sh` creates
@@ -87,7 +83,6 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 .venv/bin/python -m playwright install chromium webkit
 .venv/bin/python tests/manual/mobile_responsive_browser.py --browser chromium --output /tmp/control-responsive-check
 .venv/bin/python tests/manual/mobile_saved_editors_browser.py --browser chromium --output /tmp/control-editor-check
-.venv/bin/python tests/manual/mobile_demo_browser.py --browser webkit --output /tmp/control-demo-check
 python3 packaging/make_app_zip.py --outdir dist
 python3 packaging/make_srpm.py --outdir dist          # Requires rpmbuild
 git diff --check

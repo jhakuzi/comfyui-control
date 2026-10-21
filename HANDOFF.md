@@ -1,6 +1,24 @@
 # Session handoff — 2026-10-21
 
-## Snapshot and current authorization
+## Current follow-up — demo removal
+
+- The user confirmed that the demo worked and requested its removal. The demo
+  runner, CLI options, dedicated tests/browser check and usage instructions have
+  been removed. Desktop and configured SSH/WebUI startup remain supported.
+- The user confirmed that Upscaling works. Editing still needs verification.
+- Uninstall work is deferred; do not merge it as part of this cleanup.
+- The 11 obsolete branches fully contained in `main` were deleted. Remaining
+  branches are `main`, `testing/webui-workspace` and `testing/uninstaller`.
+- The sections below retain historical implementation and verification context;
+  demo results describe the removed feature, not current functionality.
+- Removal verification: CLI help and rejection of all three removed flags passed;
+  `git diff --check` passed. Full pytest: **409 passed, 1 failed** in 37.81s.
+  `test_old_action_preset_and_jobs_are_retained_when_multiplier_mapping_is_added`
+  also fails on untouched `a2eade7` in this environment: background reconciliation
+  adds `seconds_per_iteration: None` to its synthetic old-job fixture. This is
+  pre-existing and was left outside the demo-removal change.
+
+## Previous snapshot and documentation authorization
 
 - Repository: `https://github.com/jhakuzi/comfyui-control`, local checkout
   `/workspace/comfyui-control`.
@@ -48,8 +66,8 @@ Current development objectives, in order:
    cleanup, boxed Details/Copy prompt and richer generation progress/loading UI.
 6. Resolve the actual supplied editor-workflow import errors using normal/API
    exports, preserving real settings and connections.
-7. Document Debian 13 headless dependencies and provide UI-only testing without
-   an existing desktop-configured ComfyUI environment.
+7. Document Debian 13 headless dependencies. Standalone UI testing was completed;
+   the user subsequently requested removal of the temporary demo feature.
 
 The earlier inpainting/Mask by Touch compatibility plan was explicitly superseded
 by the responsive-workspace request. There is **no approved pending inpainting
@@ -141,30 +159,18 @@ Important differences between the user's supplied files:
 - Redacted copies of the supplied structures are committed under
   `tests/fixtures/workflow_conversion/`; private uploaded originals are not bundled.
 
-### Debian documentation and standalone demo
+### Debian documentation
 
 - README and SSH/usage guides explain Python packages versus OS Qt libraries,
   Debian 13 runtime installation, real import checks, xcb/display failures and
   optional NFS packages. Installing a desktop is not necessary for terminal mode.
 - Normal `--start-webui` still requires saved configuration. That was the user's
   latest blocker on a new headless server; it was not a missing Qt-library error.
-- New **`--demo-webui`** uses the real MobileHTTP/MobileService/frontend with a
-  loopback ComfyUI protocol simulator and six abstract sample images. No desktop
-  configuration, real ComfyUI server, models, GPU, mount setup or real output
-  folder is loaded. It includes sample model/VAE/encoder/LoRA controls.
-- Generate creates another abstract image with simulated progress. History,
-  details, Keep, reuse and recovery use existing code. Real Edit/Upscale remain
-  disabled because their workflows are absent; GPU metrics remain unavailable.
-- Demo has a visible notice, a temporary data directory and clean Ctrl+C/SIGTERM
-  shutdown. Default is `127.0.0.1:8190`; `--demo-host 0.0.0.0` enables LAN access.
-  Separate default port avoids sharing real WebUI localStorage on port 8189.
-- Conflicting CLI flags, invalid IP/port and occupied ports produce terminal
-  errors without a traceback. Demo mode does not repair or overwrite corrupt
-  existing configuration. SIGKILL cannot guarantee temporary-directory cleanup.
+- The standalone demo added in `7239ef6` was verified by the user and then
+  removed at their request. It is no longer an available startup mode.
 - A workspace-local preview was run earlier, but no supported inbound URL could
   be exposed from that cloud environment. Do not promise a remotely reachable
-  preview without checking current hosting capabilities. The new demo lets the
-  user test on their own Debian machine.
+  preview without checking current hosting capabilities.
 
 ## Change history and files
 
@@ -185,15 +191,15 @@ Main feature commits on this branch, oldest first:
 
 File inventory relative to the inspected 1.0.1 baseline (`7e500d9`):
 
-- **Added runtime:** `mobile/{demo,editor_subgraphs,image_actions,image_pixels,input_metadata}.py`
+- **Added runtime:** `mobile/{editor_subgraphs,image_actions,image_pixels,input_metadata}.py`
   under `comfyui_control/`, and `mobile/web/image_actions.js`.
 - **Modified runtime:** `comfyui_control/{__init__,cli,network_output}.py` and
   `comfyui_control/mobile/{client,server,service,workflow_sources,workflows}.py`.
 - **Modified frontend:** `mobile/web/{app.js,image_details.js,index.html,
   manifest.webmanifest,style.css,sw.js}` under `comfyui_control/`.
-- **Added tests:** `tests/test_{demo_webui,editor_workflow_compatibility,image_actions,image_workflows}.py`;
+- **Added tests:** `tests/test_{editor_workflow_compatibility,image_actions,image_workflows}.py`;
   four `tests/fixtures/workflow_conversion/{qwen,seedvr}-{editor,api}.json` fixtures;
-  `tests/manual/mobile_{demo,image_workflows,saved_editors}_browser.py`.
+  `tests/manual/mobile_{image_workflows,saved_editors}_browser.py`.
 - **Modified browser checks:** `tests/manual/mobile_{extras,loras,responsive}_browser.py`.
 - **Added documentation:** `docs/IMAGE_WORKFLOW_INTEGRATION.md`.
 - **Modified documentation:** `README.md`,
@@ -232,9 +238,9 @@ Do not claim to have re-inspected them here; recreate checks when new evidence i
 
 **Verified current limitations:**
 
-- Real Qwen/SeedVR GPU inference has not been tested in the agent environment or
-  confirmed by the user after the latest converter fix. The full required models
-  and GPU runtime were unavailable. Passing graph tests is not inference proof.
+- Real Qwen/SeedVR GPU inference has not been tested in the agent environment.
+  The user has since confirmed Upscaling works; Editing remains unverified.
+  Passing graph tests is not inference proof.
 - Unknown custom widgets, ambiguous subgraph promotion/routing, recursive/deep
   definitions and muted/bypassed subgraph instances intentionally request API
   exports or exact queued snapshots. Do not weaken these safeguards to hide errors.
@@ -242,8 +248,7 @@ Do not claim to have re-inspected them here; recreate checks when new evidence i
   images are not action sources. Uploaded input copies remain in ComfyUI `input/`;
   failed attempts after upload can leave unused copies. No automatic deletion.
 - The existing service reports interruption of a running generation as `failed`
-  with an interruption message; queued cancellation can be `cancelled`. Demo tests
-  respect this behavior rather than changing production session semantics.
+  with an interruption message; queued cancellation can be `cancelled`.
 - No deployment/package rebuild was performed for dev7. RPM spec remains
   `Version: 1.1.0`, `Release: 0.2.dev2`, while Python metadata is `1.1.0.dev7`.
   The SRPM script accepts `.devN` Python suffixes, but release metadata needs
@@ -257,42 +262,26 @@ Do not claim to have re-inspected them here; recreate checks when new evidence i
 
 **Unresolved observations/questions, not confirmed product defects:**
 
-- Full-page demo screenshots showed dark thumbnail cells despite nonzero decoded
-  image dimensions. A direct PNG/JPEG pixel check returned colored sample pixels.
-  This may be browser screenshot/paint timing; visually inspect on a real browser
-  before claiming either a gallery bug or full visual verification.
-- The user has not yet reported running the new demo mode on their Debian server.
+- Earlier demo screenshots had a possible thumbnail-paint timing issue. The user
+  subsequently reported that the demo worked fine and no longer needs it.
 - Current branch changes need physical iPhone/iPad and real NAS Trash/Restore
   checks. Earlier user confirmations apply to the older output/reconnect features.
 
 ## Recommended next steps (priority order)
 
-1. Let the user update their testing checkout and run the new demo command below;
-   collect any actual Debian import, bind/firewall or visual issues. Investigate
-   thumbnail painting if reproduced. Keep demo distinct from real generation.
-2. On the user's configured PC, verify selected older image → Edit instruction
-   and Upscale with blank/1.5 multiplier using the current saved editor workflows.
-   Check actual outputs, GGUF/cache wiring, saved 3× default, model availability
-   and clear errors. Do not silently replace graphs with the supplied older API.
-3. Manually exercise real-generation refresh/phone lock/VPN recovery, duplicate
+1. On the user's configured PC, verify selected older image → Edit instruction
+   using the current saved editor workflow. Check actual outputs, GGUF/cache
+   wiring, model availability and clear errors. Do not silently replace graphs
+   with the supplied older API. Upscaling has been confirmed by the user.
+2. Manually exercise real-generation refresh/phone lock/VPN recovery, duplicate
    prevention, cancellation, image ownership/sharing, source preservation and NFS
    fallback/gallery/Trash restore on this branch.
-4. If requested, merge `testing/uninstaller` separately. Reconcile CLI/metadata,
-   installer/ZIP contents, Settings UI and uninstall safety tests; run regressions.
-5. After user approval only: reconcile documentation/version/spec/downloads,
+3. If requested later, merge `testing/uninstaller` separately. It is deferred.
+   Reconcile CLI/metadata, installer/ZIP contents, Settings UI and uninstall
+   safety tests; run regressions.
+4. After user approval only: reconcile documentation/version/spec/downloads,
    rerun appropriate tests, merge to main, tag and queue COPR using release guides.
    No new release authorization has been given.
-
-Latest command supplied to the user, from their existing testing checkout:
-
-```bash
-git pull --ff-only
-.venv-test/bin/python -m pip install .
-.venv-test/bin/comfyui-control --demo-webui --demo-host 0.0.0.0
-```
-
-Open `http://YOUR_SERVER_IP:8190/` on the trusted LAN/VPN. Qt OS dependencies are
-still required. Ctrl+C stops the demo; it performs no real inference.
 
 ## Workspace-specific cautions
 
