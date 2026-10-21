@@ -74,31 +74,36 @@
         </nav>
         <section id="create-page">
           <form id="generate-form">
-            <section class="card">
-              <label for="preset">Workflow</label>
-              <div class="selector-tools">
-                <select id="preset">
-                  <option value="">Choose a workflow…</option>
-                </select>
-                <button id="refresh-workflows" class="icon-button" type="button" aria-label="Refresh saved ComfyUI workflows" title="Refresh saved ComfyUI workflows">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9" /></svg>
+            <section class="card" id="workflow-card">
+              <div id="workflow-picker">
+                <label for="preset">Workflow</label>
+                <div class="selector-tools">
+                  <select id="preset">
+                    <option value="">Choose a workflow…</option>
+                  </select>
+                  <button id="refresh-workflows" class="icon-button" type="button" aria-label="Refresh saved ComfyUI workflows" title="Refresh saved ComfyUI workflows">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9" /></svg>
+                  </button>
+                </div>
+                <p id="empty-presets" class="hint">
+                  Import an API-format workflow below to get started.
+                </p>
+                <p id="comfy-offline" class="hint" hidden>
+                  Start ComfyUI in the desktop app. This page will reconnect
+                  automatically.
+                </p>
+              </div>
+              <div id="prompt-controls"></div>
+              <div id="prompt-actions">
+                <div class="prompt-shortcuts">
+                  <button id="prompt-history" class="small" type="button" aria-label="Prompt history">History</button>
+                  <button id="image-favourites" class="small" type="button">Favourites</button>
+                </div>
+                <button id="reuse-last" class="small prompt-action" type="button" hidden>
+                  Reuse last generation
                 </button>
               </div>
-              <p id="empty-presets" class="hint">
-                Import an API-format workflow below to get started.
-              </p>
-              <p id="comfy-offline" class="hint" hidden>
-                Start ComfyUI in the desktop app. This page will reconnect
-                automatically.
-              </p>
-              <div id="prompt-controls"></div>
-              <div class="prompt-shortcuts">
-                <button id="prompt-history" class="small" type="button" aria-label="Prompt history">History</button>
-                <button id="image-favourites" class="small" type="button">Favourites</button>
-              </div>
-              <button id="reuse-last" class="small prompt-action" type="button" hidden>
-                Reuse last generation
-              </button>
+              <div id="desktop-generate-slot"></div>
               <div class="model-tools">
                 <span class="muted">Models</span>
                 <button id="refresh-models" class="icon-button" type="button" aria-label="Refresh model choices" title="Refresh model choices" hidden>

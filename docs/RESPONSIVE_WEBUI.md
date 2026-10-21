@@ -12,13 +12,17 @@ Refreshing the list preserves the selected workflow and unsent edits; no stored
 presets, history or original workflow files are deleted by this organization.
 
 - **Phone / narrow window:** existing compact controls and bottom Generate/progress dock.
-- **Desktop / large landscape iPad:** settings and prompts on the left, a large
-  selected-image preview in the center, and gallery/history on the right.
+- **Desktop / large landscape iPad:** workflow and model selectors across the
+  top, broad positive/negative prompts with Generate beside them, open generation,
+  resolution and LoRA settings on the left, and a large preview on the right.
+  The full-width gallery sits underneath. Advanced mappings remain collapsible.
   Click a thumbnail to inspect that exact saved image. Previous/next, **Save image**
   and collapsible **Details** are integrated below the preview. Phones retain the
   separate image viewer. Preview controls remain in view as settings scroll. The
-  preview fills the available height. Columns share the width at roughly
-  30% settings / 40% preview / 30% gallery, so both sidebars grow on wider screens.
+  preview fills the available height. Clicking a gallery image brings its preview
+  and actions into view. Live progress and Cancel stay in the sticky header while
+  scrolling; Generate remains beside the prompts at the top.
+  Returning to phone width restores the compact sections' open/closed preferences.
   Redundant Create/Gallery tabs are hidden in this view.
 - **Medium-width windows:** settings on the left; preview and Generate on the right.
   Live progress, s/it, VRAM and GPU
@@ -42,7 +46,7 @@ presets, history or original workflow files are deleted by this organization.
 - **Refresh / cleanup:** compact refresh icons sit beside the workflow selector
   and first model selector. The small broom by Models requests idle VRAM cleanup.
   Icons have accessible labels, tooltips and 44px touch targets.
-- **Gallery:** the desktop sidebar has All images, Favourites, History and Trash views.
+- **Gallery:** the full-width desktop gallery has All images, Favourites, History and Trash views.
   History lists this browser's jobs; selecting one never submits a generation.
   Phones keep the Gallery tab and full-size viewer. Comparison remains available.
   Previews use 768px thumbnails, or 1280px on high-density screens; phones keep
@@ -60,7 +64,7 @@ presets, history or original workflow files are deleted by this organization.
   is off by default and is also loaded when starting through SSH.
 
 Layout follows available space, not the device name: two columns start at
-1000 × 600 CSS pixels. Three columns fit landscape windows from 1024px wide
+1000 × 600 CSS pixels. The desktop workbench fits landscape windows from 1024px wide
 (at least a 4:3 aspect ratio), or windows at least 1440px wide, with a minimum
 height of 600px. Content uses up to 2560px on ultrawide monitors.
 iPad Split View, browser zoom, small tablets and short
@@ -79,8 +83,8 @@ indicator. Colors, control/panel radii, spacing, typography and shadows are
 defined at the top of `comfyui_control/mobile/web/style.css`. Component rules
 reuse those tokens. Restrained highlights separate panels, inputs and raised
 buttons; gallery filters use segmented selection styling. Compact header spacing,
-44px standard controls and collapsed sections leave more room for the preview.
-The three-column structure and responsive breakpoints are unchanged.
+44px standard controls retain comfortable targets. Desktop settings stay open;
+compact sections retain their existing disclosure behavior and breakpoints.
 Keyboard focus stays visible, controls retain their touch targets, and reduced
 motion disables the control transitions and loading animation.
 
@@ -96,7 +100,7 @@ The existing application icon is retained.
 
 ## Run from source
 
-The three-column workspace is on **testing/webui-workspace**, version
+The responsive workspace is on **testing/webui-workspace**, version
 **1.1.0.dev7**. It branches from main; the uninstall work remains separate.
 For an isolated source copy,
 close the running app and install as your usual Linux user:
@@ -157,15 +161,16 @@ before retrying. A disconnected NAS is not evidence that its files were deleted.
 1. Try phone portrait/landscape, large iPad portrait/landscape and Split View,
    and a laptop at different window sizes or browser zoom levels.
 2. Enter a draft and rotate/resize; confirm the text and workflow stay selected.
-3. Generate: confirm model loading, progress, preview, Cancel and Generate remain
-   accessible while scrolling, then check the completed image and Save image.
+3. Generate: confirm model loading, progress and Cancel remain accessible while
+   scrolling. On desktop, Generate stays beside the prompts; phones keep the
+   bottom dock. Check the completed image and Save image.
 4. Refresh or briefly disconnect during generation; confirm recovery and no
    duplicate request. Try Gallery, comparison selection and closing the viewer.
 5. Select an older image, tap its heart, refresh and check Favourites. Trash that image,
    confirm other files remain, then restore it. Try actions while changing selection.
 
 Chromium and Linux WebKit checks exercise layout, generation/recovery, comparison,
-metadata reuse, Keep, Trash/restore and browser isolation with a simulated ComfyUI
+metadata reuse, image hearts, Trash/restore and browser isolation with a simulated ComfyUI
 backend and temporary images. Physical Apple devices, VPN routes, GPU inference
 and actual NAS Trash/restore still need manual testing for this branch.
 Repeat browser checks with Playwright:

@@ -124,6 +124,25 @@ async def main(browser_name,root):
         await expect(toggle).to_have_attribute('aria-expanded', 'false')
         await expect(prompt).to_have_value(text)
         await page.locator('[data-role="positive"]').fill('A luminous city at dusk')
+        # Desktop exposes mapped sections immediately without overwriting the
+        # phone's collapsed preferences, including through a desktop reload.
+        for section in ('settings-card', 'resolution-card', 'lora-card', 'negative-controls'):
+            await expect(page.locator('#' + section)).to_have_js_property('open', False)
+        await page.set_viewport_size(dict(width=1440, height=1000))
+        for section in ('settings-card', 'resolution-card', 'lora-card', 'negative-controls'):
+            await expect(page.locator('#' + section)).to_have_js_property('open', True)
+        await expect(page.get_by_role('textbox', name='Negative prompt', exact=True)).to_be_visible()
+        await expect(page.get_by_role('checkbox', name='one.safetensors', exact=True)).to_be_visible()
+        assert await page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+        await page.evaluate('window.scrollTo(0,0)')
+        await page.screenshot(path=str(root/'desktop-workbench.png'), full_page=True)
+        await page.reload()
+        await expect(page.locator('#negative-controls')).to_have_js_property('open', True)
+        await expect(prompt).to_have_value('A luminous city at dusk')
+        await page.set_viewport_size(dict(width=390, height=844))
+        for section in ('settings-card', 'resolution-card', 'lora-card', 'negative-controls'):
+            await expect(page.locator('#' + section)).to_have_js_property('open', False)
+        assert (await prompt.bounding_box())['height'] == 288
         await page.locator('#negative-controls').evaluate('(el)=>el.open=true')
         assert await page.locator('#negative-controls label:not(.visually-hidden)').count()==0
         await expect(page.get_by_role('textbox',name='Negative prompt',exact=True)).to_be_visible()

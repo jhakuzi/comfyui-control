@@ -115,7 +115,7 @@ async def main(browser_name, root):
             await page.emulate_media(reduced_motion='no-preference')
 
             async def select_page(tab, name):
-                # Large layouts show all columns at once; only compact layouts
+                # Large layouts show both workspace areas; only compact layouts
                 # have navigation tabs. Scrolling a visible column is sufficient.
                 button = tab.locator('#' + name + '-tab')
                 viewport = tab.viewport_size
@@ -135,23 +135,29 @@ async def main(browser_name, root):
                 await page.evaluate('window.scrollTo(0,0)')
                 await expect(page.locator('#generate')).to_be_visible()
                 assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
-                form = await page.locator('#generate-form').bounding_box()
                 panel = await page.locator('#generation-panel').bounding_box()
-                if wide:
+                if await page.evaluate('studioLayout.matches'):
+                    card = await page.locator('#workflow-card').bounding_box()
+                    settings = await page.locator('#settings-card').bounding_box()
+                    library = await page.locator('#gallery-page').bounding_box()
+                    assert panel['x'] >= settings['x'] + settings['width'] + 12
+                    assert abs(panel['y'] - settings['y']) < 1
+                    assert card['width'] > panel['width'] * 1.8
+                    assert abs(library['x'] - card['x']) < 1 and abs(library['width'] - card['width']) < 1
+                    assert library['y'] >= panel['y'] + panel['height']
+                    for section in ('settings-card', 'resolution-card', 'lora-card'):
+                        await expect(page.locator('#' + section)).to_have_js_property('open', True)
+                    assert await page.locator('#desktop-generate-slot #generate').count() == 1
+                    await expect(page.locator('.tabs')).to_be_hidden()
+                elif wide:
+                    form = await page.locator('#generate-form').bounding_box()
                     assert panel['x'] >= form['x'] + form['width'] + 12, (form, panel)
                     assert panel['width'] >= 350
                     card = await page.locator('#generate-form > .card').first.bounding_box()
                     assert abs(card['y'] - panel['y']) < 1, (card, panel)
-                    if await page.evaluate('studioLayout.matches'):
-                        sidebar = await page.locator('#gallery-page').bounding_box()
-                        assert sidebar['x'] >= panel['x'] + panel['width'] + 12, (panel, sidebar)
-                        total = form['width'] + panel['width'] + sidebar['width']
-                        assert .28 <= form['width'] / total <= .32, (form, panel, sidebar)
-                        assert .28 <= sidebar['width'] / total <= .32, (form, panel, sidebar)
-                        assert .38 <= panel['width'] / total <= .43, (form, panel, sidebar)
-                        await expect(page.locator('.tabs')).to_be_hidden()
                 else:
                     assert await page.locator('#generation-dock').evaluate('el => getComputedStyle(el).position') == 'fixed'
+                    assert await page.locator('#generation-dock #generate').count() == 1
                 await expect(prompt).to_have_value('An unsent draft survives resizing')
 
             for width, height, wide in [(320, 568, False), (390, 844, False), (844, 390, False), (834, 1194, False),
@@ -166,6 +172,7 @@ async def main(browser_name, root):
             await page.screenshot(path=str(root / 'create-tablet-landscape.png'))
             await layout(1440, 900, True)
             await page.screenshot(path=str(root / 'create-desktop.png'))
+            await layout(390, 844, False)
             # Fixed-seed editing must allow clearing/replacing the text without
             # JavaScript rounding the 64-bit value or submitting a generation.
             # Restyled disclosure markers retain native keyboard activation.
@@ -205,6 +212,8 @@ async def main(browser_name, root):
             await page.locator('#settings-card > summary').focus()
             await page.keyboard.press('Enter')
             await expect(page.locator('#settings-card')).to_have_js_property('open', False)
+            await layout(1440, 900, True)
+            await expect(page.locator('#settings-card')).to_have_js_property('open', True)
             # Keyboard activation opens a normal control without submitting.
             await page.locator('#prompt-history').focus()
             await page.keyboard.press('Enter')
@@ -268,8 +277,12 @@ async def main(browser_name, root):
             await page.locator('#advanced').evaluate('el => el.open=true')
             await page.locator('#mapping').evaluate('el => el.open=true')
 
-            async def reachable(identifiers=('generate', 'progress', 'cancel')):
+            async def reachable(identifiers=None):
+                studio = await page.evaluate('studioLayout.matches')
+                identifiers = identifiers or (('progress', 'cancel') if studio else ('generate', 'progress', 'cancel'))
                 for identifier in identifiers:
+                    if studio and identifier not in ('progress', 'cancel', 'stat-iteration', 'stat-vram', 'stat-gpu'):
+                        await page.locator('#' + identifier).scroll_into_view_if_needed()
                     bounds = await page.locator('#' + identifier).bounding_box()
                     assert bounds and bounds['y'] >= 0 and bounds['y'] + bounds['height'] <= page.viewport_size['height'] + 1, (identifier, bounds)
                     assert await page.evaluate('({x,y,id}) => !!document.elementFromPoint(x,y)?.closest("#"+id)',
@@ -302,7 +315,7 @@ async def main(browser_name, root):
             await page.set_viewport_size(dict(width=1440, height=900))
             await select_page(page, 'gallery')
             await expect(page.locator('#gallery-grid button')).to_have_count(17)
-            assert await page.locator('#gallery-grid').evaluate('el => getComputedStyle(el).gridTemplateColumns.split(" ").length') == 2
+            assert await page.locator('#gallery-grid').evaluate('el => getComputedStyle(el).gridTemplateColumns.split(" ").length') >= 4
             await page.evaluate('window.scrollTo(0,100000)')
             await reachable()
             await page.locator('#select-compare').click()
@@ -614,7 +627,7 @@ async def main(browser_name, root):
             await expect(page.locator('#image-dialog')).to_be_hidden()
             await expect(page.get_by_role('button', name='View image02.png', exact=True)).to_have_count(0)
             assert not errors, errors
-            print(json.dumps(dict(browser=browser_name, responsive_layout='phone, tablet portrait/landscape, Split View, laptop, short window; 30/40/30 studio columns',
+            print(json.dumps(dict(browser=browser_name, responsive_layout='phone, tablet portrait/landscape, Split View, laptop, short window; desktop prompts above open settings/preview and full-width gallery',
                 motion='disclosure open/close, reversal, keyboard and reduced motion',
                 button_progress='submission, queue, loading, actual sampling fraction, new stage, reconnect pause and completion reset',
                 generation='fixture: model loading, progress/preview, sticky controls, offline completion and reload',
@@ -622,7 +635,7 @@ async def main(browser_name, root):
                 previews='768px at 1x, 1280px at 2x; private sessions remain isolated',
                 cross_device='opt-in laptop to phone reuse/variation; independent history/jobs; disabling sharing restores image restrictions',
                 image_actions='older-image hearts, Favourites shortcut, unlike, reload, phone/desktop consistency, unavailable workflow actions, Trash/restore and history',
-                gallery='desktop sidebar, keyboard comparison, accessible close', tablet='touch expansion, rotation, isolated draft', javascript_errors=errors)))
+                gallery='full-width below desktop workspace, keyboard comparison, accessible close', tablet='touch expansion, rotation, isolated draft', javascript_errors=errors)))
             await browser.close()
     finally:
         await service.stop()

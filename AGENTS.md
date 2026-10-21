@@ -144,6 +144,9 @@ the user's authorization; follow `docs/MAINTAINING.md` and `packaging/README.md`
   warns about manual upload. Gallery follows the selected run's output folder;
   successful retry does not silently switch an active generation's destination.
 - Maintain one responsive frontend and existing mobile touch/reconnect patterns.
+  Desktop places prompts/models above open generation/LoRA settings and preview,
+  with the gallery below. Reuse the same controls/state; restore compact section
+  preferences when resizing back to phone width.
   Centralize visual tokens in `mobile/web/style.css`; preserve focus, readable
   contrast and reduced-motion support. Use short button labels without trailing
   ellipses. Do not remove functional controls during visual refinements.

@@ -1,5 +1,34 @@
 # Session handoff — 2026-10-21
 
+## Current follow-up — Forge-inspired desktop workbench
+
+- The user requested a desktop rearrangement while preserving the phone UI and
+  charcoal-blue styling. This supersedes the three-column studio layout below.
+- At the existing studio breakpoints, workflow/models run across the top,
+  positive/negative prompts have Generate beside them, generation/resolution/LoRA
+  panels stay open on the left, and the sticky preview sits on the right. The
+  gallery spans the width below, retaining history, hearts, reuse and image actions.
+  Selecting a gallery image scrolls its preview into view. Live progress and Cancel
+  remain in the header; desktop Generate remains beside the prompts.
+- One frontend and the same controls, events, drafts and backend are retained.
+  Responsive DOM moves preserve the single Generate button, prompt shortcuts and
+  Cancel button. Desktop forces the mapped sections open without saving that as
+  the compact preference; resizing back restores phone disclosures, including
+  after a desktop reload. Advanced mappings remain collapsible. No dependencies,
+  graph mappings, API or persistence changes. Shell cache refreshed.
+- Verification: **40 focused tests passed** across mobile core/integration, image
+  actions/details/sharing and prompt history. Chromium and Linux WebKit responsive,
+  extras and supplied saved-editor browser checks passed, including phone/tablet/
+  desktop/ultrawide geometry, draft/section restoration, negative prompts, multiple
+  LoRAs, live progress/Cancel, reconnect, hearts, metadata reuse, privacy and exact
+  Edit/Upscale submissions. JavaScript syntax and `git diff --check` passed.
+  Browser checks use protocol fixtures, not GPU inference or physical phones.
+  Actual Editing and the pre-existing Upscale pytest failure below remain deferred;
+  the full suite was not rerun. No release, package rebuild or uninstall changes.
+- Visuals and logs: `/workspace/desktop-workbench-{chromium,webkit}-v1`,
+  `/workspace/desktop-workbench-extras-{chromium,webkit}-v2`, and
+  `/workspace/desktop-workbench-editors-{chromium,webkit}-v1` in this workspace.
+
 ## Current correction — image hearts are the only Favourites UI
 
 - The user clarified that there should be no second prompt-favourites system.

@@ -12,6 +12,8 @@ const studioLayout = window.matchMedia(
   "(min-width: 1024px) and (min-height: 600px) and (min-aspect-ratio: 4/3), " +
   "(min-width: 1440px) and (min-height: 600px)",
 );
+const desktopSections = new Set(["settings-card", "resolution-card", "lora-card", "negative-controls"]);
+const compactSections = new Map();
 let preset = null,
   draft = {},
   disabledLoras = new Set(),
@@ -159,7 +161,7 @@ function saveUI() {
     details: Object.fromEntries(
       [...document.querySelectorAll("details[id]")].map((el) => [
         el.id,
-        el.open,
+        studioLayout.matches && compactSections.has(el.id) ? compactSections.get(el.id) : el.open,
       ]),
     ),
     search: $("mapping-search").value,
@@ -187,6 +189,7 @@ function restoreUI() {
 function selectTab(name) {
   $("workspace").dataset.page = name;
   $("workspace").dataset.layout = studioLayout.matches ? "studio" : "compact";
+  syncDesktopLayout();
   $("create-page").hidden = !studioLayout.matches && name !== "create";
   $("gallery-page").hidden = !studioLayout.matches && name !== "gallery";
   $("create-tab").classList.toggle("selected", name === "create");
@@ -195,6 +198,33 @@ function selectTab(name) {
   saveUI();
   if (name === "gallery" || studioLayout.matches) loadGallery(true);
   else stopGallerySync();
+}
+function syncDesktopLayout() {
+  const desktop = studioLayout.matches;
+  const generate = $("generate"), actions = $("prompt-actions");
+  if (desktop) {
+    if (generate.parentElement !== $("desktop-generate-slot"))
+      $("desktop-generate-slot").append(generate, actions);
+  } else {
+    if (generate.parentElement !== $("generation-dock")) $("generation-dock").append(generate);
+    if (actions.parentElement !== $("workflow-card")) $("prompt-controls").after(actions);
+  }
+  for (const id of desktopSections) {
+    const section = $(id);
+    if (!section) continue;
+    const summary = section.querySelector(":scope > summary");
+    if (desktop) {
+      if (!compactSections.has(id)) compactSections.set(id, uiState.details?.[id] ?? section.open);
+      section.open = true;
+      summary.tabIndex = -1;
+      summary.setAttribute("aria-disabled", "true");
+    } else {
+      if (compactSections.has(id)) section.open = compactSections.get(id);
+      compactSections.delete(id);
+      summary.removeAttribute("tabindex");
+      summary.removeAttribute("aria-disabled");
+    }
+  }
 }
 function currentJob() {
   return selectedJob === "new"
@@ -210,6 +240,9 @@ function syncJobMetrics(active) {
     if (atTop) destination.append(metrics);
     else destination.insertBefore(metrics, $("preview-stage"));
   }
+  const cancel = $("cancel");
+  const cancelHome = studioLayout.matches && atTop ? header : $("job-card").querySelector(".heading");
+  if (cancel.parentElement !== cancelHome) cancelHome.append(cancel);
   header.hidden = !atTop;
 }
 function syncGenerationDock() {
@@ -485,6 +518,7 @@ async function choosePreset(id, reuse) {
     $("mapping").open = true;
   }
   renderFields();
+  syncDesktopLayout();
   renderMappings();
   writeStore("preset", id);
   saveDraft();
@@ -1292,6 +1326,8 @@ function selectSavedImage(item, inspect = false) {
   $("generation-empty").hidden = !!item || !!currentJob() || submitting;
   renderLibrary();
   saveUI();
+  if (studioLayout.matches && inspect && item)
+    $("generation-panel").scrollIntoView({ block: "start", behavior: disclosureMotion.matches ? "instant" : "smooth" });
 }
 
 function selectedImageItems() {
@@ -1913,6 +1949,10 @@ document.addEventListener("click", (event) => {
       event.target.closest("a, button, input, select, textarea")) return;
   const details = summary.parentElement;
   if (details.tagName !== "DETAILS") return;
+  if (studioLayout.matches && desktopSections.has(details.id)) {
+    event.preventDefault();
+    return;
+  }
   const previous = disclosureAnimations.get(details);
   const opening = !(previous?.opening ?? details.open);
   if (!previous && (disclosureMotion.matches || !details.animate)) return;
