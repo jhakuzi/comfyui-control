@@ -111,14 +111,14 @@ async def main(engine, root, baseline, desktop_redesign=False):
                 await page.evaluate('''({name, image}) => {
                     selectSavedImage(null);
                     selectedJob = null;
-                    const active = name === 'running';
+                    const active = name === 'running' || name === 'running-inspect';
                     const job = {id: 'layout-job', prompt_id: 'layout-prompt', created: 1,
                         preset: preset.id, preset_name: preset.name, values: {}, controls: [],
-                        status: active ? 'running' : 'complete', phase: 'sampling',
+                        status: active ? 'running' : ['cancelled', 'failed'].includes(name) ? name : 'complete', phase: 'sampling',
                         progress: active ? {value: 6, max: 20} : null, images: image ? [image] : []};
                     applyState({...state, version: state.version + 1, online: name !== 'offline',
-                        jobs: active || image ? [job] : [], preview: null});
-                    if (image) selectSavedImage(image);
+                        jobs: name !== 'saved-no-job' && (active || image) ? [job] : [], preview: null});
+                    if (image) selectSavedImage(image, name === 'running-inspect');
                     window.scrollTo(0, 0);
                 }''', dict(name=state_name, image=image))
                 if image:
@@ -126,7 +126,8 @@ async def main(engine, root, baseline, desktop_redesign=False):
                     await expect(page.locator('#selected-image-preview')).to_have_js_property('complete', True)
                     # Compare settled skins, not different moments of the same
                     # existing 1.4s completion feedback animation.
-                    await expect(page.locator('#generate')).to_have_attribute('data-progress', 'idle')
+                    if state_name != 'running-inspect':
+                        await expect(page.locator('#generate')).to_have_attribute('data-progress', 'idle')
                 # Compare neutral component skins, not a pointer left over a
                 # differently positioned control by the previous interaction.
                 await page.mouse.move(0, 0)
@@ -212,6 +213,24 @@ async def main(engine, root, baseline, desktop_redesign=False):
                     ratio = await page.locator('#selected-image-preview').evaluate('el => ({w:el.clientWidth,h:el.clientHeight,nw:el.naturalWidth,nh:el.naturalHeight})')
                     assert ratio['nw'] > 0 and abs(ratio['w'] / ratio['h'] - ratio['nw'] / ratio['nh']) < .01, ratio
                 if image and not baseline_view:
+                    await expect(page.locator('#job-output')).not_to_be_visible()
+                    controls = await page.evaluate("""() => {
+                        const rect=el=>el.getBoundingClientRect();
+                        const image=rect(document.getElementById('selected-image-preview'));
+                        const heart=rect(document.querySelector('#desktop-selected-stage > .image-heart'));
+                        const row=[...document.querySelectorAll('#selected-image-actions .saved-image-buttons > button')].map(rect);
+                        const reuse=[...document.querySelectorAll('.selected-image-reuse > button')].map(rect);
+                        const stage=rect(document.getElementById('desktop-selected-stage'));
+                        return {heartTop:heart.top-image.top,heartRight:image.right-heart.right,
+                            widths:row.map(b=>b.width),count:row.length,
+                            leftGap:row[0].left-reuse[0].left,rightGap:row[3].right-reuse[1].right,
+                            middleGap:(row[1].right+row[2].left-reuse[0].right-reuse[1].left)/2,
+                            previewHeight:stage.height,panelHeight:rect(document.getElementById('generation-panel')).height};
+                    }""")
+                    assert abs(controls['heartTop']-8)<1 and abs(controls['heartRight']-8)<1, controls
+                    assert controls['count']==4 and max(controls['widths'])-min(controls['widths'])<1, controls
+                    assert all(abs(controls[key])<1 for key in ['leftGap','rightGap','middleGap']), controls
+                    assert controls['previewHeight'] > controls['panelHeight']*.55, controls
                     await expect(page.locator('#selected-image-actions .image-action-status')).to_be_empty()
                     await page.locator('#selected-image-actions [data-action="trash"]').click()
                     await expect(page.locator('#selected-image-actions .image-action-status')).to_contain_text('Only the browser')
@@ -307,6 +326,9 @@ async def main(engine, root, baseline, desktop_redesign=False):
                         await check(state_name)
                     for image in images:
                         await check('generated-' + image['filename'].split('.')[0], image)
+                    if not baseline_view and width == 1440:
+                        for status in ['saved-no-job', 'cancelled', 'failed', 'running-inspect']:
+                            await check(status, images[0])
                 await context.close()
             if baseline:
                 for width, height in [(390, 844), (430, 932), (768, 1024), (834, 1194), (1024, 1366)]:

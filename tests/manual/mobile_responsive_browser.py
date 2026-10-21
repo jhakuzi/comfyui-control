@@ -533,7 +533,7 @@ async def main(browser_name, root):
                 await page.locator('#select-compare').click()
             await page.get_by_role('button', name='View image02.png', exact=True).click()
             await expect(page.locator('#selected-image-name')).to_have_text('image02.png')
-            actions = page.locator('#selected-image-actions')
+            actions = page.locator('#selected-image-panel')
             await expect(actions.locator('[data-action="keep"]')).to_be_enabled()
             await expect(actions.locator('[data-action="edit"]')).to_be_disabled()
             await expect(actions.locator('[data-action="upscale"]')).to_be_disabled()

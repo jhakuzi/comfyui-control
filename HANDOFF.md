@@ -1,6 +1,45 @@
 # Session handoff — 2026-10-21
 
-## Latest refinement: expanded prompt aligned with Batch count
+## Latest work: preview heart, action rows and small-preview fix
+
+The user requested the desktop Favourites heart on the image corner, even action
+rows (Edit/Upscale/Details/Trash and Reuse settings/New variation), with Save image
+and arrows unchanged. They also asked to check the intermittently small preview.
+This follows pushed `a989c2f`; the user authorized committing and pushing this
+verified batch to `testing/webui-desktop-forge`.
+
+- The original selected-image heart moves through `place()` into the existing
+  desktop image stage. A desktop ResizeObserver tracks the image's rendered bounds
+  so the heart stays inset 8px from its upper-right corner, including letterboxing.
+  The original action Map/listener owns favourites, pending state and requests;
+  switching to mobile restores the original row automatically. Desktop-only heart
+  styling retains the existing Favourites tokens, with a shadow over light images.
+- Desktop action rows use four and two equal columns with the same gap and edges;
+  the Save/arrow selectors are unchanged. Mobile/shared component styles untouched.
+- Root cause of the small preview: `#job-output` kept `flex:1` even empty or showing
+  a previous non-complete job, reserving space above the saved image. It is now
+  hidden while saved images are shown without an active run, or explicitly inspected
+  during one. Generation itself and the ordinary live preview remain unchanged.
+- Product files are only desktop CSS/JS and public cache version 8 in `sw.js`.
+  Added desktop geometry checks for heart insets, four equal actions, aligned reuse
+  edges/midpoint, and sufficient preview space, including no-job/cancelled/failed/
+  running-inspection cases. Responsive action assertions now locate the same
+  controls through the selected-image panel so the moved heart is exercised too.
+  Desktop geometry writes are queued outside ResizeObserver delivery to avoid
+  WebKit notification loops; the final responsive rerun has no page errors.
+- Chromium and WebKit passed the five-width desktop matrix and five compact pixel
+  comparisons against `a989c2f`, including the new heart/row/preview-state checks.
+  Both passed responsive/reconnect/privacy, Favourites/reload/unlike, delayed-action
+  targeting, Trash/restore, and mobile viewer/restoration checks. Final Chromium
+  isolation passed with live jobs, exact seeds, unique controls and cancellation.
+  Screenshots were inspected. Syntax, protected-file and whitespace checks passed.
+  The Python suite was not rerun for this desktop-only follow-up; earlier suite
+  results and the known fixture failure remain documented separately below.
+
+Artifacts: `/tmp/control-heart-*`; baseline exported from `a989c2f` under
+`/tmp/control-heart-baseline/comfyui_control/mobile/web`.
+
+## Previously pushed: expanded prompt aligned with Batch count
 
 After pushed `3b8bfcb`, the user requested that the expanded prompt's initial lower
 border align with the bottom of Batch count and explicitly authorized an immediate

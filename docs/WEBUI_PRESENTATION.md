@@ -47,8 +47,14 @@ its ellipsis only on desktop and restores the original attribute on mobile.
 
 Generation, resolution and LoRAs occupy one bounded column. Completed images and
 live image previews scale to the same bottom edge as those settings, preserving
-aspect ratios and room for compact image actions. Idle/loading placeholders stay
-compact. The gallery follows the aligned workspace, with Advanced & workflows
+aspect ratios and room for compact image actions. The existing Favourites heart
+moves reversibly to the image's upper-right corner, following its rendered bounds
+rather than the surrounding letterbox. Edit/Upscale/Details/Trash use four equal
+columns, and Reuse settings/New variation use two aligned columns. The Save image
+and arrow row retains its existing layout. While viewing a saved image, an empty
+or previous job output must not reserve flex space above it; live generation still
+uses the original preview when the user is not inspecting a saved result.
+Idle/loading placeholders stay compact. The gallery follows the aligned workspace, with Advanced & workflows
 below it while remaining inside the original form. Gallery thumbnails use flexible
 columns of at least 200px, filling the available width. A desktop ResizeObserver
 caps the grid at eight complete rows plus gaps/padding; additional rows scroll

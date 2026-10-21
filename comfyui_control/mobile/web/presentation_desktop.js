@@ -7,6 +7,15 @@ window.ComfyDesktopPresentation = (() => {
   const placeholders = new Map();
   const scrollFrames = new WeakMap();
   let initialized = false, detailsOpen = false;
+  // Geometry writes run in the next frame, outside ResizeObserver delivery.
+  const afterLayout = (update) => {
+    let pending = false;
+    return () => {
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(() => { pending = false; update(); });
+    };
+  };
   const desktopNode = (tag, id, text, className) => {
     const node = document.createElement(tag);
     if (id) node.id = id;
@@ -83,7 +92,7 @@ window.ComfyDesktopPresentation = (() => {
       // A queued close event must not override mobile's restored disclosure.
       if (ComfyPresentation.desktop.matches) $("image-details").open = detailsOpen;
     });
-    const observer = new ResizeObserver(() => {
+    const observer = new ResizeObserver(afterLayout(() => {
       if (!ComfyPresentation.desktop.matches) return;
       $("generation-panel").style.setProperty("--desktop-settings-height", `${Math.max(360, $("settings-stack").getBoundingClientRect().height)}px`);
       const batch = $("batch-count");
@@ -94,10 +103,28 @@ window.ComfyDesktopPresentation = (() => {
           editor.style.setProperty("--desktop-prompt-expanded-height", `${height}px`);
         }
       }
-    });
+    }));
     observer.observe($("settings-stack"));
     observer.observe($("settings-card"));
     observer.observe($("prompt-controls"));
+    const image = $("selected-image-preview");
+    let heartFrame = 0;
+    const imageObserver = new ResizeObserver(() => {
+      if (heartFrame) return;
+      heartFrame = requestAnimationFrame(() => {
+        heartFrame = 0;
+        if (!ComfyPresentation.desktop.matches || !image.getClientRects().length) return;
+        const bounds = image.getBoundingClientRect(), container = stage.getBoundingClientRect();
+        for (const [property, value] of [
+          ["--desktop-heart-top", `${bounds.top - container.top + 8}px`],
+          ["--desktop-heart-right", `${container.right - bounds.right + 8}px`],
+        ]) {
+          if (stage.style.getPropertyValue(property) !== value) stage.style.setProperty(property, value);
+        }
+      });
+    });
+    imageObserver.observe(image);
+    imageObserver.observe(stage);
     const grid = $("gallery-grid");
     const limitGallery = () => {
       if (!ComfyPresentation.desktop.matches || !grid.clientWidth) return;
@@ -110,7 +137,7 @@ window.ComfyDesktopPresentation = (() => {
       if (grid.style.getPropertyValue("--desktop-gallery-limit") !== value)
         grid.style.setProperty("--desktop-gallery-limit", value);
     };
-    new ResizeObserver(limitGallery).observe(grid);
+    new ResizeObserver(afterLayout(limitGallery)).observe(grid);
     new MutationObserver(limitGallery).observe(grid, { childList: true });
     ComfyPresentation.desktop.addEventListener("change", ({ matches }) => {
       if (matches) return;
@@ -131,6 +158,8 @@ window.ComfyDesktopPresentation = (() => {
       place($("prompt-actions"), $("desktop-generate-slot"));
     }
     const actions = $("selected-image-actions").querySelector(".saved-image-buttons");
+    const heart = actions?.querySelector(".image-heart");
+    if (heart) place(heart, $("desktop-selected-stage"));
     if (actions && $("desktop-show-details").parentElement !== actions)
       place($("desktop-show-details"), actions, actions.querySelector('[data-action="trash"]'));
     for (const input of placeholders.keys()) if (!input.isConnected) placeholders.delete(input);

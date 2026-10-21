@@ -370,6 +370,7 @@
 }
 :where(html[data-presentation="desktop"]) #selected-image-panel > :not(#desktop-selected-stage) { flex-shrink: 0; }
 :where(html[data-presentation="desktop"]) #desktop-selected-stage {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -387,7 +388,8 @@
 :where(html[data-presentation="desktop"]) #generation-panel[data-active="true"]:not([data-inspect="true"]) #selected-image-panel,
 :where(html[data-presentation="desktop"]) #generation-panel[data-inspect="true"] #preview-stage,
 :where(html[data-presentation="desktop"]) #generation-panel[data-saved="true"][data-active="false"] #job-images,
-:where(html[data-presentation="desktop"]) #generation-panel[data-saved="true"][data-job-status="complete"] #job-output { display: none; }
+:where(html[data-presentation="desktop"]) #generation-panel[data-saved="true"][data-active="false"] #job-output,
+:where(html[data-presentation="desktop"]) #generation-panel[data-saved="true"][data-inspect="true"] #job-output { display: none; }
 :where(html[data-presentation="desktop"]) #image-save-hint,
 :where(html[data-presentation="desktop"]) #open-selected-image { display: none; }
 :where(html[data-presentation="desktop"]) #selected-image-tools .actions,
@@ -399,7 +401,30 @@
   margin: 6px 0 0;
 }
 :where(html[data-presentation="desktop"]) #selected-image-actions .saved-image-buttons {
-  grid-template-columns: 44px repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+:where(html[data-presentation="desktop"]) .selected-image-reuse {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+:where(html[data-presentation="desktop"]) #desktop-selected-stage > .image-heart {
+  position: absolute;
+  top: var(--desktop-heart-top, 8px);
+  right: var(--desktop-heart-right, 8px);
+  z-index: 1;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  font-size: 1.4rem;
+  line-height: 1;
+  background-color: var(--surface-raised);
+  box-shadow: var(--shadow-dialog);
+}
+:where(html[data-presentation="desktop"]) #desktop-selected-stage > .image-heart[aria-pressed="true"] {
+  color: var(--favourite);
+  border-color: var(--favourite-line);
+  background-color: var(--favourite-bg);
 }
 :where(html[data-presentation="desktop"]) .saved-image-buttons,
 :where(html[data-presentation="desktop"]) .selected-image-reuse {
