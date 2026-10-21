@@ -138,7 +138,7 @@
   align-items: center;
   justify-content: center;
 }
-:where(html[data-presentation="desktop"]) #prompt-controls textarea { display: block; }
+:where(html[data-presentation="desktop"]) #prompt-controls textarea { display: block; font-size: 14px; }
 :where(html[data-presentation="desktop"]) textarea.positive {
   height: 102px;
   min-height: 102px;
