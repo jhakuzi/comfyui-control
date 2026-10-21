@@ -8,8 +8,9 @@ The controller manages its own ComfyUI process, maps existing workflow inputs,
 and presents simpler controls on phones, tablets and desktops.
 
 - Reuse the existing application, queue, workflow mappings and session services.
-  Do not introduce a second frontend, generation engine or independently managed
-  mobile service without an explicit requirement.
+  Keep one application shell with isolated mobile/desktop presentation adapters;
+  do not introduce a duplicate application, generation engine or independently
+  managed mobile service without an explicit requirement.
 - Preserve existing settings, presets, custom nodes, GGUF loaders, multiple LoRAs,
   saved jobs, browser identities and reconnect recovery.
 - Prefer small changes and existing dependencies. Keep the main README brief;
@@ -34,7 +35,7 @@ and presents simpler controls on phones, tablets and desktops.
 | `mobile/workflows.py`, `workflow_sources.py` | Immutable API graphs, explicit mappings, metadata-described controls, saved workflow discovery/import. |
 | `mobile/editor_subgraphs.py`, `input_metadata.py` | Bounded subgraph expansion and shared ComfyUI V3 dynamic-input metadata interpretation. |
 | `mobile/image_actions.py`, `image_pixels.py`, `image_metadata.py`, `prompt_history.py` | Saved-image actions/Favourites, pixel encoding, metadata and private prompt history. |
-| `mobile/web/` | Buildless HTML/CSS/JavaScript; `app.js` coordinates existing views; comparison, history, details and actions have separate modules. |
+| `mobile/web/` | Buildless shared HTML/JS application; `presentation_{mobile,desktop}.{css,js}` isolate layouts, `presentation.js` coordinates them; `theme.css` and `style.css` contain shared design tokens/component skins. See `docs/WEBUI_PRESENTATION.md`. |
 | `tests/`, `tests/manual/`, `tests/fixtures/` | pytest regression suite, explicit browser/real-server checks and redacted workflow fixtures. |
 | `packaging/`, `.github/workflows/`, `downloads/` | ZIP/SRPM builders, Fedora packaging, controlled release automation and downloadable artifacts. |
 | `examples/`, `docs/` | Small examples, setup guides, architectural notes and testing/release records. |
@@ -160,13 +161,35 @@ the user's authorization; follow `docs/MAINTAINING.md` and `packaging/README.md`
   rules. Startup checks are bounded; failure selects local output and visibly
   warns about manual upload. Gallery follows the selected run's output folder;
   successful retry does not silently switch an active generation's destination.
-- Maintain one responsive frontend and existing mobile touch/reconnect patterns.
-  Desktop places prompts/models above open generation/LoRA settings and preview,
-  with the gallery below. Reuse the same controls/state; restore compact section
-  preferences when resizing back to phone width.
-  Centralize visual tokens in `mobile/web/style.css`; preserve focus, readable
-  contrast and reduced-motion support. Use short button labels without trailing
-  ellipses. Do not remove functional controls during visual refinements.
+- Keep the shared WebUI application/state and independent presentation layers.
+  **Desktop-only changes belong in `mobile/web/presentation_desktop.css` and
+  `presentation_desktop.js`. Do not edit mobile presentation, shared component
+  skins, theme tokens or application logic merely to rearrange desktop.**
+  Every layout selector must remain scoped with zero-specificity
+  `:where(html[data-presentation="mobile"])` or the corresponding desktop scope.
+  Desktop must not inherit `presentation_mobile.css` or depend on its adapter.
+  Existing phone/tablet breakpoints, visuals, touch/navigation and reconnect
+  behavior are protected. Substantial mobile changes require an explicit request.
+- `presentation.js` owns breakpoint selection, temporary section preferences,
+  geometry observation and reversible desktop placements; it owns no application
+  state, requests or persistence. Move existing controls with its `place()` helper
+  in desktop adapters so switching back restores their original mobile positions.
+  Mark new desktop-only containers `data-desktop-slot`; retain shared control IDs
+  and listeners. Never clone controls, duplicate business logic, reset drafts/jobs,
+  or create separate services/state stores to support a presentation.
+- Shared component markup/renderers remain in `index.html`, `app.js` and feature
+  modules; visual tokens live in `theme.css`, component skins/animations in
+  `style.css`. Changes there affect both presentations and require both to be
+  verified. See `docs/WEBUI_PRESENTATION.md` for responsibilities and baseline
+  comparison commands. Preserve focus, readable contrast, reduced motion and
+  existing Generate/cancel animations. Use short button labels without trailing
+  ellipses; do not remove functional controls during layout work.
+- For presentation refactors, compare both layouts against the pre-change assets
+  and exercise resizing with unsent prompts, exact 64-bit seeds and live jobs.
+  Check 390×844, 430×932, 768×1024, 1280×800, 1440×900, 1920×1080 and 2560×1440;
+  run `tests/manual/mobile_presentation_browser.py` and the responsive regressions.
+  Public shell additions must be in the server asset allowlist and service-worker
+  shell cache. Neither presentation may cache private API/image data.
 - PWA service workers need a secure context; ordinary LAN/VPN HTTP must remain
   functional without them. Refresh cached assets appropriately when shipping UI.
 - Never commit credentials or private workflow prompts/paths. Redact examples

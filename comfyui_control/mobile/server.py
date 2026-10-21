@@ -22,7 +22,7 @@ from .settings import check_password, lan_address
 ASSETS = Path(__file__).with_name("web")
 ICON = Path(__file__).parents[1] / "assets" / "comfyui-control.png"
 OWNER = web.RequestKey("mobile_owner", str) if hasattr(web, "RequestKey") else "mobile_owner"
-PUBLIC = {"/", "/app.js", "/comparison.js", "/prompt_history.js", "/image_details.js", "/image_actions.js", "/style.css", "/manifest.webmanifest", "/sw.js", "/icon.png", "/icon-192.png", "/icon-512.png", "/api/login", "/api/session"}
+PUBLIC = {"/", "/app.js", "/comparison.js", "/prompt_history.js", "/image_details.js", "/image_actions.js", "/style.css", "/theme.css", "/presentation_mobile.css", "/presentation_desktop.css", "/presentation.js", "/presentation_mobile.js", "/presentation_desktop.js", "/manifest.webmanifest", "/sw.js", "/icon.png", "/icon-192.png", "/icon-512.png", "/api/login", "/api/session"}
 
 
 def json_response(value, **kwargs):

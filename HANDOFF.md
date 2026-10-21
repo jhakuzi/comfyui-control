@@ -1,5 +1,62 @@
 # Session handoff — 2026-10-21
 
+## Current update: independent presentation layers
+
+- Active work branch: `testing/webui-presentation-layers`, created from pushed
+  `testing/webui-workspace` commit `cddb86b`. Use Git for the final commit/ref;
+  the older branch/application descriptions below are historical context.
+- User explicitly requested an architecture-only separation of mobile/desktop
+  presentation. Appearance and existing breakpoints are preserved. No additional
+  Forge-inspired redesign, workflow/API change or generation change is included.
+- New `mobile/web/theme.css` contains shared tokens. `style.css` retains shared
+  component skins/animations; `presentation_{mobile,desktop}.{css,js}` isolate
+  page layouts/interactions. `presentation.js` selects the mode before first
+  paint and coordinates temporary preferences/reversible DOM placements.
+- There is one shared HTML/control tree, application state and backend. Desktop
+  adapters use `place()` to record return anchors; leaving desktop restores even
+  new desktop-only moves without changing the mobile adapter. New desktop slots
+  use `data-desktop-slot`. No controls or business logic are cloned.
+- `app.js` delegates layout/navigation while retaining all application services,
+  workflow fields, requests, progress, recovery and shared feature rendering.
+  The only server change is the additional public shell asset allowlist. Shell
+  caching and package inclusion cover all six new CSS/JS assets.
+- Read `docs/WEBUI_PRESENTATION.md` for file ownership, shared dependencies,
+  breakpoints and baseline-comparison commands. `AGENTS.md` now explicitly
+  protects mobile and directs desktop-only work to the desktop CSS/JS adapter.
+
+Verification on this refactor:
+
+- Full Python suite: **430 passed, 1 failed**. The failure is still
+  `tests/test_image_workflows.py::test_old_action_preset_and_jobs_are_retained_when_multiplier_mapping_is_added`.
+  The exact `seconds_per_iteration: None` equality failure was independently
+  reproduced on an exported, untouched `cddb86b` baseline; it remains unfixed.
+- Chromium and Linux WebKit isolation/live-state checks passed at 390×844,
+  430×932, 768×1024, 1280×800, 1440×900, 1920×1080 and 2560×1440, plus rotation.
+  Checks disable the inactive stylesheet, verify unique/control-node identity,
+  preserve prompts/exact seeds/live jobs and exercise automatic restoration of
+  a desktop-only placement unknown to mobile. Generation/queue cancellation
+  handlers still work after resizing.
+- Both engines passed baseline desktop geometry/component-skin comparisons at
+  1280×800, 1440×900, 1512×982, 1920×1080 and 2560×1440 for empty, offline,
+  running and portrait/landscape results, including long filenames/prompts.
+  Mobile screenshot comparisons passed at 390×844, 430×932, 768×1024, 834×1194
+  and 1024×1366 after a desktop round trip (one-channel antialiasing tolerance).
+- Chromium responsive/reconnect/gallery/privacy/reuse, generation/seed/batch and
+  Generate-fill/cancellation regressions passed. Public asset authentication/cache
+  coverage and ZIP asset inclusion passed; JS/Python syntax and whitespace passed.
+  Chromium supplied-editor Edit/Upscale, GGUF/dynamic-input/multiplier, draft and
+  reload regression checks also passed.
+- These remain protocol/fixture checks, not real GPU/NAS/VPN or physical iOS proof.
+  Real Editing verification and the installation-specific outstanding work below
+  remain relevant. No release, version bump, tag or main merge was performed.
+
+Current uncommitted artifacts are under `/tmp/presentation-*`, including the
+pre-change `web/` snapshot and per-engine screenshots. They may not survive
+an environment replacement. The comparison baseline can be recreated from Git.
+
+## Earlier handoff — historical application context
+
+
 ## Verified Git state and scope
 
 - Repository: https://github.com/jhakuzi/comfyui-control; checkout:

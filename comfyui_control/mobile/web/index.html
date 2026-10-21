@@ -20,7 +20,13 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <link rel="icon" href="/icon.png" />
+    <link rel="stylesheet" href="/theme.css" />
     <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/presentation_mobile.css" />
+    <link rel="stylesheet" href="/presentation_desktop.css" />
+    <script src="/presentation.js"></script>
+    <script src="/presentation_mobile.js" defer></script>
+    <script src="/presentation_desktop.js" defer></script>
     <script src="/comparison.js" defer></script>
     <script src="/prompt_history.js" defer></script>
     <script src="/image_details.js" defer></script>
@@ -75,7 +81,7 @@
         <section id="create-page">
           <form id="generate-form">
             <section class="card" id="workflow-card">
-              <div id="desktop-toolbar"></div>
+              <div id="desktop-toolbar" data-desktop-slot></div>
               <div id="workflow-picker">
                 <label for="preset">Workflow</label>
                 <div class="selector-tools">
@@ -104,7 +110,7 @@
                   Reuse last generation
                 </button>
               </div>
-              <div id="desktop-generate-slot"></div>
+              <div id="desktop-generate-slot" data-desktop-slot></div>
               <div class="model-tools">
                 <span class="muted">Models</span>
                 <button id="refresh-models" class="icon-button" type="button" aria-label="Refresh model choices" title="Refresh model choices" hidden>

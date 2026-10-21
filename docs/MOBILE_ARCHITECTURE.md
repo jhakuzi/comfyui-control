@@ -1,5 +1,15 @@
 # Mobile WebUI architecture and verification
 
+## Current presentation architecture
+
+Mobile and desktop now have independent, scoped CSS and DOM-placement adapters
+within the same shared WebUI application. Theme/components, workflow handling,
+job state, requests, reconnect and feature renderers remain shared. The page
+appearance at `cddb86b` is preserved. File ownership, protection rules, breakpoints
+and verification commands are in [WEBUI_PRESENTATION.md](WEBUI_PRESENTATION.md).
+The sections below record earlier development and verification history; their
+layout descriptions and historical test counts are not the current specification.
+
 ## Testing: responsive workspace (1.1.0.dev7)
 
 The saved-workflow importer now handles the supplied Qwen/SeedVR editor

@@ -88,7 +88,7 @@ async def main(engine, root, baseline):
                 await page.locator('[data-role="positive"]').fill('A populated positive prompt. ' * 40)
                 if width >= 1280:
                     await page.locator('[data-role="negative"]').fill('A populated negative prompt. ' * 20)
-                await page.evaluate('events?.close()')
+                await page.evaluate('closeEvents()')
                 return context, page
 
             context, page = await open_page(1280, 800)
@@ -96,6 +96,9 @@ async def main(engine, root, baseline):
             await page.wait_for_function('() => gallery.length === 2')
             images = await page.evaluate('gallery')
             assert len(images) == 2
+
+            reports = {}
+            baseline_view = False
 
             async def check(state_name, image=None):
                 await page.evaluate('''({name, image}) => {
@@ -114,6 +117,9 @@ async def main(engine, root, baseline):
                 if image:
                     await expect(page.locator('#selected-image-preview')).to_be_visible()
                     await expect(page.locator('#selected-image-preview')).to_have_js_property('complete', True)
+                    # Compare settled skins, not different moments of the same
+                    # existing 1.4s completion feedback animation.
+                    await expect(page.locator('#generate')).to_have_attribute('data-progress', 'idle')
                 report = await page.evaluate('''() => {
                     const rect = id => document.getElementById(id).getBoundingClientRect().toJSON();
                     const visible = el => !!el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden';
@@ -132,6 +138,16 @@ async def main(engine, root, baseline):
                         panels: ['settings-card', 'resolution-card', 'lora-card', 'advanced'].map(rect),
                         panelOverflow: getComputedStyle(panel).overflowY, panelPosition: getComputedStyle(panel).position};
                 }''')
+                report['skins'] = await page.evaluate('''() => ['#generate', '#preset', '[data-role="positive"]', '#settings-card', '#generation-panel'].map(selector => {
+                    const css = getComputedStyle(document.querySelector(selector));
+                    return [css.color, css.backgroundColor, css.fontFamily, css.fontSize, css.fontWeight,
+                        css.borderRadius, css.borderColor, css.boxShadow];
+                })''')
+                key = (page.viewport_size['width'], state_name)
+                if baseline_view:
+                    assert reports[key] == report, (key, reports[key], report)
+                else:
+                    reports[key] = report
                 assert not report['overflow'] and not report['overlap'], report
                 if report['pageWidth'] > report['width']:
                     report['wide'] = await page.evaluate('''() => [...document.querySelectorAll('body *')].filter(el => el.getClientRects().length && el.getBoundingClientRect().right > innerWidth + 1).map(el => ({id:el.id, tag:el.tagName, cls:el.className, width:el.getBoundingClientRect().width, right:el.getBoundingClientRect().right, overflow:getComputedStyle(el).overflowX})).slice(0,20)''')
@@ -153,18 +169,21 @@ async def main(engine, root, baseline):
                     await page.locator(selector).scroll_into_view_if_needed()
                     await expect(page.locator(selector)).to_be_in_viewport()
                 await page.evaluate('window.scrollTo(0,0)')
-                await page.screenshot(path=str(root / f'{page.viewport_size["width"]}-{state_name}.png'), full_page=True)
+                await page.screenshot(path=str(root / f'{"baseline-" if baseline_view else ""}{page.viewport_size["width"]}-{state_name}.png'), full_page=True)
 
-            for width, height in SIZES:
-                await page.set_viewport_size({'width': width, 'height': height})
-                for state_name in ['online-empty', 'offline', 'running']:
-                    await check(state_name)
-                for image in images:
-                    await check('generated-' + image['filename'].split('.')[0], image)
-            await context.close()
-
+            for baseline_view in ([False, True] if baseline else [False]):
+                if baseline_view:
+                    context, page = await open_page(1280, 800, old=True)
+                    await page.wait_for_function('() => gallery.length === 2')
+                for width, height in SIZES:
+                    await page.set_viewport_size({'width': width, 'height': height})
+                    for state_name in ['online-empty', 'offline', 'running']:
+                        await check(state_name)
+                    for image in images:
+                        await check('generated-' + image['filename'].split('.')[0], image)
+                await context.close()
             if baseline:
-                for width, height in [(390, 844), (834, 1194), (1024, 1366)]:
+                for width, height in [(390, 844), (430, 932), (768, 1024), (834, 1194), (1024, 1366)]:
                     captures = []
                     for old in [True, False]:
                         mobile_context, mobile = await open_page(width, height, old)

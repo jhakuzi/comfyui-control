@@ -7,13 +7,9 @@ const activeStatuses = new Set([
   "cancelling",
   "unknown",
 ]);
-const wideLayout = window.matchMedia("(min-width: 1000px) and (min-height: 600px)");
-const studioLayout = window.matchMedia(
-  "(min-width: 1024px) and (min-height: 600px) and (min-aspect-ratio: 4/3), " +
-  "(min-width: 1440px) and (min-height: 600px)",
-);
-const desktopSections = new Set(["settings-card", "resolution-card", "lora-card", "negative-controls"]);
-const compactSections = new Map();
+// Shared renderers use the coordinator's existing viewport contracts.
+const wideLayout = ComfyPresentation.wide;
+const studioLayout = ComfyPresentation.desktop;
 let preset = null,
   draft = {},
   disabledLoras = new Set(),
@@ -164,7 +160,7 @@ function saveUI() {
     details: Object.fromEntries(
       [...document.querySelectorAll("details[id]")].map((el) => [
         el.id,
-        studioLayout.matches && compactSections.has(el.id) ? compactSections.get(el.id) : el.open,
+        ComfyPresentation.sectionOpen(el),
       ]),
     ),
     search: $("mapping-search").value,
@@ -190,50 +186,14 @@ function restoreUI() {
   uiReady = true;
 }
 function selectTab(name) {
-  $("workspace").dataset.page = name;
-  $("workspace").dataset.layout = studioLayout.matches ? "studio" : "compact";
-  syncDesktopLayout();
-  $("create-page").hidden = !studioLayout.matches && name !== "create";
-  $("gallery-page").hidden = !studioLayout.matches && name !== "gallery";
-  $("create-tab").classList.toggle("selected", name === "create");
-  $("gallery-tab").classList.toggle("selected", name === "gallery");
+  ComfyPresentation.navigate(name, uiState);
   syncGenerationDock();
   saveUI();
-  if (name === "gallery" || studioLayout.matches) loadGallery(true);
+  if (name === "gallery" || ComfyPresentation.inlineImages) loadGallery(true);
   else stopGallerySync();
 }
 function syncDesktopLayout() {
-  const desktop = studioLayout.matches;
-  const generate = $("generate"), actions = $("prompt-actions");
-  if (desktop) {
-    if ($("workflow-picker").parentElement !== $("desktop-toolbar"))
-      $("desktop-toolbar").append($("workflow-picker"), $("model-controls"), document.querySelector(".model-tools"));
-    if (generate.parentElement !== $("desktop-generate-slot"))
-      $("desktop-generate-slot").append(generate, actions);
-  } else {
-    if ($("workflow-picker").parentElement !== $("workflow-card")) {
-      $("prompt-controls").before($("workflow-picker"));
-      $("desktop-generate-slot").after(document.querySelector(".model-tools"), $("model-controls"));
-    }
-    if (generate.parentElement !== $("generation-dock")) $("generation-dock").append(generate);
-    if (actions.parentElement !== $("workflow-card")) $("prompt-controls").after(actions);
-  }
-  for (const id of desktopSections) {
-    const section = $(id);
-    if (!section) continue;
-    const summary = section.querySelector(":scope > summary");
-    if (desktop) {
-      if (!compactSections.has(id)) compactSections.set(id, uiState.details?.[id] ?? section.open);
-      section.open = true;
-      summary.tabIndex = -1;
-      summary.setAttribute("aria-disabled", "true");
-    } else {
-      if (compactSections.has(id)) section.open = compactSections.get(id);
-      compactSections.delete(id);
-      summary.removeAttribute("tabindex");
-      summary.removeAttribute("aria-disabled");
-    }
-  }
+  ComfyPresentation.arrange(uiState);
 }
 function currentJob() {
   const job = selectedJob === "new"
@@ -244,47 +204,12 @@ function currentJob() {
   return job;
 }
 function syncJobMetrics(active) {
-  const header = $("header-generation"),
-    metrics = $("job-metrics"),
-    atTop = active && wideLayout.matches && !studioLayout.matches && !$("workspace").hidden,
-    destination = atTop ? header : $("job-card");
-  if (metrics.parentElement !== destination) {
-    if (atTop) destination.append(metrics);
-    else destination.insertBefore(metrics, $("preview-stage"));
-  }
-  const cancel = $("cancel-controls");
-  const cancelHome = studioLayout.matches ? $("desktop-generate-slot") : $("job-card").querySelector(".heading");
-  if (cancel.parentElement !== cancelHome) {
-    if (studioLayout.matches) $("generate").after(cancel);
-    else cancelHome.append(cancel);
-  }
-  header.hidden = !atTop;
+  ComfyPresentation.metrics(active);
 }
 function syncGenerationDock() {
-  const job = currentJob(),
-    active = !!job && activeStatuses.has(job.status),
-    dock = $("generation-dock"),
-    card = $("job-card"),
-    destination = active || (submitting && wideLayout.matches) ? dock : $("job-output");
+  const job = currentJob(), active = !!job && activeStatuses.has(job.status);
   renderGenerationStats(job);
-  syncJobMetrics(active);
-  card.hidden = !job && !(submitting && wideLayout.matches);
-  card.dataset.preparing = String(submitting && !active);
-  const stage = $("preview-stage");
-  stage.hidden = !(active || submitting) || (studioLayout.matches && inspectingSavedImage);
-  stage.dataset.preview = String(!$("preview").hidden && !submitting);
-  $("preview-loading-phase").textContent = submitting && !active ? "Submitting workflow…"
-    : $("job-title").textContent || "Preparing generation…";
-  $("job-images").hidden = active || submitting;
-  $("generation-panel").dataset.active = String(active || submitting);
-  $("generation-panel").dataset.jobStatus = job?.status || "";
-  $("job-output").hidden = !studioLayout.matches && !$("gallery-page").hidden;
-  $("generation-empty").hidden = !!job || submitting || !!selectedImage;
-  if (card.parentElement !== destination) {
-    if (active) destination.prepend(card);
-    else destination.append(card);
-  }
-  $("dock-submitting").hidden = !submitting || active;
+  ComfyPresentation.generation({ job, active, submitting, inspectingSavedImage, selectedImage });
   const images = !active && !submitting ? job?.images || [] : [];
   $("dock-result").hidden = !images.length;
   if (images.length) {
@@ -297,7 +222,6 @@ function syncGenerationDock() {
       ? "Image ready · View result"
       : `${images.length} images ready · View results`;
   }
-  dock.hidden = !active && !submitting && !studioLayout.matches && !$("gallery-page").hidden;
 }
 function renderGenerationStats(job) {
   $("generation-stats").hidden = !job || !activeStatuses.has(job.status);
@@ -1299,7 +1223,7 @@ function applyState(value) {
     if (job.status === "complete" && job.images?.length && !completedResultsSeen.has(job.id)) {
       completedResultsSeen.add(job.id);
       if ((!selectedImage && !uiState.selectedImage) || observedActiveJobs.has(job.id)) selectSavedImage(job.images[0]);
-      if (studioLayout.matches) loadGallery(true);
+      if (ComfyPresentation.inlineImages) loadGallery(true);
     }
     if (activeStatuses.has(job.status)) observedActiveJobs.add(job.id);
   }
@@ -1365,7 +1289,7 @@ function renderImages(container, items) {
       if (currentIndex < 0) return;
       if (container.id === "gallery-grid" && comparison.choose(currentItems[currentIndex])) return;
       selectSavedImage(currentItems[currentIndex], true);
-      if (studioLayout.matches) return;
+      if (ComfyPresentation.inlineImages) return;
       openImage(currentItems, currentIndex, container.id === "gallery-grid");
     });
     if (previous) previous.replaceWith(button);
@@ -1428,10 +1352,7 @@ function loadGallery(force = false) {
 }
 function openImage(items, index, fromGallery = null) {
   if (!items.length) return;
-  if (studioLayout.matches) {
-    selectSavedImage(items[(index + items.length) % items.length], true);
-    return;
-  }
+  if (ComfyPresentation.openImage(items, index, selectSavedImage)) return;
   viewerFromGallery = fromGallery ?? (items === gallery || items === viewerItems && viewerFromGallery);
   imageReuseEpoch++;
   viewerItems = items;
@@ -1474,8 +1395,7 @@ function selectSavedImage(item, inspect = false) {
   $("generation-empty").hidden = !!item || !!currentJob() || submitting;
   renderLibrary();
   saveUI();
-  if (studioLayout.matches && inspect && item)
-    $("generation-panel").scrollIntoView({ block: "start", behavior: disclosureMotion.matches ? "instant" : "smooth" });
+  ComfyPresentation.inspectImage(item, inspect, disclosureMotion.matches);
 }
 
 function selectedImageItems() {
@@ -1484,16 +1404,8 @@ function selectedImageItems() {
 }
 
 function syncSelectedPreview(refreshDetails = false) {
-  const source = wideLayout.matches ? selectedImage?.url : null;
-  if (source) {
-    if ($("selected-image-preview").getAttribute("src") !== source) $("selected-image-preview").src = source;
-  } else $("selected-image-preview").removeAttribute("src");
-  const tools = $("image-browse-tools"),
-    destination = studioLayout.matches && selectedImage && !$("workspace").hidden
-      ? $("selected-image-tools") : $("viewer-image-tools"),
-    moved = tools.parentElement !== destination;
-  if (moved) destination.append(tools);
-  if (destination.id === "selected-image-tools") {
+  const { moved, inline } = ComfyPresentation.selectedPreview(selectedImage);
+  if (inline) {
     const items = selectedImageItems();
     $("download-image").href = selectedImage.download;
     $("previous-image").disabled = $("next-image").disabled = items.length < 2;
@@ -1503,11 +1415,9 @@ function syncSelectedPreview(refreshDetails = false) {
 }
 
 function syncImageLayout() {
-  if (studioLayout.matches && $("image-dialog").open) {
-    const item = viewerItems[viewerIndex];
-    if (item) selectSavedImage(item, true);
-    $("image-dialog").close();
-  } else syncSelectedPreview();
+  ComfyPresentation.reconcileViewer({
+    item: viewerItems[viewerIndex], select: selectSavedImage, refresh: syncSelectedPreview,
+  });
 }
 
 function navigateImage(offset) {
@@ -1573,7 +1483,7 @@ function renderGenerationHistory() {
       writeStore("job", job.id);
       applyState(state);
       if (job.images?.length) selectSavedImage(gallery.find((image) => image.id === job.images[0].id) || job.images[0]);
-      if (!studioLayout.matches) selectTab("create");
+      if (!ComfyPresentation.inlineImages) selectTab("create");
     });
     container.append(button);
   }
@@ -1862,18 +1772,14 @@ $("dock-result").addEventListener("click", () => {
 $("dock-result-image").addEventListener("error", () => {
   $("dock-result-image").hidden = true;
 });
-new ResizeObserver(() => {
-  const height = $("generation-dock").getBoundingClientRect().height;
-  document.documentElement.style.setProperty("--generation-dock-height", `${height}px`);
-}).observe($("generation-dock"));
-wideLayout.addEventListener("change", () => { syncGenerationDock(); syncImageLayout(); });
-studioLayout.addEventListener("change", () => {
-  selectTab($("workspace").dataset.page || "create");
-  syncImageLayout();
+ComfyPresentation.observeGeometry();
+ComfyPresentation.onChange({
+  wide() { syncGenerationDock(); syncImageLayout(); },
+  desktop() {
+    selectTab($("workspace").dataset.page || "create");
+    syncImageLayout();
+  },
 });
-new ResizeObserver(([entry]) => {
-  document.documentElement.style.setProperty("--masthead-height", `${entry.target.getBoundingClientRect().height}px`);
-}).observe(document.querySelector(".masthead"));
 $("mapping-search").addEventListener("input", renderMappings);
 $("save-mapping").addEventListener(
   "click",
@@ -2010,7 +1916,7 @@ $("image-favourites").addEventListener("click", () => {
   selectTab("gallery");
   renderLibrary();
   $("gallery-kept").focus({ preventScroll: true });
-  if (studioLayout.matches) $("gallery-page").scrollIntoView({ block: "nearest", behavior: disclosureMotion.matches ? "instant" : "smooth" });
+  ComfyPresentation.focusGallery(disclosureMotion.matches);
 });
 $("refresh-gallery").addEventListener("click", () => loadGallery(true));
 for (const [id, filter] of [["gallery-all", "all"], ["gallery-kept", "kept"], ["gallery-jobs", "jobs"], ["gallery-trash", "trash"]]) {
@@ -2118,7 +2024,7 @@ document.addEventListener("click", (event) => {
       event.target.closest("a, button, input, select, textarea")) return;
   const details = summary.parentElement;
   if (details.tagName !== "DETAILS") return;
-  if (studioLayout.matches && desktopSections.has(details.id)) {
+  if (ComfyPresentation.forcedOpen(details.id)) {
     event.preventDefault();
     return;
   }

@@ -1,0 +1,401 @@
+/* Mobile presentation, including the existing medium-width tablet layout.
+   Every selector is zero-specificity scoped; desktop never inherits this sheet. */
+:where(html[data-presentation="mobile"]) textarea.negative {
+  min-height: 90px;
+}
+:where(html[data-presentation="mobile"]) textarea.positive {
+  min-height: 288px;
+  height: 288px;
+}
+:where(html[data-presentation="mobile"]) .prompt-editor.expanded textarea.positive {
+  height: 576px;
+  height: clamp(432px, 70vh, 720px);
+  height: clamp(432px, 70dvh, 720px);
+}
+:where(html[data-presentation="mobile"]) .masthead {
+  max-width: 980px;
+  margin: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: calc(12px + var(--safe-area-top)) calc(18px + var(--safe-area-right)) 8px calc(18px + var(--safe-area-left));
+}
+:where(html[data-presentation="mobile"]) main {
+  max-width: 740px;
+  margin: auto;
+  padding: 0 calc(18px + var(--safe-area-right)) calc(35px + var(--generation-dock-height) + env(safe-area-inset-bottom)) calc(18px + var(--safe-area-left));
+}
+:where(html[data-presentation="mobile"]) .generate-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-width: 740px;
+  margin: auto;
+  background: linear-gradient(transparent, var(--bg) 25%);
+  padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
+  z-index: 2;
+}
+:where(html[data-presentation="mobile"]) .generate-bar > .job-card,
+:where(html[data-presentation="mobile"]) #dock-submitting {
+  margin: 0 0 10px;
+  padding: 14px;
+  box-shadow: var(--shadow-panel);
+}
+:where(html[data-presentation="mobile"]) .generate-bar > .job-card {
+  display: grid;
+  gap: 8px;
+  max-height: 40dvh;
+  overflow: auto;
+}
+:where(html[data-presentation="mobile"]) .generate-bar > .job-card .heading {
+  margin: 0;
+  gap: 8px;
+}
+:where(html[data-presentation="mobile"]) .generate-bar > .job-card h2 {
+  font-size: 0.9rem;
+  line-height: 1.3;
+}
+:where(html[data-presentation="mobile"]) .generate-bar > .job-card .hint {
+  margin: 0;
+  font-size: 0.75rem;
+}
+:where(html[data-presentation="mobile"]) .generate-bar > .job-card.has-preview {
+  grid-template-columns: minmax(0, 1fr) 72px;
+}
+:where(html[data-presentation="mobile"]) .generate-bar > .job-card.has-preview .heading,
+:where(html[data-presentation="mobile"]) .generate-bar > .job-card.has-preview .hint,
+:where(html[data-presentation="mobile"]) .generate-bar > .job-card.has-preview progress {
+  grid-column: 1;
+}
+:where(html[data-presentation="mobile"]) #job-metrics {
+  display: contents;
+}
+:where(html[data-presentation="mobile"]) .generate-bar > .job-card.has-preview .generation-stats { grid-column: 1 / -1; }
+:where(html[data-presentation="mobile"]) .generate-bar > .job-card .preview {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  width: 72px;
+  height: 72px;
+  margin: 0;
+}
+:where(html[data-presentation="mobile"]) .generate-bar > .job-card .actions {
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+:where(html[data-presentation="mobile"]) [data-desktop-slot] { display: none; }
+:where(html[data-presentation="mobile"]) #settings-stack { display: contents; }
+:where(html[data-presentation="mobile"]) .preview-stage { display: contents; }
+:where(html[data-presentation="mobile"]) .preview-loading { display: none; }
+:where(html[data-presentation="mobile"]) .wide-screen-only {
+  display: none;
+}
+:where(html[data-presentation="mobile"]) #selected-image-panel {
+  display: none;
+  min-width: 0;
+}
+@media (min-width: 700px) {
+  :where(html[data-presentation="mobile"]) .generate-bar {
+    padding-left: 28px;
+    padding-right: 28px;
+  }
+  :where(html[data-presentation="mobile"]) main {
+    padding-left: calc(28px + var(--safe-area-left));
+    padding-right: calc(28px + var(--safe-area-right));
+  }
+  :where(html[data-presentation="mobile"]) .masthead {
+    padding-left: 28px;
+    padding-right: 28px;
+  }
+  :where(html[data-presentation="mobile"]) .card {
+    --panel-padding: 20px;
+  }
+  :where(html[data-presentation="mobile"]) .image-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+/* Use available space, rather than a device/user-agent guess. A narrow laptop
+   window and iPad Split View retain the phone layout and its fixed progress dock. */
+@media (min-width: 1000px) and (min-height: 600px) {
+  :where(html[data-presentation="mobile"]) body {
+    --live-header-height: 0px;
+  }
+  :where(html[data-presentation="mobile"]) body:has(#header-generation:not([hidden])) {
+    --live-header-height: var(--masthead-height, var(--header-height));
+  }
+  :where(html[data-presentation="mobile"]) .masthead {
+    min-height: calc(var(--header-height) + var(--safe-area-top));
+    padding-top: calc(10px + var(--safe-area-top));
+    padding-bottom: 10px;
+    gap: var(--space-5);
+  }
+  :where(html[data-presentation="mobile"]) body:has(#header-generation:not([hidden])) .masthead {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    background: var(--bg);
+  }
+  :where(html[data-presentation="mobile"]) .masthead .brand,
+:where(html[data-presentation="mobile"]) .masthead .pill {
+    flex-shrink: 0;
+  }
+  :where(html[data-presentation="mobile"]) #header-generation {
+    width: min(48vw, 560px);
+    min-width: 0;
+    min-height: 56px;
+    margin: 0 auto;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+    background: var(--panel-sheen) var(--surface);
+    box-shadow: var(--shadow-panel);
+    opacity: 1;
+    transition: opacity 180ms ease, display 180ms allow-discrete;
+  }
+  :where(html[data-presentation="mobile"]) #header-generation[hidden] {
+    opacity: 0;
+  }
+  @starting-style {
+    :where(html[data-presentation="mobile"]) #header-generation:not([hidden]) { opacity: 0; }
+}
+  @media (prefers-reduced-motion: reduce) {
+    :where(html[data-presentation="mobile"]) #header-generation { transition: none; }
+}
+  :where(html[data-presentation="mobile"]) #header-generation #job-metrics {
+    display: grid;
+    gap: 3px;
+  }
+  :where(html[data-presentation="mobile"]) #header-generation .hint {
+    margin: 0;
+    font-size: 0.72rem;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  :where(html[data-presentation="mobile"]) #header-generation progress {
+    display: block;
+    height: 6px;
+  }
+  :where(html[data-presentation="mobile"]) #header-generation .generation-stats {
+    font-size: 0.68rem;
+    gap: 4px 12px;
+  }
+  :where(html[data-presentation="mobile"]) .comparison-actions {
+    top: calc(8px + max(var(--safe-area-top), var(--live-header-height)));
+  }
+  :where(html[data-presentation="mobile"]) main,
+:where(html[data-presentation="mobile"]) .masthead {
+    max-width: 1440px;
+  }
+  :where(html[data-presentation="mobile"]) #login,
+:where(html[data-presentation="mobile"]) #offline {
+    max-width: 640px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  :where(html[data-presentation="mobile"]) #workspace[data-page="create"] {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    gap: 0 28px;
+    align-items: start;
+  }
+  :where(html[data-presentation="mobile"]) .tabs {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+  :where(html[data-presentation="mobile"]) #output-warning {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  :where(html[data-presentation="mobile"]) #create-page {
+    grid-column: 1;
+    grid-row: 3;
+    min-width: 0;
+  }
+  :where(html[data-presentation="mobile"]) main:has(#workspace[data-page="create"]:not([hidden])) {
+    padding-bottom: calc(35px + var(--safe-area-bottom));
+  }
+  :where(html[data-presentation="mobile"]) #workspace[data-page="create"] #generation-panel {
+    grid-column: 2;
+    grid-row: 2 / span 2;
+    position: sticky;
+    top: calc(16px + max(var(--safe-area-top), var(--live-header-height)));
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    /* Reserve room for the masthead and tabs before sticky positioning starts. */
+    max-height: calc(100dvh - 210px - var(--safe-area-top) - var(--safe-area-bottom));
+    padding: var(--panel-padding);
+    background: var(--panel-sheen) var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-panel);
+  }
+  :where(html[data-presentation="mobile"]) #workspace[data-page="create"] .wide-screen-only {
+    display: block;
+  }
+  :where(html[data-presentation="mobile"]) #generation-empty {
+    padding: 40px 12px;
+    text-align: center;
+  }
+  :where(html[data-presentation="mobile"]) #workspace[data-page="create"] #job-output {
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  :where(html[data-presentation="mobile"]) #workspace[data-page="create"] #job-output > .job-card {
+    margin: 0 0 16px;
+    padding: 0;
+    background: transparent;
+    border: 0;
+  }
+  :where(html[data-presentation="mobile"]) #workspace[data-page="create"] .generate-bar {
+    position: static;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  :where(html[data-presentation="mobile"]) #workspace[data-page="create"] .generate-bar > button {
+    flex-shrink: 0;
+  }
+  :where(html[data-presentation="mobile"]) #workspace[data-page="create"] #dock-result {
+    /* The full result is already directly above Generate in this layout. */
+    display: none;
+  }
+  :where(html[data-presentation="mobile"]) #workspace[data-page="create"] .generate-bar > .job-card {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    max-height: calc(100dvh - 210px - var(--safe-area-top) - var(--safe-area-bottom));
+    margin-bottom: 14px;
+    padding: 0 0 14px;
+    border: 0;
+    border-radius: 0;
+    border-bottom: 1px solid var(--line);
+    background: transparent;
+    box-shadow: none;
+  }
+  :where(html[data-presentation="mobile"]) #workspace[data-page="create"] .generate-bar > .job-card .preview {
+    width: 100%;
+    height: clamp(160px, 32dvh, 400px);
+    min-height: 60px;
+    flex-shrink: 1;
+  }
+  :where(html[data-presentation="mobile"]) #workspace[data-page="create"] .preview-stage {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1 1 auto;
+    min-height: 140px;
+    height: clamp(160px, 32dvh, 400px);
+    margin-top: 12px;
+    border-radius: var(--radius-control);
+    background: var(--image-bg);
+    overflow: hidden;
+  }
+  :where(html[data-presentation="mobile"]) #workspace[data-page="create"] .preview-stage .preview { margin-top: 0; }
+  :where(html[data-presentation="mobile"]) #workspace[data-page="create"] .preview-loading {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    max-width: calc(100% - 16px);
+    padding: 16px;
+    text-align: center;
+    pointer-events: none;
+  }
+  :where(html[data-presentation="mobile"]) #preview-loading .hint { margin: 0; }
+  :where(html[data-presentation="mobile"]) #preview-loading .generation-stats { justify-content: center; margin: 0; }
+  :where(html[data-presentation="mobile"]) #workspace[data-page="create"] .preview-stage[data-preview="true"] .preview-loading {
+    bottom: 8px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+    background: var(--surface);
+  }
+  :where(html[data-presentation="mobile"]) .preview-stage[data-preview="true"] .loading-spinner { width: 18px; height: 18px; border-width: 2px; }
+  :where(html[data-presentation="mobile"]) .preview-stage[data-preview="true"] #preview-loading-phase { display: none; }
+  :where(html[data-presentation="mobile"]) #workspace[data-page="create"] .job-card[data-preparing="true"] > .heading,
+:where(html[data-presentation="mobile"]) #workspace[data-page="create"] .job-card[data-preparing="true"] > .actions,
+:where(html[data-presentation="mobile"]) #workspace[data-page="create"] .job-card[data-preparing="true"] > #job-metrics { display: none; }
+  :where(html[data-presentation="mobile"]) #workspace[data-page="create"] #generation-panel:has(#preview-stage:not([hidden])) #dock-submitting { display: none; }
+  :where(html[data-presentation="mobile"]) #workspace[data-page="create"] .generate-bar > .job-card .heading,
+:where(html[data-presentation="mobile"]) #workspace[data-page="create"] .generate-bar > .job-card .hint,
+:where(html[data-presentation="mobile"]) #workspace[data-page="create"] .generate-bar > .job-card progress,
+:where(html[data-presentation="mobile"]) #workspace[data-page="create"] .generate-bar > .job-card .generation-stats {
+    flex-shrink: 0;
+  }
+  :where(html[data-presentation="mobile"]) #workspace[data-page="create"] #job-images {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  :where(html[data-presentation="mobile"]) #workspace[data-page="create"] #job-images:has(> :only-child) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  :where(html[data-presentation="mobile"]) #workspace[data-page="create"] #job-images button {
+    aspect-ratio: auto;
+    height: clamp(180px, 40dvh, 480px);
+  }
+  :where(html[data-presentation="mobile"]) #workspace[data-page="create"] #job-images img {
+    object-fit: contain;
+  }
+  :where(html[data-presentation="mobile"]) #workspace[data-page="create"] #selected-image-panel { display: block; }
+  :where(html[data-presentation="mobile"]) #generation-panel[data-active="true"]:not([data-inspect="true"]) #selected-image-panel { display: none; }
+  :where(html[data-presentation="mobile"]) #generation-panel[data-active="true"][data-inspect="true"] #preview { display: none; }
+  :where(html[data-presentation="mobile"]) #generation-panel[data-saved="true"][data-active="false"] #job-images { display: none; }
+  :where(html[data-presentation="mobile"]) main:has(#workspace[data-page="create"]:not([hidden])) #notice {
+    bottom: calc(16px + var(--safe-area-bottom));
+  }
+  :where(html[data-presentation="mobile"]) #workspace[data-page="gallery"] .generate-bar {
+    left: auto;
+    right: calc(28px + var(--safe-area-right));
+    width: 440px;
+  }
+  :where(html[data-presentation="mobile"]) #workspace[data-page="gallery"] .wide-screen-only {
+    display: none;
+  }
+  :where(html[data-presentation="mobile"]) #gallery-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-3);
+  }
+  :where(html[data-presentation="mobile"]) #compare-dialog,
+:where(html[data-presentation="mobile"]) #image-dialog {
+    width: min(1120px, calc(100% - 56px - var(--safe-area-left) - var(--safe-area-right)));
+  }
+  :where(html[data-presentation="mobile"]) .compare-viewport {
+    aspect-ratio: 16 / 10;
+    max-height: 62dvh;
+  }
+}
+@media (max-width: 360px) {
+  :where(html[data-presentation="mobile"]) .saved-image-buttons { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  :where(html[data-presentation="mobile"]) .masthead {
+    padding-left: 15px;
+    padding-right: 15px;
+  }
+  :where(html[data-presentation="mobile"]) .brand {
+    font-size: 0.95rem;
+  }
+  :where(html[data-presentation="mobile"]) .card {
+    --panel-padding: 14px;
+  }
+  :where(html[data-presentation="mobile"]) .control-grid {
+    gap: 10px;
+  }
+  :where(html[data-presentation="mobile"]) .actions {
+    flex-wrap: wrap;
+  }
+  :where(html[data-presentation="mobile"]) .actions > * {
+    min-width: 40%;
+  }
+}

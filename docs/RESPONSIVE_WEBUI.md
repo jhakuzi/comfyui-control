@@ -1,3 +1,7 @@
+> Presentation files are now separated without changing this layout. See
+> [WEBUI_PRESENTATION.md](WEBUI_PRESENTATION.md) for mobile/desktop file ownership,
+> shared component dependencies and regression checks.
+
 # Responsive WebUI — testing workspace
 
 Open the **same Mobile WebUI URL** on your phone, iPad or laptop. No device
