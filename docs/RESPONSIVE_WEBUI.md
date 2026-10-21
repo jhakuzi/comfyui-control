@@ -39,6 +39,25 @@ presets, history or original workflow files are deleted by this organization.
   and processing use a moving highlight without inventing a percentage. It pauses
   while reconnecting and resets when the job ends. The button remains disabled
   during an active job; Cancel retains its existing behavior.
+- **Generation settings:** Steps, CFG/guidance, Sampler, Scheduler, Seed and Batch
+  size use the selected workflow's mapped inputs and installed node choices.
+  Missing recognized controls in older presets are discovered on load. Inputs
+  on separate sampler/noise/scheduler nodes work too; graph connections stay linked.
+  Existing Advanced mappings appear here with their saved keys/roles retained.
+  Turn off **Randomize seed for each generation** to enter a fixed seed.
+  **Reuse last seed** copies just the latest matching completed generation's seed(s), turns
+  randomization off and preserves the prompt and other edits. Seeds retain their
+  exact 64-bit values. Whole-setting reuse remains available separately.
+- **Batch count / Batch size:** count queues that many workflow runs; size is the
+  workflow's images per run. For example, count 2 and size 3 requests two runs of
+  three images. Count defaults to 1, is saved with the draft, and is limited to
+  20 runs within the existing 20-unfinished-job limit. Random mode chooses a seed
+  per run; fixed mode retains the same seed and may reuse cached output. Progress
+  follows the active batch member; History lists each run. Cancel removes the
+  remaining batch members using safe per-job cancellation, leaving other jobs alone.
+  Reloads/retries do not submit the batch again. An uncertain/rejected submission
+  stops the remaining runs and reports where it stopped; check History/ComfyUI
+  before starting another batch. Reusing whole image/job settings resets count to 1.
 - **History / Favourites:** separate buttons near the prompt open prompt history
   and liked images. Image hearts toggle Favourites in the central selected-image
   panel or phone viewer. Existing Keep marks carry across unchanged. Image hearts

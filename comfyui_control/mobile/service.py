@@ -17,7 +17,8 @@ from .client import ComfyClient, ComfyError
 from .settings import lan_address, save_json
 from .workflows import (Presets, candidates, fields_for, render, suggested_mappings,
                         with_model_controls, MODEL_CONTROLS_VERSION,
-                        with_resolution_controls, RESOLUTION_CONTROLS_VERSION)
+                        with_resolution_controls, RESOLUTION_CONTROLS_VERSION,
+                        with_generation_controls, GENERATION_CONTROLS_VERSION)
 from .workflow_sources import saved_workflows, saved_workflow_graph
 from ..performance import GenerationPerformance
 from .prompt_history import PromptHistory
@@ -183,7 +184,8 @@ class MobileService:
         if include_details:
             public = [self.public_job(job) for job in jobs]
         else:
-            keys = {"id", "status", "phase", "progress", "prompt_id", "position", "preset_name", "error", "seconds_per_iteration"}
+            keys = {"id", "status", "phase", "progress", "prompt_id", "position", "preset_name", "error", "seconds_per_iteration",
+                    "batch_id", "batch_index", "batch_count", "batch_notice"}
             public = [{**{k: v for k, v in job.items() if k in keys}, "image_count": len(self.public_job(job).get("images", []))} for job in jobs]
         preview_allowed = owner is None or any(j["id"] == self.preview_job for j in jobs)
         return json_safe({"instance": self.instance_id, "version": self.state_version,
@@ -258,6 +260,8 @@ class MobileService:
                 preset = with_model_controls(preset, info)
             if preset.get("resolution_controls_version") != RESOLUTION_CONTROLS_VERSION:
                 preset = with_resolution_controls(preset, info)
+            if preset.get("generation_controls_version") != GENERATION_CONTROLS_VERSION:
+                preset = with_generation_controls(preset, info)
         if preset is not previous:
             if preset["mappings"] != previous["mappings"]:
                 preset["model_upgrade_revision"] = revision(previous)
@@ -272,7 +276,7 @@ class MobileService:
     async def refresh_models(self, identifier):
         info = await self.metadata(force=True)
         previous = self.presets.get(identifier)
-        preset = with_resolution_controls(with_model_controls(previous, info), info)
+        preset = with_generation_controls(with_resolution_controls(with_model_controls(previous, info), info), info)
         if preset["mappings"] != previous["mappings"]:
             preset["model_upgrade_revision"] = revision(previous)
         save_json(self.presets.path(identifier), preset)
@@ -308,6 +312,9 @@ class MobileService:
 
     async def submit(self, body, owner=None, *, expected_scope=None):
         request_id = body.get("request_id")
+        batch_count = body.get("batch_count", 1)
+        if type(batch_count) is not int or not 1 <= batch_count <= 20:
+            raise ValueError("Batch count must be an integer from 1 to 20.")
         try:
             if str(uuid.UUID(request_id)) != request_id:
                 raise ValueError()
@@ -320,8 +327,8 @@ class MobileService:
                 if owner is not None and self.jobs[request_id].get("owner") != owner:
                     raise ValueError("This request belongs to another browser session.")
                 return self.jobs[request_id]
-            if len([j for j in self.current_jobs() if j["status"] not in {"complete", "failed", "cancelled"}]) >= 20:
-                raise ValueError("There are already 20 unfinished mobile jobs.")
+            if len([j for j in self.current_jobs() if j["status"] not in {"complete", "failed", "cancelled"}]) + batch_count > 20:
+                raise ValueError("Batch would exceed the limit of 20 unfinished mobile jobs.")
             preset = self.presets.get(body.get("preset"))
             if body.get("revision") != revision(preset):
                 raise ValueError("This preset changed. Reload it before generating.")
@@ -332,31 +339,53 @@ class MobileService:
             lora_models = await self.lora_choices(preset, info)
             if expected_scope is not None and expected_scope != self.output_scope:
                 raise ValueError('The output folder changed. No generation was queued; refresh the gallery.')
-            graph, actual = render(preset, body.get("values", {}), body.get("random_seed", False), body.get("disabled_loras", []), info, lora_models)
-            # Journal before the network request. A lost response never retries a prompt blindly.
-            job = {"id": request_id, "owner": owner, "scope": self.output_scope, "preset": preset["id"], "preset_name": preset["name"], "revision": revision(preset),
+            # Validate the entire batch before queueing anything. Each run uses
+            # the same graph, with an independent random seed when requested.
+            runs = [render(preset, body.get("values", {}), body.get("random_seed", False), body.get("disabled_loras", []), info, lora_models)
+                    for _ in range(batch_count)]
+            identifiers = [request_id] + [str(uuid.uuid5(uuid.UUID(request_id), str(index))) for index in range(1, batch_count)]
+            if any(identifier in self.jobs for identifier in identifiers):
+                raise ValueError("A batch request identifier is already in use. Start a new request.")
+            scope = self.output_scope
+            controls = fields_for(preset, info, lora_models)
+            first = None
+            for index, (identifier, (graph, actual)) in enumerate(zip(identifiers, runs)):
+                if scope != self.output_scope:
+                    break
+                # Journal each run before its network request. Repeating the
+                # parent request returns the existing batch and never requeues.
+                job = {"id": identifier, "owner": owner, "scope": scope, "preset": preset["id"], "preset_name": preset["name"], "revision": revision(preset),
                    "values": actual, "disabled_loras": body.get("disabled_loras", []), "created": time.time(),
                    "status": "submitting", "phase": "preparing", "progress": None, "images": [], "prompt_id": None,
                    "prompt_history_recorded": False}
-            controls = fields_for(preset, info, lora_models)
-            job["controls"] = [{k: field[k] for k in ("key", "label", "role", "kind", "node", "input", "group")} for field in controls]
-            job['metadata'] = generation_details(controls, actual, graph, info)
-            self.jobs[request_id] = job
-            self.persist()
-            try:
-                result = await self.client.request("POST", "/prompt", {
-                    "prompt": graph, "client_id": self.client_id,
-                    "extra_data": {"mobile_request_id": request_id}})
-                job.update(prompt_id=result["prompt_id"], status="queued")
-            except ComfyError as exc:
-                job.update(status="failed" if exc.rejected else "unknown", error=str(exc))
-            except (KeyError, TypeError):
-                job.update(status="unknown", error="ComfyUI's submission response was incomplete. Reconnecting before retrying is safest.")
-            await self._record_prompt(job)
+                if batch_count > 1:
+                    job.update(batch_id=request_id, batch_index=index + 1, batch_count=batch_count)
+                first = first or job
+                job["controls"] = [{k: field[k] for k in ("key", "label", "role", "kind", "node", "input", "group")} for field in controls]
+                job['metadata'] = generation_details(controls, actual, graph, info)
+                self.jobs[identifier] = job
+                self.persist()
+                try:
+                    result = await self.client.request("POST", "/prompt", {
+                        "prompt": graph, "client_id": self.client_id,
+                        "extra_data": {"mobile_request_id": identifier}})
+                    job.update(prompt_id=result["prompt_id"], status="queued")
+                except ComfyError as exc:
+                    job.update(status="failed" if exc.rejected else "unknown", error=str(exc))
+                except (KeyError, TypeError):
+                    job.update(status="unknown", error="ComfyUI's submission response was incomplete. Reconnecting before retrying is safest.")
+                await self._record_prompt(job)
+                self.persist()
+                if batch_count > 1 and job['status'] in {'failed', 'unknown'}:
+                    first['batch_notice'] = f"Batch stopped at run {index + 1} of {batch_count}. Check History and ComfyUI's queue before starting another batch."
+                    job['batch_notice'] = first['batch_notice']
+                    break
+            if scope != self.output_scope:
+                first['batch_notice'] = 'The output folder changed; the remaining batch runs were not submitted.'
             self.persist()
             self.broadcast()
             self.schedule_refresh()
-            return job
+            return first
 
     async def prompt_history(self, owner, action='list', identifier=None, favorite=None):
         async with self.prompt_lock:
@@ -512,6 +541,30 @@ class MobileService:
                 self.online = False
                 self.connection = "ComfyUI is offline; reconnecting…"
             self.broadcast()
+
+    async def cancel_batch(self, identifier, owner=None):
+        # Wait for an in-flight submission to finish queueing before choosing
+        # members. Reuse safe per-job cancellation; never interrupt globally.
+        async with self.submit_lock:
+            job = self.jobs.get(identifier)
+            if not job or job not in self.current_jobs() or owner is not None and job.get('owner') != owner:
+                raise ValueError('No cancellable job was found.')
+            if not job.get('batch_id'):
+                return await self.cancel(identifier, owner)
+            members = [item for item in self.current_jobs()
+                       if item.get('batch_id') == job['batch_id'] and item.get('owner') == job.get('owner')
+                       and item.get('prompt_id') and item['status'] in {'queued', 'running', 'cancelling', 'unknown'}]
+            # Remove queued runs even if a server cannot safely stop a running one.
+            members.sort(key=lambda item: item['status'] != 'queued')
+            errors = []
+            for member in members:
+                try:
+                    await self.cancel(member['id'], owner)
+                except (ValueError, ComfyError) as exc:
+                    errors.append(str(exc))
+            if errors:
+                raise ValueError('Some batch runs could not be cancelled. ' + errors[0])
+            return job
 
     async def cancel(self, identifier, owner=None):
         job = self.jobs.get(identifier)

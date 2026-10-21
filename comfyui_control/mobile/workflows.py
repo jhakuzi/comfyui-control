@@ -18,6 +18,8 @@ ROLES = {"positive", "negative", "model", "lora_model", "lora_strength", "lora_e
 MODEL_CONTROLS_VERSION = 2
 RESOLUTION_CONTROLS_VERSION = 1
 RESOLUTION_ROLES = {"resolution_mp", "aspect_ratio", "alignment", "custom_ratio", "custom_aspect_ratio"}
+GENERATION_CONTROLS_VERSION = 1
+GENERATION_ROLES = {"sampler", "scheduler", "steps", "cfg", "seed", "batch"}
 
 
 def diffusion_inputs(graph, info):
@@ -130,7 +132,9 @@ def suggested_mappings(graph, info=None):
         "clip_name": ("text_encoder", "Text encoder"), "clip_name1": ("text_encoder", "Text encoder 1"),
         "clip_name2": ("text_encoder", "Text encoder 2"), "text_encoder_name": ("text_encoder", "Text encoder"),
         "sampler_name": ("sampler", "Sampler"), "scheduler": ("scheduler", "Scheduler"),
+        "sampler": ("sampler", "Sampler"), "scheduler_name": ("scheduler", "Scheduler"),
         "steps": ("steps", "Steps"), "cfg": ("cfg", "CFG"), "seed": ("seed", "Seed"),
+        "cfg_scale": ("cfg", "CFG"),
         "guidance": ("cfg", "Guidance"),
         "noise_seed": ("seed", "Seed"), "width": ("width", "Width"), "height": ("height", "Height"),
         "batch_size": ("batch", "Batch size"), "lora_name": ("lora_model", "LoRA"),
@@ -226,11 +230,17 @@ def with_resolution_controls(preset, info):
     return item
 
 
+def with_generation_controls(preset, info):
+    """Expose recognized generation inputs without replacing existing mappings."""
+    item = _with_missing_controls(preset, info, GENERATION_ROLES, "generation")
+    item["generation_controls_version"] = GENERATION_CONTROLS_VERSION
+    return item
+
+
 def fields_for(preset, info, lora_models=None):
     available = {(c["node"], c["input"]): c for c in candidates(preset["graph"], info)}
     diffusion = diffusion_inputs(preset["graph"], info)
-    resolution = {(m["node"], m["input"]): m["role"] for m in suggested_mappings(preset["graph"], info)
-                  if m["role"] in RESOLUTION_ROLES}
+    recognized = {(m["node"], m["input"]): m["role"] for m in suggested_mappings(preset["graph"], info)}
     fields = [{**available[(m["node"], m["input"])], **m} for m in preset["mappings"]]
     for field in fields:
         # Custom loaders may register a STRING widget populated by their own
@@ -243,8 +253,11 @@ def fields_for(preset, info, lora_models=None):
             field["allow_saved_value"] = True
         if field["role"] == "advanced" and (field["node"], field["input"]) in diffusion:
             field["model_role"] = "diffusion_model"
-        if field["role"] == "advanced" and (field["node"], field["input"]) in resolution:
-            field["resolution_role"] = resolution[(field["node"], field["input"])]
+        inferred = recognized.get((field["node"], field["input"]))
+        if field["role"] == "advanced" and inferred in RESOLUTION_ROLES:
+            field["resolution_role"] = inferred
+        if field["role"] == "advanced" and inferred in GENERATION_ROLES:
+            field["generation_role"] = inferred
     return fields
 
 
@@ -337,5 +350,6 @@ class Presets:
         if not automatic:
             item["model_controls_version"] = MODEL_CONTROLS_VERSION
             item["resolution_controls_version"] = RESOLUTION_CONTROLS_VERSION
+            item["generation_controls_version"] = GENERATION_CONTROLS_VERSION
         save_json(self.path(identifier), item)
         return item

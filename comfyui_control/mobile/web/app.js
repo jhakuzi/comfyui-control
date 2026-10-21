@@ -17,7 +17,8 @@ const compactSections = new Map();
 let preset = null,
   draft = {},
   disabledLoras = new Set(),
-  randomSeed = true;
+  randomSeed = true,
+  batchCount = 1;
 let workflowPresets = [], savedWorkflowNames = null;
 let state = { jobs: [], online: false },
   selectedJob = null,
@@ -147,6 +148,7 @@ function saveDraft() {
       fields: preset.fields.map(({ key, node, input, role, kind }) => ({ key, node, input, role, kind })),
       values: draft,
       randomSeed,
+      batchCount,
       seedPreferenceVersion: 2,
       disabledLoras: [...disabledLoras],
       mappings: [...mappingDraft.values()],
@@ -227,9 +229,12 @@ function syncDesktopLayout() {
   }
 }
 function currentJob() {
-  return selectedJob === "new"
+  const job = selectedJob === "new"
     ? null
     : state.jobs.find((item) => item.id === selectedJob) || state.jobs.at(-1);
+  if (job?.batch_id && !activeStatuses.has(job.status))
+    return state.jobs.find((item) => item.batch_id === job.batch_id && activeStatuses.has(item.status)) || job;
+  return job;
 }
 function syncJobMetrics(active) {
   const header = $("header-generation"),
@@ -300,9 +305,10 @@ function renderGenerationStats(job) {
   }
 }
 function updateGenerate() {
+  updateSeedReuse();
   $("cleanup-vram").disabled = cleaningVram || busy || !connected || recovering || !state.online || state.queue_remaining > 0;
   $("cleanup-vram").title = state.queue_remaining > 0 ? "Available when ComfyUI has no running or queued generations." : "Unload idle models and release unused GPU memory. The next generation will reload its models.";
-  const job = state.jobs.find((item) => item.id === selectedJob);
+  const job = currentJob();
   $("generate").disabled =
     busy ||
     !connected ||
@@ -485,6 +491,8 @@ async function choosePreset(id, reuse) {
   // Keep new checkbox choices and explicit Same seed reuse across refreshes.
   randomSeed = compatible && (reuse || stored.seedPreferenceVersion === 2) && typeof stored.randomSeed === "boolean"
     ? stored.randomSeed : true;
+  batchCount = !reuse && Number.isInteger(Number(stored.batchCount)) && Number(stored.batchCount) >= 1 && Number(stored.batchCount) <= 20
+    ? Number(stored.batchCount) : 1;
   disabledLoras = new Set(compatible ? stored.disabledLoras || [] : []);
   mappingDraft = new Map(
     (same && Array.isArray(stored.mappings)
@@ -728,13 +736,13 @@ function renderFields() {
   }
   $("lora-card").hidden = !groups.length;
   $("lora-count").textContent = `· ${groups.length} configured`;
-  const basics = preset.fields.filter((field) =>
-    ["sampler", "scheduler", "steps", "cfg", "seed", "batch"].includes(
-      field.role,
-    ),
-  );
-  for (const field of basics) control(field, $("basic-controls"));
-  if (roles("seed").length) {
+  const generationRoles = ["steps", "cfg", "sampler", "scheduler", "seed", "batch"];
+  const basics = preset.fields
+    .map((field) => ({ ...field, role: field.generation_role || field.role }))
+    .filter((field) => generationRoles.includes(field.role))
+    .sort((a, b) => generationRoles.indexOf(a.role) - generationRoles.indexOf(b.role));
+  for (const field of basics.filter((field) => field.role !== "batch")) control(field, $("basic-controls"));
+  if (basics.some((field) => field.role === "seed")) {
     const label = node(
         "label",
         "Randomize seed for each generation",
@@ -755,9 +763,34 @@ function renderFields() {
       saveDraft();
     });
     label.prepend(toggle);
-    $("basic-controls").append(label, hint);
+    const reuse = node("button", "↺ Reuse last seed", "small");
+    reuse.type = "button";
+    reuse.id = "reuse-last-seed";
+    reuse.addEventListener("click", () => {
+      const values = lastSeedValues();
+      if (!values) return;
+      if (randomSeed) toggle.click();
+      for (const [key, value] of values) {
+        draft[key] = value;
+        $("control-" + key).value = value;
+      }
+      saveDraft();
+    });
+    const actions = node("div", undefined, "seed-actions wide");
+    actions.append(label, reuse);
+    $("basic-controls").append(actions, hint);
   }
-  $("settings-card").hidden = !basics.length;
+  const count = node("div", undefined, "control");
+  const countLabel = node("label", "Batch count");
+  countLabel.htmlFor = "batch-count";
+  const countInput = node("input");
+  Object.assign(countInput, { id: "batch-count", type: "number", min: "1", max: "20", step: "1", required: true, value: batchCount });
+  countInput.title = "Number of queued runs. Batch size controls images per run.";
+  countInput.addEventListener("input", () => { batchCount = countInput.value; saveDraft(); });
+  count.append(countLabel, countInput);
+  $("basic-controls").append(count);
+  for (const field of basics.filter((field) => field.role === "batch")) control(field, $("basic-controls"));
+  $("settings-card").hidden = false;
   const resolutionRoles = [
     "resolution_mp",
     "aspect_ratio",
@@ -773,8 +806,28 @@ function renderFields() {
   for (const field of resolution)
     control({ ...field, role: field.resolution_role || field.role }, $("resolution-controls"));
   $("resolution-card").hidden = !resolution.length;
-  for (const field of roles("advanced").filter((field) => !field.model_role && !field.resolution_role)) control(field, $("advanced-controls"));
+  for (const field of roles("advanced").filter((field) => !field.model_role && !field.resolution_role && !field.generation_role)) control(field, $("advanced-controls"));
   $("reuse-last").hidden = !state.jobs.some((job) => job.preset === preset.id);
+}
+function lastSeedValues() {
+  const seeds = preset?.fields.filter((field) => (field.generation_role || field.role) === "seed") || [];
+  if (!seeds.length) return null;
+  for (const job of [...state.jobs].reverse()) {
+    if (job.preset !== preset.id || job.status !== "complete" || !job.prompt_id) continue;
+    const values = seeds.map((field) => {
+      const previous = job.controls?.find((old) => old.node === field.node && old.input === field.input && old.kind === field.kind);
+      const value = previous && job.values?.[previous.key];
+      return [field.key, value === undefined ? null : String(value)];
+    });
+    if (values.every(([, value]) => value !== null && /^[0-9]{1,20}$/.test(value))) return values;
+  }
+  return null;
+}
+function updateSeedReuse() {
+  const button = $("reuse-last-seed");
+  if (!button) return;
+  button.disabled = !lastSeedValues();
+  button.title = button.disabled ? "No completed generation with matching seed controls in this browser." : "Copy only the last completed generation's seed and use it as a fixed seed.";
 }
 const roleNames = {
   positive: "Positive prompt",
@@ -891,12 +944,14 @@ function requestId() {
 async function generate(event) {
   event.preventDefault();
   if (busy || (!preset && !pendingSubmission) || !connected || recovering) return;
+  if (!pendingSubmission && !$("batch-count")?.reportValidity()) return;
   await submitGeneration(pendingSubmission || {
     request_id: requestId(),
     preset: preset.id,
     revision: preset.revision,
     values: draft,
     random_seed: randomSeed,
+    batch_count: Number(batchCount),
     disabled_loras: [...disabledLoras],
   });
 }
@@ -917,6 +972,7 @@ async function submitGeneration(body) {
     });
     const job = action ? response.job : response;
     if (job.prompt_history_notice) notice(job.prompt_history_notice);
+    if (job.batch_notice) notice(job.batch_notice);
     pendingSubmission = null;
     writeStore("pending", null);
     selectedJob = job.id;
@@ -1129,6 +1185,8 @@ function applyState(value) {
                 ? `Preparing another stage or saving results · ${job.preset_name}`
                 : `Preparing the workflow; models may take a while to load · ${job.preset_name}`
               : job.preset_name);
+    if (job.batch_count > 1) $("job-detail").textContent += ` · Batch ${job.batch_index}/${job.batch_count}`;
+    if (job.batch_notice) $("job-detail").textContent += " · " + job.batch_notice;
     $("progress").hidden = !["submitting", "queued", "running", "cancelling"].includes(job.status);
     $("progress").setAttribute("aria-label", $("job-title").textContent);
     if (job.status === "running" && job.progress) {
@@ -1423,7 +1481,7 @@ function renderGenerationHistory() {
     button.type = "button";
     button.dataset.jobId = job.id;
     button.setAttribute("aria-pressed", String(job.id === selectedJob));
-    button.append(node("span", job.preset_name || "Workflow"), node("span", `${job.status} · ${new Date(job.created * 1000).toLocaleString()}`, "hint"));
+    button.append(node("span", (job.preset_name || "Workflow") + (job.batch_count > 1 ? ` · Batch ${job.batch_index}/${job.batch_count}` : "")), node("span", `${job.status} · ${new Date(job.created * 1000).toLocaleString()}`, "hint"));
     button.addEventListener("click", () => {
       selectedJob = job.id;
       writeStore("job", job.id);
@@ -1783,16 +1841,17 @@ $("delete-preset").addEventListener(
 $("cancel").addEventListener(
   "click",
   guarded(async () => {
+    const batch = currentJob()?.batch_count > 1;
     if (
       !selectedJob ||
       !confirm(
-        "Cancel this job? Running work is interrupted only when your ComfyUI supports safe per-job cancellation.",
+        `Cancel ${batch ? "the remaining batch runs" : "this job"}? Running work is interrupted only when your ComfyUI supports safe per-job cancellation.`,
       )
     )
       return;
     await api("/api/jobs/" + selectedJob + "/cancel", {
       method: "POST",
-      body: JSON.stringify({ confirm_interrupt: true }),
+      body: JSON.stringify({ confirm_interrupt: true, all_in_batch: batch }),
     });
     applyState(await api("/api/state"));
   }),

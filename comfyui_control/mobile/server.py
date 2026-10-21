@@ -210,7 +210,8 @@ class MobileHTTP:
         body = await object_body(request)
         if body.get("confirm_interrupt") is not True:
             raise ValueError("Confirm interruption before cancelling a running job.")
-        return json_response(self.service.public_job(await self.service.cancel(request.match_info["id"], owner=request[OWNER])))
+        cancel = self.service.cancel_batch if body.get('all_in_batch') is True else self.service.cancel
+        return json_response(self.service.public_job(await cancel(request.match_info["id"], owner=request[OWNER])))
 
     async def gallery(self, request):
         images = await self.service.gallery(owner=request[OWNER], force=request.query.get('refresh') == '1')

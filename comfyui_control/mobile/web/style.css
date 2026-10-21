@@ -702,6 +702,8 @@ main {
 .control {
   min-width: 0;
 }
+.seed-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.seed-actions .check-label { margin: 0; }
 .control + textarea {
   margin-top: 12px;
 }

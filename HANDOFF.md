@@ -1,5 +1,49 @@
 # Session handoff — 2026-10-21
 
+## Current follow-up — generation settings and batch count
+
+- User asked for CFG, Sampler/Scheduler, random/fixed/last-seed controls, Batch
+  count and Batch size, and why they were missing. The previous resolution-panel
+  screenshot used a minimal fixture with no sampler/seed inputs; it did not show
+  a removal of existing controls or the actual user's VeryComfy graph. Explained
+  this to the user. Also found a real discovery gap: old presets gained missing
+  model/resolution controls, but not missing generation controls.
+- Added one-time generic generation-control discovery for recognized literal
+  inputs, including separate sampler/noise/scheduler/guider nodes. Existing
+  Advanced mappings appear in Generation settings with saved roles/keys intact;
+  explicitly hidden controls remain hidden after subsequent mapping saves.
+  Actual node choices/defaults remain authoritative; linked inputs are retained.
+- Panel order is Steps/CFG, Sampler/Scheduler, Seed, random toggle + Reuse last
+  seed, then Batch count/size. Reuse last seed copies exact seeds from the latest
+  matching completed generation in this browser, switches to fixed mode, and
+  preserves prompt/settings edits. No seed rounding; whole-settings reuse remains.
+- Batch count (1–20, draft-persisted, default 1) queues normal persisted jobs;
+  Batch size remains the graph input (images per run). One UUID group and stable
+  member IDs preserve request idempotency/restart recovery. Validate all runs
+  before submission; stop on uncertain/rejected responses or output changes,
+  report partial batches and never resume them by blindly resubmitting. Keep the
+  existing 20-unfinished-job cap. Random mode generates a seed per run; fixed
+  mode keeps the seed unchanged and can produce cached results. Whole job/image
+  reuse resets count to 1; seed-only reuse keeps the count.
+- Progress follows active group members; each run appears in private History.
+  Cancel removes remaining members through existing safe per-job cancellation,
+  with browser/output checks and queued members first. It never interrupts globally
+  or cancels unrelated jobs. Existing single-job/image action requests default
+  to count 1. No second queue/store, dependency, engine, release or package rebuild.
+- Verification: **125 focused tests passed**, one known pre-existing Upscale
+  fixture test explicitly deselected (see demo-removal section). Chromium and
+  Linux WebKit generation-controls and responsive/reconnect regressions passed;
+  Chromium supplied Edit/Upscale browser check passed. Covered legacy mapping/
+  draft upgrades, separate-node discovery, exact fixed/random/reused seeds,
+  native choices, count/size submissions, reload/idempotency/restart, partial
+  submission recovery, queue limits, output changes and scoped safe cancellation.
+  JavaScript syntax and `git diff --check` passed. These are protocol fixtures,
+  not the user's actual workflow or GPU inference; full suite was not rerun.
+- Screenshots/check artifacts: `/workspace/generation-controls-{chromium,webkit}-v2`,
+  `/workspace/generation-regression-{chromium,webkit}-v1`, and
+  `/workspace/generation-editors-chromium-v1`. Manual generation check:
+  `tests/manual/mobile_generation_browser.py --browser chromium --output /tmp/control-generation-check`.
+
 ## Current follow-up — ControlAltAI resolution picker
 
 - User identified VeryComfy's `FluxResolutionNode` (ControlAltAI Nodes 1.1.4,

@@ -130,6 +130,10 @@ the user's authorization; follow `docs/MAINTAINING.md` and `packaging/README.md`
   preserve metadata choices and native types, and retain linked latent dimensions.
 - Reuse job request UUIDs, output scoping, queue/history recovery and foreground
   reconnect behavior. Phone lock/disconnection does not stop ComfyUI generation.
+  Batch count queues normal persisted jobs under one request group; retries never
+  requeue that group. Stop on uncertain submissions/output changes, and cancel
+  batch members through safe per-job cancellation with owner/scope checks.
+  Batch size remains a mapped graph input. Seed-only reuse preserves other edits.
   Actions must identify a specific current saved image, not the latest result.
 - Retain originals for Edit/Upscale; uploaded pixel copies strip PNG metadata.
   Image Favourites reuse the existing private Keep sidecar and `keep`/`kept` API
