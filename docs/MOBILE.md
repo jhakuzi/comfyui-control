@@ -350,20 +350,20 @@ cached job progress without submitting another generation.
 
 ### Prompt history and favorites
 
-Tap **History** near the prompt. Search Recent or Starred prompts, tap a
-prompt to restore its positive and negative fields, or use the star/Delete actions.
+Tap **History** near the prompt. Search your prompts, tap a
+prompt to restore its positive and negative fields, or use Delete.
 The separate **Favourites** button opens liked images. Tap the selected image's
 heart in the wide preview or phone viewer to like/unlike it. Existing Keep marks
-are retained as image favourites; prompt stars remain separate.
+are retained as image favourites. Image hearts are the only Favourites system.
 Reuse changes prompts only; it keeps the current models, seed and other settings
 and never presses Generate. Multiple text inputs are restored in mapping order;
 if their counts differ, choose a matching workflow first.
 
 History is recorded only after ComfyUI accepts a submission, including acceptance
-recovered after a lost response. Repeated identical prompt pairs update one entry
-and keep its favorite flag. Deleting an entry is not undone by reconnecting or
-reopening an old job. **Clear history** confirms removal of all entries, including
-starred prompts, without deleting images, image favourites or presets.
+recovered after a lost response. Repeated identical prompt pairs update one entry.
+Deleting an entry is not undone by reconnecting or reopening an old job.
+**Clear history** confirms removal of all prompt entries without deleting images,
+image favourites or presets.
 
 History belongs to the existing browser-identity cookie and survives app restarts.
 Tabs sharing that identity share history; a different browser profile gets its

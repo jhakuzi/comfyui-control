@@ -37,8 +37,8 @@ presets, history or original workflow files are deleted by this organization.
   during an active job; Cancel retains its existing behavior.
 - **History / Favourites:** separate buttons near the prompt open prompt history
   and liked images. Image hearts toggle Favourites in the central selected-image
-  panel or phone viewer. Existing Keep marks carry across unchanged. Prompt stars
-  remain separately available as **Starred prompts** inside History.
+  panel or phone viewer. Existing Keep marks carry across unchanged. Image hearts
+  are the only Favourites category; History provides prompt search, reuse and deletion.
 - **Refresh / cleanup:** compact refresh icons sit beside the workflow selector
   and first model selector. The small broom by Models requests idle VRAM cleanup.
   Icons have accessible labels, tooltips and 44px touch targets.

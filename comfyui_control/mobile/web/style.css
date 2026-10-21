@@ -1106,9 +1106,6 @@ dialog::backdrop {
 .prompt-reuse { display: block; width: 100%; text-align: left; }
 .prompt-excerpt { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; }
 .prompt-excerpt.hint { margin: 8px 0 0; }
-.history-filters { margin-top: 12px; }
-.history-filters [aria-pressed="true"],
-.prompt-entry [aria-pressed="true"],
 .comparison-actions [aria-pressed="true"] {
   border-color: var(--accent-line); color: var(--text);
   background: var(--selected-sheen) var(--accent-soft);

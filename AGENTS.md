@@ -131,8 +131,9 @@ the user's authorization; follow `docs/MAINTAINING.md` and `packaging/README.md`
   Actions must identify a specific current saved image, not the latest result.
 - Retain originals for Edit/Upscale; uploaded pixel copies strip PNG metadata.
   Image Favourites reuse the existing private Keep sidecar and `keep`/`kept` API
-  fields; preserve those for compatibility. Prompt stars remain separate in
-  prompt history. Trash is recoverable app-managed storage, not
+  fields; preserve those for compatibility. Image hearts are the only Favourites
+  UI; prompt history has no separate star/favourites controls. Retain legacy
+  prompt records and flags without migration or data loss. Trash is recoverable app-managed storage, not
   permanent deletion. Guard image version, ownership, traversal and symlinks.
 - Preserve Host/Origin validation, CSP, request limits, optional authentication
   and per-client privacy. Opt-in image metadata sharing must not expose another

@@ -186,12 +186,17 @@ async def main(browser_name,root):
         await expect(page.locator('#output-warning')).to_contain_text('Write access denied')
         await expect(page.locator('#progress')).to_have_js_property('value',3)
         await expect(page.locator('[data-role="positive"]')).to_have_value('Unsent draft survives')
+        # Legacy prompt-star records stay readable without a second favourites UI.
+        entry = service.prompts.list(job['owner'])[0]
+        service.prompts.favorite(job['owner'], entry['id'], True)
+        legacy_history = service.prompts.path(job['owner']).read_bytes()
         await page.locator('#prompt-history').click()
         await expect(page.locator('.prompt-entry')).to_have_count(1)
         await expect(page.locator('.prompt-entry')).to_contain_text('A luminous city at dusk')
         await expect(page.locator('.prompt-entry')).to_contain_text('blur, noise')
-        await page.get_by_role('button',name='☆ Star prompt',exact=True).click()
-        await page.locator('#history-favorites').click()
+        assert await page.locator('#history-favorites').count() == 0
+        assert await page.locator('.prompt-entry [aria-pressed]').count() == 0
+        assert service.prompts.path(job['owner']).read_bytes() == legacy_history
         await expect(page.locator('.prompt-entry')).to_have_count(1)
         await page.locator('#prompt-history-search').fill('no matching sentence')
         await expect(page.locator('.prompt-entry')).to_have_count(0)
@@ -206,7 +211,6 @@ async def main(browser_name,root):
         await page.reload()
         await expect(page.locator('#progress')).to_have_js_property('value',3)
         await page.locator('#prompt-history').click()
-        await page.locator('#history-favorites').click()
         await expect(page.locator('.prompt-entry')).to_have_count(1)
         await page.locator('#close-prompt-history').click()
         # Completion while disconnected still restores images and unsent fields.
@@ -270,7 +274,7 @@ async def main(browser_name,root):
         assert service.presets.get(preset['id'])==original_preset
         assert originals=={p.name:p.read_bytes() for p in output.iterdir()}
         assert len(stub.submissions)==1 and not errors,errors
-        print(f'PASS {browser_name}: fallback warnings across live progress, refresh/reconnect and gallery; larger prompt editor, saved touch/keyboard expand/collapse, preserved text/selection, pinned live statistics, prompt search/favorites/reuse/persistence/isolation, lazy PNG/mobile metadata, clipboard, exact seeds, custom GGUF/two LoRAs, recovery and unchanged image files.')
+        print(f'PASS {browser_name}: fallback warnings across live progress, refresh/reconnect and gallery; larger prompt editor, saved touch/keyboard expand/collapse, preserved text/selection, pinned live statistics, prompt search/reuse/persistence/isolation and unchanged legacy records without star controls, lazy PNG/mobile metadata, clipboard, exact seeds, custom GGUF/two LoRAs, recovery and unchanged image files.')
         await browser.close()
     finally:
         await service.stop(); await runner.cleanup(); await upstream.close()

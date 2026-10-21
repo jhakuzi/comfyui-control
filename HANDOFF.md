@@ -1,5 +1,18 @@
 # Session handoff — 2026-10-21
 
+## Current correction — image hearts are the only Favourites UI
+
+- The user clarified that there should be no second prompt-favourites system.
+  Removed the Starred prompts filter and star buttons from prompt History.
+  History retains search, reuse, deletion and clear; Favourites opens the existing
+  image-heart category. This supersedes the prompt-star UI retained below.
+- Legacy prompt records/flags and endpoints are left compatible; no history or
+  image likes are deleted or migrated. Refreshed shell cache. Chromium and Linux
+  WebKit extras checks passed for search, reuse, deletion, reconnect, isolation,
+  absence of prompt-star controls and unchanged legacy starred history records.
+  JavaScript syntax and `git diff --check` passed. Existing image-heart behavior
+  is unchanged; no release or package rebuild was performed.
+
 ## Current follow-up — image Favourites and compact controls
 
 - The user explicitly chose an image like/favourite system, replacing the visible
@@ -8,8 +21,8 @@
 - Separate History and Favourites shortcuts open prompt history and liked images.
   Image hearts toggle in the central selected-image panel and phone viewer, with
   a matching gallery heart badge. Gallery's former Kept label is now Favourites.
-  Existing prompt favourites remain available as Starred prompts inside History;
-  clearing prompt history does not clear image Favourites.
+  Prompt stars initially remained in History; the correction above removes that
+  duplicate UI. Clearing prompt history does not clear image Favourites.
 - Workflow refresh is a compact SVG button beside the workflow selector. The
   shared model refresh button sits beside the first model input, is retained when
   model controls rebuild, and still refreshes all choices through the existing
