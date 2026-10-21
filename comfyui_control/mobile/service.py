@@ -15,7 +15,9 @@ import aiohttp
 
 from .client import ComfyClient, ComfyError
 from .settings import lan_address, save_json
-from .workflows import Presets, candidates, fields_for, render, suggested_mappings, with_model_controls, MODEL_CONTROLS_VERSION
+from .workflows import (Presets, candidates, fields_for, render, suggested_mappings,
+                        with_model_controls, MODEL_CONTROLS_VERSION,
+                        with_resolution_controls, RESOLUTION_CONTROLS_VERSION)
 from .workflow_sources import saved_workflows, saved_workflow_graph
 from ..performance import GenerationPerformance
 from .prompt_history import PromptHistory
@@ -250,9 +252,13 @@ class MobileService:
             missing = sorted({n["class_type"] for n in preset["graph"].values()} - set(info))
         except ComfyError:
             info, missing = {}, []
-        if info and preset.get("model_controls_version") != MODEL_CONTROLS_VERSION:
-            previous = preset
-            preset = with_model_controls(preset, info)
+        previous = preset
+        if info:
+            if preset.get("model_controls_version") != MODEL_CONTROLS_VERSION:
+                preset = with_model_controls(preset, info)
+            if preset.get("resolution_controls_version") != RESOLUTION_CONTROLS_VERSION:
+                preset = with_resolution_controls(preset, info)
+        if preset is not previous:
             if preset["mappings"] != previous["mappings"]:
                 preset["model_upgrade_revision"] = revision(previous)
             save_json(self.presets.path(preset["id"]), preset)
@@ -266,7 +272,7 @@ class MobileService:
     async def refresh_models(self, identifier):
         info = await self.metadata(force=True)
         previous = self.presets.get(identifier)
-        preset = with_model_controls(previous, info)
+        preset = with_resolution_controls(with_model_controls(previous, info), info)
         if preset["mappings"] != previous["mappings"]:
             preset["model_upgrade_revision"] = revision(previous)
         save_json(self.presets.path(identifier), preset)

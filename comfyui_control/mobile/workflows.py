@@ -16,6 +16,8 @@ ROLES = {"positive", "negative", "model", "lora_model", "lora_strength", "lora_e
          "resolution_mp", "aspect_ratio", "alignment", "custom_ratio", "custom_aspect_ratio",
          "width", "height", "steps", "cfg", "seed", "batch", "advanced"}
 MODEL_CONTROLS_VERSION = 2
+RESOLUTION_CONTROLS_VERSION = 1
+RESOLUTION_ROLES = {"resolution_mp", "aspect_ratio", "alignment", "custom_ratio", "custom_aspect_ratio"}
 
 
 def diffusion_inputs(graph, info):
@@ -100,9 +102,11 @@ def validate_mappings(graph, mappings):
         role = item["role"]
         if role in {"positive", "negative", "model", "lora_model", "diffusion_model", "vae", "text_encoder", "sampler", "scheduler", "aspect_ratio", "custom_aspect_ratio"} and base["kind"] != "text":
             raise ValueError(f"{role} must map to a text or model-name input.")
-        if role in {"width", "height", "steps", "seed", "batch", "alignment"} and base["kind"] != "int":
+        integer_combo = role == "alignment" and base["kind"] == "text" and re.fullmatch(r"[0-9]{1,20}", base["default"])
+        if role in {"width", "height", "steps", "seed", "batch", "alignment"} and base["kind"] != "int" and not integer_combo:
             raise ValueError(f"{role} must map to an integer input.")
-        if role in {"cfg", "lora_strength", "resolution_mp"} and base["kind"] not in {"int", "float"}:
+        numeric_combo = role == "resolution_mp" and base["kind"] == "text" and re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", base["default"])
+        if role in {"cfg", "lora_strength", "resolution_mp"} and base["kind"] not in {"int", "float"} and not numeric_combo:
             raise ValueError(f"{role} must map to a numeric input.")
         if role == "lora_enabled" and base["kind"] != "bool":
             raise ValueError("LoRA enabled must map to a boolean input.")
@@ -188,30 +192,45 @@ def suggested_mappings(graph, info=None):
     return result[:200]
 
 
-def with_model_controls(preset, info):
-    """Add missing loader controls without changing existing keys, roles or the graph."""
+def _with_missing_controls(preset, info, roles, prefix):
+    """Add recognized literal controls without replacing existing mappings."""
     item = deepcopy(preset)
     targets = {(m["node"], m["input"]) for m in item["mappings"]}
     keys = {m["key"] for m in item["mappings"]}
     for mapping in suggested_mappings(item["graph"], info):
-        if mapping["role"] not in {"model", "diffusion_model", "vae", "text_encoder"} or (mapping["node"], mapping["input"]) in targets:
+        if mapping["role"] not in roles or (mapping["node"], mapping["input"]) in targets:
             continue
         if len(item["mappings"]) >= 200:
             break
         index = len(item["mappings"])
-        while f"model-{index}" in keys:
+        while f"{prefix}-{index}" in keys:
             index += 1
-        mapping["key"] = f"model-{index}"
+        mapping["key"] = f"{prefix}-{index}"
         item["mappings"].append(mapping)
         keys.add(mapping["key"])
     item["mappings"] = validate_mappings(item["graph"], item["mappings"])
+    return item
+
+
+def with_model_controls(preset, info):
+    """Add missing loader controls without changing existing keys, roles or the graph."""
+    item = _with_missing_controls(preset, info, {"model", "diffusion_model", "vae", "text_encoder"}, "model")
     item["model_controls_version"] = MODEL_CONTROLS_VERSION
+    return item
+
+
+def with_resolution_controls(preset, info):
+    """Expose calculator inputs while leaving linked width/height outputs alone."""
+    item = _with_missing_controls(preset, info, RESOLUTION_ROLES, "resolution")
+    item["resolution_controls_version"] = RESOLUTION_CONTROLS_VERSION
     return item
 
 
 def fields_for(preset, info, lora_models=None):
     available = {(c["node"], c["input"]): c for c in candidates(preset["graph"], info)}
     diffusion = diffusion_inputs(preset["graph"], info)
+    resolution = {(m["node"], m["input"]): m["role"] for m in suggested_mappings(preset["graph"], info)
+                  if m["role"] in RESOLUTION_ROLES}
     fields = [{**available[(m["node"], m["input"])], **m} for m in preset["mappings"]]
     for field in fields:
         # Custom loaders may register a STRING widget populated by their own
@@ -224,6 +243,8 @@ def fields_for(preset, info, lora_models=None):
             field["allow_saved_value"] = True
         if field["role"] == "advanced" and (field["node"], field["input"]) in diffusion:
             field["model_role"] = "diffusion_model"
+        if field["role"] == "advanced" and (field["node"], field["input"]) in resolution:
+            field["resolution_role"] = resolution[(field["node"], field["input"])]
     return fields
 
 
@@ -315,5 +336,6 @@ class Presets:
         item["mappings"] = validate_mappings(item["graph"], mappings)
         if not automatic:
             item["model_controls_version"] = MODEL_CONTROLS_VERSION
+            item["resolution_controls_version"] = RESOLUTION_CONTROLS_VERSION
         save_json(self.path(identifier), item)
         return item

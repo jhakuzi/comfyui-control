@@ -126,6 +126,8 @@ the user's authorization; follow `docs/MAINTAINING.md` and `packaging/README.md`
   or unsupported serialization. Interpret FLOAT metadata even when JSON defaults
   are integers. Preserve exact 64-bit seeds across Python/JavaScript; random seed
   per generation is the normal default, with fixed seeds explicitly selectable.
+  Resolution calculators can expose megapixels/rounding as string dropdowns:
+  preserve metadata choices and native types, and retain linked latent dimensions.
 - Reuse job request UUIDs, output scoping, queue/history recovery and foreground
   reconnect behavior. Phone lock/disconnection does not stop ComfyUI generation.
   Actions must identify a specific current saved image, not the latest result.

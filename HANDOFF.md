@@ -1,5 +1,36 @@
 # Session handoff — 2026-10-21
 
+## Current follow-up — ControlAltAI resolution picker
+
+- User identified VeryComfy's `FluxResolutionNode` (ControlAltAI Nodes 1.1.4,
+  node 59), currently 2.0 MP / 2:3 portrait, connected to EmptySD3LatentImage.
+  The live user workflow is not in this checkout. Inspected the upstream
+  ControlAltAI definition: megapixels and rounding are string combos, the custom
+  ratio switch is boolean. Runtime ComfyUI metadata remains authoritative.
+- Existing generic calculator recognition already found aspect/custom-ratio
+  fields but numeric-only mapping validation skipped string MP/rounding combos.
+  Validation now accepts numeric strings for those resolution roles and preserves
+  their native types/options. No class/ID-specific mappings, aspect-ratio list or
+  dimension calculations are hardcoded into the application.
+- One-time resolution-control discovery adds missing calculator controls to
+  legacy presets on describe. Existing keys, mappings and unsent drafts remain
+  compatible. Explicitly hidden controls remain hidden after later mapping saves.
+  Refreshing model/node choices can rediscover controls. Advanced calculator
+  mappings appear in Resolution using a presentation role, without altering stored
+  roles/keys. MP and aspect ratio appear first; all width/height links remain intact.
+- Verification: **79 focused tests passed** across resolution controls, mobile
+  core/integration, saved workflow/editor compatibility, image actions/details/
+  sharing and prompt history. Chromium and Linux WebKit resolution checks passed
+  for native choices/defaults, legacy Advanced mapping/draft upgrade, desktop/
+  phone resizing, reload, exact string/boolean submission and unchanged latent
+  links. Existing GGUF/saved-workflow browser checks also passed in both engines.
+  JavaScript syntax and `git diff --check` passed. Fixtures perform no inference;
+  the user's actual workflow and installed node version still need real testing.
+  No full-suite rerun, release, package rebuild or uninstall changes.
+- Browser artifacts: `/workspace/resolution-controls-{chromium,webkit}-v2`.
+  Repeat with `tests/manual/mobile_resolution_browser.py --browser chromium
+  --output /tmp/control-resolution-check` (or `--browser webkit`).
+
 ## Current follow-up — Forge-inspired desktop workbench
 
 - The user requested a desktop rearrangement while preserving the phone UI and

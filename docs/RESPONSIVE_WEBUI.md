@@ -73,6 +73,19 @@ Resizing or rotating preserves your prompt, workflow, settings and current job.
 Generation settings appear before LoRAs. Choosing a replacement LoRA updates its
 checkbox label and enables that slot; uncheck it afterward to leave it disabled.
 Other slots and the original workflow retain their settings.
+
+The **Resolution** panel also exposes calculator-node inputs, including
+ControlAltAI's **FluxResolutionNode**: megapixels, the node's aspect-ratio presets
+(such as **2:3 (Classic Portrait)**), rounding, custom-ratio toggle and custom ratio.
+Choices come from your installed node's ComfyUI metadata; saved defaults are kept.
+The calculator continues feeding width/height into the latent-image node. The
+WebUI changes its inputs without replacing those connections or calculating its
+own dimensions. Existing presets gain missing calculator controls on load;
+calculator fields already mapped under Advanced appear in Resolution with their
+keys and saved mappings retained. Update/restart the testing copy, reload the
+browser and select your saved workflow to see them. The model refresh icon also
+refreshes node choices.
+
 Saved workflows, custom nodes, GGUF models, LoRAs and session recovery use the
 same backend. [Foreground SSH startup](SSH.md) is included in 1.0.
 

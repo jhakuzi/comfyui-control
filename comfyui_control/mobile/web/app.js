@@ -465,7 +465,7 @@ async function choosePreset(id, reuse) {
   preset = loaded;
   const stored = reuse || readStore("draft-" + id, {});
   const same = stored.revision === preset.revision;
-  // Model discovery adds controls without changing the graph. Keep drafts only
+  // Control discovery adds fields without changing the graph. Keep drafts only
   // when both the graph and each existing control's target/type still match.
   const upgraded = !!stored.revision && stored.revision === preset.model_upgrade_revision;
   const compatible = same || upgraded || (stored.graphRevision && stored.graphRevision === preset.graph_revision);
@@ -758,20 +758,22 @@ function renderFields() {
     $("basic-controls").append(label, hint);
   }
   $("settings-card").hidden = !basics.length;
-  const resolution = preset.fields.filter((field) =>
-    [
-      "width",
-      "height",
-      "resolution_mp",
-      "aspect_ratio",
-      "alignment",
-      "custom_ratio",
-      "custom_aspect_ratio",
-    ].includes(field.role),
-  );
-  for (const field of resolution) control(field, $("resolution-controls"));
+  const resolutionRoles = [
+    "resolution_mp",
+    "aspect_ratio",
+    "width",
+    "height",
+    "alignment",
+    "custom_ratio",
+    "custom_aspect_ratio",
+  ];
+  const resolution = preset.fields
+    .filter((field) => resolutionRoles.includes(field.resolution_role || field.role))
+    .sort((a, b) => resolutionRoles.indexOf(a.resolution_role || a.role) - resolutionRoles.indexOf(b.resolution_role || b.role));
+  for (const field of resolution)
+    control({ ...field, role: field.resolution_role || field.role }, $("resolution-controls"));
   $("resolution-card").hidden = !resolution.length;
-  for (const field of roles("advanced").filter((field) => !field.model_role)) control(field, $("advanced-controls"));
+  for (const field of roles("advanced").filter((field) => !field.model_role && !field.resolution_role)) control(field, $("advanced-controls"));
   $("reuse-last").hidden = !state.jobs.some((job) => job.preset === preset.id);
 }
 const roleNames = {
@@ -828,15 +830,17 @@ function renderMappings() {
         "custom_aspect_ratio",
       ].includes(role)
         ? candidate.kind === "text"
-        : ["width", "height", "steps", "seed", "batch", "alignment"].includes(
-              role,
-            )
-          ? candidate.kind === "int"
-          : ["cfg", "lora_strength", "resolution_mp"].includes(role)
-            ? ["int", "float"].includes(candidate.kind)
-            : role === "lora_enabled"
-              ? candidate.kind === "bool"
-              : true;
+        : role === "resolution_mp"
+          ? ["int", "float", "text"].includes(candidate.kind)
+          : role === "alignment"
+            ? ["int", "text"].includes(candidate.kind)
+            : ["width", "height", "steps", "seed", "batch"].includes(role)
+              ? candidate.kind === "int"
+              : ["cfg", "lora_strength"].includes(role)
+                ? ["int", "float"].includes(candidate.kind)
+                : role === "lora_enabled"
+                  ? candidate.kind === "bool"
+                  : true;
       if (compatible) select.add(new Option(label, role));
     }
     select.value = mappingDraft.get(target)?.role || "";
