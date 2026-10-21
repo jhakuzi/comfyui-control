@@ -75,6 +75,7 @@
         <section id="create-page">
           <form id="generate-form">
             <section class="card" id="workflow-card">
+              <div id="desktop-toolbar"></div>
               <div id="workflow-picker">
                 <label for="preset">Workflow</label>
                 <div class="selector-tools">
@@ -117,6 +118,7 @@
               <div id="model-controls"></div>
               <p id="workflow-source-note" class="hint" hidden></p>
             </section>
+            <div id="settings-stack">
             <details class="card" id="settings-card" hidden>
               <summary>Generation settings</summary>
               <div id="basic-controls" class="control-grid"></div>
@@ -196,6 +198,7 @@
                 Sign out
               </button>
             </details>
+            </div>
           </form>
         </section>
         <aside id="generation-panel" aria-label="Generation preview and results">
@@ -213,9 +216,13 @@
             >
               <div class="heading">
                 <h2 id="job-title">In the queue</h2>
-                <button id="cancel" class="small" type="button" hidden>
-                  Cancel
-                </button>
+                <div id="cancel-controls" class="cancel-controls" role="group" aria-label="Stop generation" hidden>
+                  <button id="cancel" type="button" aria-label="Cancel current run" title="Cancel current run"><span aria-hidden="true">×</span></button>
+                  <button id="cancel-queue" type="button" aria-expanded="false" aria-controls="cancel-queue-label" aria-label="Show queue cancellation" hidden>
+                    <span id="cancel-queue-count" aria-hidden="true"></span>
+                    <span id="cancel-queue-label">Stop run & clear queue</span>
+                  </button>
+                </div>
               </div>
               <div id="job-metrics">
                 <p id="job-detail" class="hint"></p>

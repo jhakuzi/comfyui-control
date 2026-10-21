@@ -200,3 +200,85 @@ def test_cancel_batch_preserves_other_browser_and_never_interrupts_globally(tmp_
         assert client.pending == [p for p in client.pending if p[1] == other['prompt_id']]
         assert other['prompt_id'] not in client.cancels
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('safe_running_cancel', [True, False])
+def test_clear_browser_queue_cancels_queued_first_preserves_other_owners_and_scopes(tmp_path, generation_workflow, safe_running_cancel):
+    async def scenario():
+        service, preset = prepare(tmp_path, generation_workflow)
+        service.client = client = QueueClient(service)
+        first = await service.submit(request(preset, 3), owner='phone')
+        separate = await service.submit(request(preset), owner='phone')
+        other = await service.submit(request(preset), owner='other')
+        old = await service.submit(request(preset), owner='phone')
+        old['scope'] = 'previous-output'
+        client.running = [client.pending.pop(0)]
+        await service.refresh()
+        client.safe_cancel = safe_running_cancel
+        if safe_running_cancel:
+            await service.cancel_queue('phone')
+            assert first['status'] == 'cancelling'
+        else:
+            with pytest.raises(ValueError, match='Some runs could not be stopped'):
+                await service.cancel_queue('phone')
+            assert first['status'] == 'running'
+        assert separate['status'] == 'cancelled'
+        assert {p[1] for p in client.pending} == {other['prompt_id'], old['prompt_id']}
+        assert other['prompt_id'] not in client.cancels and old['prompt_id'] not in client.cancels
+        # Running cancellation happens after all queued deletions, so the server
+        # cannot start another of our queued jobs while stopping the current one.
+        if safe_running_cancel:
+            assert client.cancels[-1] == first['prompt_id']
+        with pytest.raises(ValueError, match='browser session'):
+            await service.cancel_queue(None)
+    asyncio.run(scenario())
+
+
+def test_clear_queue_waits_for_submission_lock_and_rechecks_output_scope(tmp_path, generation_workflow):
+    async def scenario():
+        service, preset = prepare(tmp_path, generation_workflow)
+        service.client = client = QueueClient(service)
+        job = await service.submit(request(preset), owner='phone')
+        await service.submit_lock.acquire()
+        cancellation = asyncio.create_task(service.cancel_queue('phone'))
+        await asyncio.sleep(0)
+        assert not cancellation.done() and not client.cancels
+        service.change_output(service.output_dir.parent / 'changed')
+        service.submit_lock.release()
+        await cancellation
+        assert not client.cancels and job['status'] == 'queued'
+    asyncio.run(scenario())
+
+
+def test_clear_queue_route_requires_confirmation_and_uses_browser_identity(tmp_path, generation_workflow):
+    from aiohttp.test_utils import TestClient, TestServer
+    from comfyui_control.mobile.server import MobileHTTP
+    async def scenario():
+        service, preset = prepare(tmp_path, generation_workflow)
+        service.client = queue = QueueClient(service)
+        server = TestServer(MobileHTTP(service).app())
+        clients = [TestClient(server), TestClient(server)]
+        try:
+            for client in clients:
+                await client.start_server()
+                await client.get('/api/session')
+            a, b = clients
+            headers = {'Origin': str(a.make_url('/')).rstrip('/')}
+            first = await a.post('/api/generate', json=request(preset, 2), headers=headers)
+            second = await b.post('/api/generate', json=request(preset), headers=headers)
+            assert first.status == second.status == 202
+            other = await second.json()
+            denied = await a.post('/api/queue/cancel', json={}, headers=headers)
+            assert denied.status == 400 and not queue.cancels
+            denied_origin = await a.post('/api/queue/cancel', json={'confirm_interrupt': True},
+                                         headers={'Origin': 'https://untrusted.example'})
+            assert denied_origin.status == 403 and not queue.cancels
+            cleared = await a.post('/api/queue/cancel', json={'confirm_interrupt': True}, headers=headers)
+            assert cleared.status == 200
+            assert all(job['status'] == 'cancelled' for job in (await cleared.json())['jobs'])
+            assert [item[1] for item in queue.pending] == [other['prompt_id']]
+        finally:
+            for client in clients:
+                await client.close()
+            await server.close()
+    asyncio.run(scenario())

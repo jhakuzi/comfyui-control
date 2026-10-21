@@ -251,8 +251,12 @@ input stay unchanged, ComfyUI may return its cached image immediately and log
 `Prompt executed in 0.00 seconds`. Change the seed or enable randomization for
 a fresh variation; the app does not disable ComfyUI's cache or change your workflow.
 
-Queue cancellation removes only the selected prompt. Running-job cancellation
-uses ComfyUI's job-specific cancellation API. Older ComfyUI versions without
+The red **×** cancels one current run, leaving other queued runs to continue.
+When more runs are queued, its attached counter expands on click to reveal
+**Stop run & clear queue**. Activate it again and confirm to remove this browser’s
+queued runs first, then stop its running work. Other browsers’ jobs and jobs
+from other output folders stay untouched. Escape collapses the attached button.
+Running-job cancellation uses ComfyUI's job-specific cancellation API. Older ComfyUI versions without
 that endpoint show an error; the app never falls back to global interruption.
 Cancel such a running job in ComfyUI itself.
 

@@ -235,7 +235,7 @@ async def main(browser_name, root):
             await expect(page.locator('#job-title')).to_have_text('In the queue')
             await expect(page.locator('#generate-label')).to_have_text('Queued')
             await expect(page.locator('#generate')).to_be_disabled()
-            await expect(page.locator('#header-generation #progress')).to_be_visible()
+            await expect(page.locator('#generation-panel #progress')).to_be_visible()
             await expect(page.locator('#preview-loading')).to_be_visible()
             await expect(page.locator('#preview-stage')).to_have_attribute('data-preview', 'false')
             await page.emulate_media(reduced_motion='reduce')
@@ -281,8 +281,8 @@ async def main(browser_name, root):
                 studio = await page.evaluate('studioLayout.matches')
                 identifiers = identifiers or (('progress', 'cancel') if studio else ('generate', 'progress', 'cancel'))
                 for identifier in identifiers:
-                    if studio and identifier not in ('progress', 'cancel', 'stat-iteration', 'stat-vram', 'stat-gpu'):
-                        await page.locator('#' + identifier).scroll_into_view_if_needed()
+                    if studio:
+                        await page.locator('#' + identifier).evaluate('el => el.scrollIntoView({block: "center"})')
                     bounds = await page.locator('#' + identifier).bounding_box()
                     assert bounds and bounds['y'] >= 0 and bounds['y'] + bounds['height'] <= page.viewport_size['height'] + 1, (identifier, bounds)
                     assert await page.evaluate('({x,y,id}) => !!document.elementFromPoint(x,y)?.closest("#"+id)',
@@ -290,7 +290,7 @@ async def main(browser_name, root):
 
             for width, height in [(1024, 1366), (1024, 768), (1194, 834), (1366, 768), (1366, 1024), (1440, 900), (2560, 1440), (1000, 600), (390, 844)]:
                 await page.set_viewport_size(dict(width=width, height=height))
-                at_top = width >= 1000 and height >= 600
+                at_top = width >= 1000 and height >= 600 and not await page.evaluate("studioLayout.matches")
                 parent = '#header-generation' if at_top else '#job-card'
                 await expect(page.locator(parent + ' #progress')).to_be_visible()
                 await expect(page.locator(parent + ' #generation-stats')).to_be_visible()
@@ -336,7 +336,7 @@ async def main(browser_name, root):
             await page.evaluate('showLogin()')
             await expect(page.locator('#header-generation')).to_be_hidden()
             await page.reload()
-            await expect(page.locator('#header-generation #progress')).to_be_visible()
+            await expect(page.locator('#generation-panel #progress')).to_be_visible()
             assert len(stub.submissions) == 1
             await context.set_offline(True)
             await expect(page.locator('#generate')).to_have_attribute('data-progress', 'paused')
@@ -524,6 +524,7 @@ async def main(browser_name, root):
             await expect(actions.locator('.image-workflow-status')).to_contain_text('not configured')
             await reachable(('generate', 'download-image'))
             for control in ('keep', 'trash'):
+                await actions.locator('[data-action="' + control + '"]').scroll_into_view_if_needed()
                 box = await actions.locator('[data-action="' + control + '"]').bounding_box()
                 assert box and box['y'] + box['height'] <= page.viewport_size['height'], box
             await actions.locator('[data-action="keep"]').click()

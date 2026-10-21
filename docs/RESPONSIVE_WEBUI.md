@@ -18,10 +18,13 @@ presets, history or original workflow files are deleted by this organization.
   The full-width gallery sits underneath. Advanced mappings remain collapsible.
   Click a thumbnail to inspect that exact saved image. Previous/next, **Save image**
   and collapsible **Details** are integrated below the preview. Phones retain the
-  separate image viewer. Preview controls remain in view as settings scroll. The
-  preview fills the available height. Clicking a gallery image brings its preview
-  and actions into view. Live progress and Cancel stay in the sticky header while
-  scrolling; Generate remains beside the prompts at the top.
+  separate image viewer. The toolbar wraps to additional rows as needed, including
+  with multiple text encoders or long filenames. The left settings form one stack;
+  the right preview keeps the image's aspect ratio without a viewport-sized height
+  or nested scrollbar. Use normal page scrolling to reach details and image actions.
+  Clicking a gallery image brings its preview and actions into view. Live progress
+  stays with the preview; Generate and the red run/queue cancellation buttons stay
+  beside the prompts. The gallery follows the taller workspace column.
   Returning to phone width restores the compact sections' open/closed preferences.
   Redundant Create/Gallery tabs are hidden in this view.
 - **Medium-width windows:** settings on the left; preview and Generate on the right.
@@ -37,8 +40,10 @@ presets, history or original workflow files are deleted by this organization.
 - **Generate button:** a blue backdrop fills behind the label during sampling,
   using the current stage's reported step percentage. Model loading, queueing
   and processing use a moving highlight without inventing a percentage. It pauses
-  while reconnecting and resets when the job ends. The button remains disabled
-  during an active job; Cancel retains its existing behavior.
+  while reconnecting. Only confirmed workflow success finishes the fill, briefly
+  showing Complete before resetting; sampler completion still waits for later
+  decoding/saving stages. Failures and cancellations show brief feedback. The
+  button remains disabled during an active job.
 - **Generation settings:** Steps, CFG/guidance, Sampler, Scheduler, Seed and Batch
   size use the selected workflow's mapped inputs and installed node choices.
   Missing recognized controls in older presets are discovered on load. Inputs
@@ -53,8 +58,13 @@ presets, history or original workflow files are deleted by this organization.
   three images. Count defaults to 1, is saved with the draft, and is limited to
   20 runs within the existing 20-unfinished-job limit. Random mode chooses a seed
   per run; fixed mode retains the same seed and may reuse cached output. Progress
-  follows the active batch member; History lists each run. Cancel removes the
-  remaining batch members using safe per-job cancellation, leaving other jobs alone.
+  follows the active batch member; History lists each run. The red **×** cancels
+  only the current run. When additional runs are queued, an attached counter
+  peeks from behind it. Click once to expand **Stop run & clear queue**, then
+  activate and confirm to remove this browser’s queued runs and stop its running
+  work. Escape collapses it. Queue removal happens first; other browsers’ jobs
+  and jobs from other output folders are preserved. Running interruption requires
+  ComfyUI’s safe per-job cancellation endpoint; no global interrupt is sent.
   Reloads/retries do not submit the batch again. An uncertain/rejected submission
   stops the remaining runs and reports where it stopped; check History/ComfyUI
   before starting another batch. Reusing whole image/job settings resets count to 1.

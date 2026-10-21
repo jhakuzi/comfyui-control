@@ -213,6 +213,13 @@ class MobileHTTP:
         cancel = self.service.cancel_batch if body.get('all_in_batch') is True else self.service.cancel
         return json_response(self.service.public_job(await cancel(request.match_info["id"], owner=request[OWNER])))
 
+    async def cancel_queue(self, request):
+        body = await object_body(request)
+        if body.get('confirm_interrupt') is not True:
+            raise ValueError('Confirm stopping the run and clearing this browser’s queue.')
+        await self.service.cancel_queue(owner=request[OWNER])
+        return json_response(self.service.state(owner=request[OWNER]))
+
     async def gallery(self, request):
         images = await self.service.gallery(owner=request[OWNER], force=request.query.get('refresh') == '1')
         if 'since' not in request.query:
@@ -400,6 +407,7 @@ class MobileHTTP:
             web.get('/api/presets/{id}', self.preset), web.put('/api/presets/{id}', self.preset), web.delete('/api/presets/{id}', self.preset),
             web.post('/api/presets/{id}/models', self.refresh_models),
             web.post('/api/generate', self.generate), web.post('/api/jobs/{id}/cancel', self.cancel),
+            web.post('/api/queue/cancel', self.cancel_queue),
             web.post('/api/images/{id}/reuse', self.image_reuse),
             web.get('/api/images/{id}/actions', self.image_actions), web.post('/api/images/{id}/actions', self.image_actions),
             web.get('/api/trash', self.trash), web.post('/api/trash/{token}/restore', self.restore_image),

@@ -26,6 +26,7 @@ let state = { jobs: [], online: false },
   busy = false;
 let submitting = false;
 let cleaningVram = false;
+let cancellingRuns = false;
 let galleryRevision = "", galleryPromise = null, galleryTimer = null, galleryEpoch = 0;
 let mappingDraft = new Map(),
   gallery = [],
@@ -205,9 +206,15 @@ function syncDesktopLayout() {
   const desktop = studioLayout.matches;
   const generate = $("generate"), actions = $("prompt-actions");
   if (desktop) {
+    if ($("workflow-picker").parentElement !== $("desktop-toolbar"))
+      $("desktop-toolbar").append($("workflow-picker"), $("model-controls"), document.querySelector(".model-tools"));
     if (generate.parentElement !== $("desktop-generate-slot"))
       $("desktop-generate-slot").append(generate, actions);
   } else {
+    if ($("workflow-picker").parentElement !== $("workflow-card")) {
+      $("prompt-controls").before($("workflow-picker"));
+      $("desktop-generate-slot").after(document.querySelector(".model-tools"), $("model-controls"));
+    }
     if (generate.parentElement !== $("generation-dock")) $("generation-dock").append(generate);
     if (actions.parentElement !== $("workflow-card")) $("prompt-controls").after(actions);
   }
@@ -239,15 +246,18 @@ function currentJob() {
 function syncJobMetrics(active) {
   const header = $("header-generation"),
     metrics = $("job-metrics"),
-    atTop = active && wideLayout.matches && !$("workspace").hidden,
+    atTop = active && wideLayout.matches && !studioLayout.matches && !$("workspace").hidden,
     destination = atTop ? header : $("job-card");
   if (metrics.parentElement !== destination) {
     if (atTop) destination.append(metrics);
     else destination.insertBefore(metrics, $("preview-stage"));
   }
-  const cancel = $("cancel");
-  const cancelHome = studioLayout.matches && atTop ? header : $("job-card").querySelector(".heading");
-  if (cancel.parentElement !== cancelHome) cancelHome.append(cancel);
+  const cancel = $("cancel-controls");
+  const cancelHome = studioLayout.matches ? $("desktop-generate-slot") : $("job-card").querySelector(".heading");
+  if (cancel.parentElement !== cancelHome) {
+    if (studioLayout.matches) $("generate").after(cancel);
+    else cancelHome.append(cancel);
+  }
   header.hidden = !atTop;
 }
 function syncGenerationDock() {
@@ -304,8 +314,47 @@ function renderGenerationStats(job) {
     $("preview-stat-" + name).textContent = value;
   }
 }
+// Presentation only: observe active jobs, never replay success for old history.
+const generateObserved = new Set();
+let generateFeedback = null, generateFeedbackTimer;
+let generateProgressId = null, generateLastProgress = 0;
+function showGenerateFeedback(kind, label) {
+  clearTimeout(generateFeedbackTimer);
+  generateFeedback = { kind, label };
+  generateFeedbackTimer = setTimeout(() => {
+    generateFeedback = null;
+    updateGenerate();
+  }, 1400);
+}
+function cancellationJob() {
+  return state.jobs.find((job) => job.status === "running") ||
+    state.jobs.find((job) => job.status === "cancelling") ||
+    state.jobs.find((job) => job.status === "queued");
+}
+function updateCancellation() {
+  const job = cancellationJob(), controls = $("cancel-controls"), queue = $("cancel-queue");
+  const remaining = state.jobs.filter((item) => item.status === "queued" && item.id !== job?.id).length;
+  controls.hidden = !job;
+  $("cancel").hidden = !job;
+  $("cancel").disabled = cancellingRuns || !connected || recovering || !state.online || job?.status === "cancelling";
+  $("cancel").setAttribute("aria-label", job?.status === "queued" ? "Cancel queued run" : "Cancel current run");
+  $("cancel").title = $("cancel").getAttribute("aria-label");
+  queue.hidden = !remaining;
+  queue.disabled = cancellingRuns || !connected || recovering || !state.online;
+  controls.classList.toggle("has-queue", remaining > 0);
+  if (!remaining) {
+    controls.classList.remove("expanded");
+    queue.setAttribute("aria-expanded", "false");
+  }
+  $("cancel-queue-count").textContent = remaining;
+  queue.setAttribute("aria-label", controls.classList.contains("expanded")
+    ? `Stop run and clear ${remaining} queued runs from this browser`
+    : `Show stop run and clear queue · ${remaining} queued`);
+  queue.title = queue.getAttribute("aria-label");
+}
 function updateGenerate() {
   updateSeedReuse();
+  updateCancellation();
   $("cleanup-vram").disabled = cleaningVram || busy || !connected || recovering || !state.online || state.queue_remaining > 0;
   $("cleanup-vram").title = state.queue_remaining > 0 ? "Available when ComfyUI has no running or queued generations." : "Unload idle models and release unused GPU memory. The next generation will reload its models.";
   const job = currentJob();
@@ -322,7 +371,29 @@ function updateGenerate() {
     : pendingSubmission
       ? "Retry submission"
       : "✦ Generate";
-  const active = !!job && activeStatuses.has(job.status);
+  // Follow running work before queued work, including separately queued jobs.
+  const progressJob = state.jobs.find((item) => item.status === "running") ||
+    (job && activeStatuses.has(job.status) ? job : state.jobs.find((item) => activeStatuses.has(item.status)));
+  const active = !!progressJob;
+  if (progressJob && progressJob.id !== generateProgressId) {
+    generateProgressId = progressJob.id;
+    generateLastProgress = 0;
+  }
+  let finished = null;
+  for (const item of state.jobs) {
+    if (activeStatuses.has(item.status)) generateObserved.add(item.id);
+    else if (!busy && !submitting && generateObserved.delete(item.id)) finished = item;
+  }
+  if (busy || submitting || active) {
+    clearTimeout(generateFeedbackTimer);
+    generateFeedback = null;
+  } else if (finished) {
+    const group = finished.batch_id ? state.jobs.filter((item) => item.batch_id === finished.batch_id) : [finished];
+    const failed = group.some((item) => item.status === "failed" || item.batch_notice);
+    const cancelled = group.some((item) => item.status === "cancelled");
+    showGenerateFeedback(failed ? "failed" : cancelled ? "cancelled" : "success",
+      failed ? "Generation failed" : cancelled ? "Cancelled" : "✓ Complete");
+  }
   const button = $("generate");
   button.dataset.progress = "idle";
   button.style.removeProperty("--generation-progress");
@@ -331,19 +402,32 @@ function updateGenerate() {
     if (!connected || recovering || !state.online) {
       label = "Reconnecting";
       button.dataset.progress = "paused";
-    } else if (!busy && !submitting && job) {
+    } else if (!busy && !submitting && progressJob) {
+      const job = progressJob;
       label = { submitting: "Submitting", queued: "Queued", cancelling: "Stopping",
         unknown: "Checking submission" }[job.status] ||
         (job.phase === "processing" ? "Processing" : "Loading models");
+      if (job.status === "running" && job.phase === "processing")
+        button.style.setProperty("--generation-progress", generateLastProgress);
       const value = job.progress?.value, max = job.progress?.max;
       if (job.status === "running" && Number.isFinite(value) && Number.isFinite(max) && max > 0) {
         const fraction = Math.max(0, Math.min(1, value / max));
-        button.dataset.progress = "determinate";
-        button.style.setProperty("--generation-progress", fraction);
-        label = `Sampling · ${Math.floor(fraction * 100)}%`;
+        // This is node/sampler progress, never a whole-workflow estimate.
+        // A completed sampler still has decoding/saving (or another stage) ahead.
+        button.dataset.progress = fraction < 1 ? "determinate" : "indeterminate";
+        generateLastProgress = Math.min(fraction, 0.98);
+        button.style.setProperty("--generation-progress", generateLastProgress);
+        label = fraction < 1 ? `Sampling · ${Math.floor(fraction * 100)}%` : "Processing";
       }
     }
   }
+  if (!busy && !submitting && !active && generateFeedback) {
+    button.dataset.progress = generateFeedback.kind;
+    button.style.setProperty("--generation-finish-from", generateLastProgress);
+    button.style.setProperty("--generation-progress", generateFeedback.kind === "success" ? 1 : 0);
+    label = generateFeedback.label;
+  }
+  button.setAttribute("aria-busy", String(busy || submitting || active));
   $("generate-label").textContent = label;
   syncGenerationDock();
 }
@@ -956,6 +1040,7 @@ async function generate(event) {
   });
 }
 async function submitGeneration(body) {
+  generateObserved.add(body.request_id);
   busy = true;
   inspectingSavedImage = false;
   $("generation-panel").dataset.inspect = "false";
@@ -983,6 +1068,8 @@ async function submitGeneration(body) {
     if ([400, 403, 404, 413, 415, 422].includes(error.status)) {
       pendingSubmission = null;
       writeStore("pending", null);
+      generateObserved.delete(body.request_id);
+      showGenerateFeedback("failed", "Submission failed");
       notice(error.message);
     } else
       notice(
@@ -1195,7 +1282,6 @@ function applyState(value) {
     } else {
       $("progress").removeAttribute("value"); // Indeterminate: never invent a loading percentage.
     }
-    $("cancel").hidden = !["queued", "running"].includes(job.status);
     $("new-request").hidden = job.status !== "unknown";
     $("same-seed").hidden = !["complete", "failed", "cancelled"].includes(
       job.status,
@@ -1838,24 +1924,44 @@ $("delete-preset").addEventListener(
     await loadPresets();
   }),
 );
-$("cancel").addEventListener(
-  "click",
-  guarded(async () => {
-    const batch = currentJob()?.batch_count > 1;
-    if (
-      !selectedJob ||
-      !confirm(
-        `Cancel ${batch ? "the remaining batch runs" : "this job"}? Running work is interrupted only when your ComfyUI supports safe per-job cancellation.`,
-      )
-    )
-      return;
-    await api("/api/jobs/" + selectedJob + "/cancel", {
-      method: "POST",
-      body: JSON.stringify({ confirm_interrupt: true, all_in_batch: batch }),
+async function cancelRuns(clearQueue = false) {
+  const job = cancellationJob();
+  if (!job || cancellingRuns) return;
+  if (!confirm(clearQueue ? "Stop the current run and remove all queued runs from this browser?"
+    : "Cancel this run? Other queued runs will continue.")) return;
+  cancellingRuns = true;
+  updateCancellation();
+  try {
+    await api(clearQueue ? "/api/queue/cancel" : `/api/jobs/${encodeURIComponent(job.id)}/cancel`, {
+      method: "POST", body: JSON.stringify({ confirm_interrupt: true }),
+      timeoutMs: 90000,
     });
-    applyState(await api("/api/state"));
-  }),
-);
+  } finally {
+    cancellingRuns = false;
+    // Partial cancellation is still reflected when running interruption is unsupported.
+    try { applyState(await api("/api/state")); }
+    finally { updateCancellation(); }
+  }
+}
+$("cancel").addEventListener("click", guarded(() => cancelRuns()));
+$("cancel-queue").addEventListener("click", guarded(async () => {
+  const controls = $("cancel-controls");
+  if (!controls.classList.contains("expanded")) {
+    controls.classList.add("expanded");
+    $("cancel-queue").setAttribute("aria-expanded", "true");
+    updateCancellation();
+    return;
+  }
+  await cancelRuns(true);
+}));
+$("cancel-controls").addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    $("cancel-controls").classList.remove("expanded");
+    $("cancel-queue").setAttribute("aria-expanded", "false");
+    updateCancellation();
+    $("cancel-queue").focus();
+  }
+});
 $("new-request").addEventListener("click", () => {
   if (
     confirm(

@@ -566,6 +566,24 @@ class MobileService:
                 raise ValueError('Some batch runs could not be cancelled. ' + errors[0])
             return job
 
+    async def cancel_queue(self, owner):
+        """Stop this browser's current-scope jobs, queued members first."""
+        async with self.submit_lock:
+            if not owner:
+                raise ValueError('A browser session is required to stop its queue.')
+            members = [job for job in self.current_jobs()
+                       if job.get('owner') == owner and job.get('prompt_id')
+                       and job['status'] in {'queued', 'running', 'cancelling', 'unknown'}]
+            members.sort(key=lambda job: job['status'] != 'queued')
+            errors = []
+            for job in members:
+                try:
+                    await self.cancel(job['id'], owner)
+                except (ValueError, ComfyError) as exc:
+                    errors.append(str(exc))
+            if errors:
+                raise ValueError('Some runs could not be stopped. ' + errors[0])
+
     async def cancel(self, identifier, owner=None):
         job = self.jobs.get(identifier)
         if not job or job not in self.current_jobs() or not job.get("prompt_id") or owner is not None and job.get("owner") != owner:
