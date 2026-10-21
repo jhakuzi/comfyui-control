@@ -117,7 +117,20 @@
   min-height: 0;
   margin: 0;
 }
-:where(html[data-presentation="desktop"]) .prompt-editor { position: relative; }
+:where(html[data-presentation="desktop"]) .prompt-editor {
+  position: relative;
+  min-height: 112px;
+  align-self: start;
+}
+/* Retain the collapsed footprint while the original editor floats over settings. */
+:where(html[data-presentation="desktop"]) .prompt-editor.expanded { z-index: 3; }
+:where(html[data-presentation="desktop"]) .prompt-editor.expanded > .desktop-scroll-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  box-shadow: var(--shadow-dialog);
+}
 :where(html[data-presentation="desktop"]) .prompt-editor-heading label,
 :where(html[data-presentation="desktop"]) #negative-controls > summary {
   position: absolute;
@@ -451,7 +464,7 @@
     margin: 0;
   }
   :where(html[data-presentation="desktop"]) #prompt-controls:has(.prompt-editor):has(#negative-controls) {
-    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr);
   }
   :where(html[data-presentation="desktop"]) #prompt-controls:has(.prompt-editor) > #negative-controls {
     grid-column: 2;

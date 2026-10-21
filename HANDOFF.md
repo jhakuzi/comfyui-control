@@ -1,6 +1,37 @@
 # Session handoff — 2026-10-21
 
-## Latest work: desktop gallery, History and control polish
+## Latest work: floating desktop prompt editor
+
+The user requested Expand to float the positive prompt above surrounding controls
+without shifting the UI, with a shadow, plus more width for positive and less for
+negative. This work follows pushed `d3d34f2`; the user authorized committing and pushing
+these verified changes to `testing/webui-desktop-forge`.
+
+- Desktop CSS keeps a 112px collapsed footprint, absolutely positions the expanded
+  existing scroll frame above settings, and uses the existing dialog shadow token.
+  The positive/negative columns now use 2.2:1 instead of 1.4:1 from 1280px upward.
+  The desktop 14px prompt font remains unchanged.
+- No new JS, controls, handlers or state; the shared Expand/Collapse class and live
+  textarea are retained. Mobile/tablet adapters, theme, shared styling/app/backend
+  are untouched. The public asset cache is bumped to version 6 in `sw.js`.
+- Extended the desktop browser check to assert unchanged workspace rectangles on
+  expansion/collapse, actual painting above settings, a visible shadow, wider
+  positive inputs, preserved editing, and expanded mobile-to-desktop restoration.
+  Baseline desktop Advanced/gallery ordering accepts either historic order while
+  retaining non-overlap; current ordering and all mobile pixel checks remain strict.
+- Full Python run: 430 passed, 1 failed (the existing old-job equality fixture).
+  Chromium and WebKit passed desktop/skin/mobile baseline checks at five desktop
+  and five compact sizes. Chromium presentation isolation and broad responsive,
+  reconnect, progress/cancellation, image actions and comparison checks passed.
+  WebKit also verified an expanded-editor mobile-to-desktop round trip without
+  losing the original textarea, draft or layout. Screenshots were inspected in
+  both engines at laptop sizes. Syntax and whitespace checks passed.
+
+Artifacts: `/tmp/control-prompt-overlay-*`; baseline exported from `d3d34f2` under
+`/tmp/control-prompt-overlay-baseline/comfyui_control/mobile/web`. Browser checks
+use protocol fixtures, not real inference or physical devices.
+
+## Previously pushed: desktop gallery, History and control polish
 
 The user requested inset scrollbars, centered text in all buttons, larger gallery
 thumbnails filling the width, a unified gallery/comparison bar without the desktop

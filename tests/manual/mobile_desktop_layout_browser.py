@@ -176,7 +176,8 @@ async def main(engine, root, baseline, desktop_redesign=False):
                 assert report['panel']['x'] >= report['stack']['right'] + 12, report
                 assert report['gallery']['y'] >= max(report['panel']['bottom'], report['stack']['bottom']), report
                 if baseline_view:
-                    assert report['gallery']['y'] >= report['advanced']['bottom'], report
+                    assert (report['gallery']['y'] >= report['advanced']['bottom']
+                            or report['advanced']['y'] >= report['gallery']['bottom']), report
                 else:
                     assert report['advanced']['y'] >= report['gallery']['bottom'], report
                 assert report['prompts']['y'] >= report['toolbar']['bottom'], report
@@ -242,6 +243,52 @@ async def main(engine, root, baseline, desktop_redesign=False):
                         await expect(page.locator('html')).to_have_attribute('data-presentation', 'desktop')
                         assert await page.evaluate("detailsNode === document.getElementById('image-details')")
                         await expect(page.locator('[data-role="positive"]')).to_have_attribute('placeholder', 'Describe your image')
+                if not baseline_view and state_name == 'online-empty':
+                    # Expansion must preserve the whole workspace footprint and the
+                    # same live textarea while painting above the settings below.
+                    await page.evaluate('window.scrollTo(0,0)')
+                    await page.evaluate("window.promptNode = document.querySelector('textarea.positive')")
+                    measure = """() => Object.fromEntries(
+                        ['#workflow-card','#negative-controls','#desktop-generate-slot',
+                         '#settings-stack','#generation-panel','#gallery-page','#advanced'].map(selector => {
+                            const b=document.querySelector(selector).getBoundingClientRect();
+                            return [selector,[b.x,b.y,b.width,b.height]];
+                        }))"""
+                    before = await page.evaluate(measure)
+                    toggle = page.locator('.prompt-editor-toggle')
+                    await toggle.click()
+                    await expect(toggle).to_have_attribute('aria-expanded', 'true')
+                    assert await page.evaluate(measure) == before, 'Expand moved the desktop workspace'
+                    overlay = await page.evaluate("""() => {
+                        const input=window.promptNode, frame=input.parentElement, b=frame.getBoundingClientRect();
+                        const settings=document.getElementById('settings-stack').getBoundingClientRect();
+                        const hit=document.elementFromPoint(b.left+20,settings.top+10);
+                        return {shadow:getComputedStyle(frame).boxShadow,
+                            overlaps:b.bottom>settings.top+10, onTop:frame.contains(hit),
+                            same:input===document.querySelector('textarea.positive'),
+                            ratio:input.clientWidth/document.querySelector('textarea.negative').clientWidth};
+                    }""")
+                    assert overlay['overlaps'] and overlay['onTop'] and overlay['same'], overlay
+                    assert overlay['shadow'] != 'none' and overlay['ratio'] > 2, overlay
+                    await page.screenshot(path=str(root / f'{page.viewport_size["width"]}-expanded-prompt.png'))
+                    # Editing the floating original is reflected immediately after Collapse.
+                    draft = await page.locator('textarea.positive').input_value()
+                    await page.locator('textarea.positive').fill(draft + ' Edited while expanded.')
+                    if page.viewport_size['width'] == 1440:
+                        await page.set_viewport_size({'width':390, 'height':844})
+                        await expect(page.locator('html')).to_have_attribute('data-presentation', 'mobile')
+                        assert await page.locator('textarea.positive').evaluate(
+                            "el => el === window.promptNode && !el.parentElement.classList.contains('desktop-scroll-frame')")
+                        await expect(toggle).to_have_attribute('aria-expanded', 'true')
+                        await page.set_viewport_size({'width':1440, 'height':900})
+                        await expect(page.locator('html')).to_have_attribute('data-presentation', 'desktop')
+                        await page.evaluate('window.scrollTo(0,0)')
+                        assert await page.evaluate(measure) == before
+                    await toggle.click()
+                    await expect(toggle).to_have_attribute('aria-expanded', 'false')
+                    await expect(page.locator('textarea.positive')).to_have_value(draft + ' Edited while expanded.')
+                    assert await page.evaluate(measure) == before, 'Collapse moved the desktop workspace'
+                    await page.locator('textarea.positive').fill(draft)
                 for selector in ['#generate', '#advanced > summary', '#gallery-all']:
                     await page.locator(selector).scroll_into_view_if_needed()
                     await expect(page.locator(selector)).to_be_in_viewport()

@@ -36,7 +36,11 @@ reserved cancellation slot at its upper right. Reuse last generation sits with
 the toolbar utilities so queue state cannot change the height of the prompt row.
 Prompts appear side by side from 1280px, with visually hidden accessible labels,
 Expand inside the positive editor, and Generate/History/Favourites aligned beside
-them. Narrower desktop windows stack the prompts. The positive placeholder omits
+them. The positive/negative split is 2.2:1; narrower desktop windows stack the
+prompts. Expanding the positive prompt floats its existing padded editor above the
+workspace with a shadow, retaining the collapsed footprint so other panels do not
+move. Collapse returns it to normal flow. Both modes keep the same live textarea,
+draft and existing Expand/Collapse state. The positive placeholder omits
 its ellipsis only on desktop and restores the original attribute on mobile.
 
 Generation, resolution and LoRAs occupy one bounded column. Completed images and
