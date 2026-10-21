@@ -731,7 +731,7 @@ class MobileService:
                   else 'Only the browser that generated this image can move it to Trash.' if not own else '')
         return {'image_id': identifier, 'modified': item.get('modified', ''),
                 'kept': self.image_library.contains(self.output_scope, owner, item),
-                'actions': {'keep': {'available': saved, 'reason': '' if saved else 'Keep is available for saved output images.'},
+                'actions': {'keep': {'available': saved, 'reason': '' if saved else 'Favourites are available for saved output images.'},
                             'trash': {'available': not reason, 'reason': reason}, **workflow_capabilities()}}
 
     async def describe_image_actions(self, identifier, owner):

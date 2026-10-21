@@ -88,7 +88,8 @@ output folder is unavailable for these actions.
 ## Implementation boundary
 
 - `mobile/image_actions.py`: exact named workflow bindings, validation and
-  per-browser Keep marks. No model-specific processing pipeline is constructed.
+  per-browser image Favourites (stored in the existing Keep sidecar).
+  No model-specific processing pipeline is constructed.
 - `mobile/editor_subgraphs.py`: bounded, explicit subgraph boundary expansion
   with separate namespaced nodes and promoted literal values.
 - `mobile/input_metadata.py`: shared V3 dynamic metadata expansion used by the
@@ -107,7 +108,7 @@ output folder is unavailable for these actions.
 - `network_output.py`: existing bounded worker validates path/version and reads
   source pixels without blocking the embedded HTTP event loop.
 
-Keep marks, recoverable Trash and browser-filtered generation history continue
+Image favourites, recoverable Trash and browser-filtered generation history continue
 using their existing stores and guards. No additional service, frontend,
 ComfyUI node package or dependency is introduced.
 

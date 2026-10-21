@@ -127,19 +127,23 @@ async def main(browser_name,root):
         await page.locator('#negative-controls').evaluate('(el)=>el.open=true')
         assert await page.locator('#negative-controls label:not(.visually-hidden)').count()==0
         await expect(page.get_by_role('textbox',name='Negative prompt',exact=True)).to_be_visible()
-        # Refresh actions follow history and precede the model fields, with real
-        # button backgrounds/borders and touch targets instead of link styling.
+        # Compact icons stay attached to their selectors and retain touch targets.
         for width in (320,390,768):
             await page.set_viewport_size(dict(width=width,height=844))
             history=await page.locator('#prompt-history').bounding_box()
+            favourites=await page.locator('#image-favourites').bounding_box()
             assert history['height']>=44
+            assert favourites['height'] >= 44 and abs(favourites['y'] - history['y']) < 1
             assert await page.locator('#prompt-history').evaluate("el=>getComputedStyle(el).borderTopStyle==='solid' && getComputedStyle(el).backgroundColor!=='rgba(0, 0, 0, 0)'")
-            models=await page.locator('#model-controls').bounding_box()
-            for action in ('refresh-models','refresh-workflows'):
+            for action in ('refresh-models','refresh-workflows','cleanup-vram'):
                 box=await page.locator('#'+action).bounding_box()
-                assert box and box['y']>=history['y']+history['height']
-                assert box['height']>=44 and box['y']+box['height']<=models['y']
+                assert box and box['height'] >= 44 and box['width'] == 44
+                assert await page.locator('#'+action).get_attribute('aria-label')
                 assert await page.locator('#'+action).evaluate("el=>getComputedStyle(el).borderTopStyle==='solid' && getComputedStyle(el).backgroundColor!=='rgba(0, 0, 0, 0)'")
+            for action, selector in [('refresh-workflows', '#preset'), ('refresh-models', '[data-role="diffusion_model"]')]:
+                box = await page.locator('#'+action).bounding_box()
+                field = await page.locator(selector).bounding_box()
+                assert abs(box['y'] - field['y']) < 1 and box['x'] > field['x']
             assert await page.evaluate('document.documentElement.scrollWidth<=innerWidth')
         await page.set_viewport_size(dict(width=390,height=844))
         await page.screenshot(path=str(root/'prompt-controls.png'))
@@ -186,7 +190,7 @@ async def main(browser_name,root):
         await expect(page.locator('.prompt-entry')).to_have_count(1)
         await expect(page.locator('.prompt-entry')).to_contain_text('A luminous city at dusk')
         await expect(page.locator('.prompt-entry')).to_contain_text('blur, noise')
-        await page.get_by_role('button',name='☆ Favorite',exact=True).click()
+        await page.get_by_role('button',name='☆ Star prompt',exact=True).click()
         await page.locator('#history-favorites').click()
         await expect(page.locator('.prompt-entry')).to_have_count(1)
         await page.locator('#prompt-history-search').fill('no matching sentence')

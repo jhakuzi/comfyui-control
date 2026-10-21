@@ -7,7 +7,7 @@ The [responsive interface](RESPONSIVE_WEBUI.md) uses the same address on
 phones, large iPads and laptops. Wider windows show settings beside a pinned
 preview/results column; narrow windows and Split View keep the compact layout.
 The [testing workspace](RESPONSIVE_WEBUI.md) adds three columns on larger screens,
-selected-image Keep/Trash actions and a generation-history view. Edit and Upscale
+selected-image Favourites/Trash actions and a generation-history view. Edit and Upscale
 use the [named saved workflows](IMAGE_WORKFLOW_INTEGRATION.md) when present.
 
 ## Run from source in an isolated environment
@@ -136,7 +136,8 @@ Older presets gain missing model controls when opened with ComfyUI online;
 existing mapping keys, labels and roles are preserved. Custom loaders using
 `model_name`, `model_path` or `model_file` are recognized when their metadata
 declares a single `MODEL` output. Other input names can still be mapped explicitly.
-Use **Refresh model choices** after starting ComfyUI or adding models. This
+Use the **Refresh model choices** icon beside the first model selector after
+starting ComfyUI or adding models. This
 fetches fresh choices and adds missing loader controls without changing the
 saved graph or replacing your current prompt/model edits. Choices remain specific
 to the selected loader; the app does not swap node types or quantization formats.
@@ -349,8 +350,11 @@ cached job progress without submitting another generation.
 
 ### Prompt history and favorites
 
-Tap **History & favorites** near the prompt. Search Recent or Favorites, tap a
+Tap **History** near the prompt. Search Recent or Starred prompts, tap a
 prompt to restore its positive and negative fields, or use the star/Delete actions.
+The separate **Favourites** button opens liked images. Tap the selected image's
+heart in the wide preview or phone viewer to like/unlike it. Existing Keep marks
+are retained as image favourites; prompt stars remain separate.
 Reuse changes prompts only; it keeps the current models, seed and other settings
 and never presses Generate. Multiple text inputs are restored in mapping order;
 if their counts differ, choose a matching workflow first.
@@ -359,7 +363,7 @@ History is recorded only after ComfyUI accepts a submission, including acceptanc
 recovered after a lost response. Repeated identical prompt pairs update one entry
 and keep its favorite flag. Deleting an entry is not undone by reconnecting or
 reopening an old job. **Clear history** confirms removal of all entries, including
-favorites, without deleting images or presets.
+starred prompts, without deleting images, image favourites or presets.
 
 History belongs to the existing browser-identity cookie and survives app restarts.
 Tabs sharing that identity share history; a different browser profile gets its

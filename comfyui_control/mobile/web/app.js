@@ -406,6 +406,8 @@ async function choosePreset(id, reuse) {
   preset = null;
   $("refresh-models").hidden = !id;
   updateGenerate();
+  // Keep the shared refresh control when replacing the old model inputs.
+  $("cleanup-vram").before($("refresh-models"));
   for (const target of [
     "prompt-controls",
     "model-controls",
@@ -636,13 +638,20 @@ function renderFields() {
   }
   // Keep the three loaders together even when an older mapping placed the
   // diffusion filename under Advanced. The stored mapping/key stays unchanged.
+  let modelRefreshPlaced = false;
   for (const role of ["diffusion_model", "model", "vae", "text_encoder"]) {
     const fields = preset.fields.filter((field) => (field.model_role || field.role) === role);
     for (const field of fields) {
       const label = role === "diffusion_model"
         ? "Diffusion model" + (fields.length > 1 ? " · " + field.label : "")
         : field.label;
-      control({ ...field, role, label }, $("model-controls"));
+      const input = control({ ...field, role, label }, $("model-controls"));
+      if (!modelRefreshPlaced) {
+        const row = node("div", undefined, "selector-tools");
+        input.replaceWith(row);
+        row.append(input, $("refresh-models"));
+        modelRefreshPlaced = true;
+      }
     }
   }
   const loras = preset.fields.filter((field) => field.role.startsWith("lora_"));
@@ -1357,7 +1366,7 @@ function renderLibrary() {
   const items = galleryFilter === "kept" ? gallery.filter((item) => item.kept) : gallery;
   renderImages($("gallery-grid"), items);
   $("gallery-empty").hidden = !!items.length;
-  $("gallery-empty").textContent = galleryFilter === "kept" ? "No kept images yet. Open an image and choose Keep." : "No images yet. Your next idea starts in Create.";
+  $("gallery-empty").textContent = galleryFilter === "kept" ? "No favourite images yet. Select an image and tap its heart." : "No images yet. Your next idea starts in Create.";
   syncSelectedPreview();
 }
 
@@ -1790,6 +1799,13 @@ $("reuse-last").addEventListener(
 $("create-tab").addEventListener("click", () => selectTab("create"));
 $("gallery-tab").addEventListener("click", () => {
   selectTab("gallery");
+});
+$("image-favourites").addEventListener("click", () => {
+  galleryFilter = "kept";
+  selectTab("gallery");
+  renderLibrary();
+  $("gallery-kept").focus({ preventScroll: true });
+  if (studioLayout.matches) $("gallery-page").scrollIntoView({ block: "nearest", behavior: disclosureMotion.matches ? "instant" : "smooth" });
 });
 $("refresh-gallery").addEventListener("click", () => loadGallery(true));
 for (const [id, filter] of [["gallery-all", "all"], ["gallery-kept", "kept"], ["gallery-jobs", "jobs"], ["gallery-trash", "trash"]]) {

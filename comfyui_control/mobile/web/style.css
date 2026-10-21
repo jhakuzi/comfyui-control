@@ -24,6 +24,9 @@
   --accent-soft: #1d3048;
   --accent-line: #4484ce80;
   --accent-text: #ffffff;
+  --favourite: #ff7799;
+  --favourite-bg: #35202c;
+  --favourite-line: #ff779955;
   /* A slightly deeper fill keeps white button labels legible. */
   --primary: #2374dd;
   --primary-hover: #216ed4;
@@ -617,15 +620,49 @@ main {
   font-size: 0.85rem;
   box-shadow: none;
 }
-.workflow-actions {
+.selector-tools {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  margin: 0 0 var(--space-3);
+  align-items: stretch;
+  gap: 6px;
 }
-.workflow-actions button {
-  flex: 1 1 180px;
-  min-width: 0;
+.selector-tools > select { flex: 1; min-width: 0; }
+.icon-button {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 11px;
+  flex-shrink: 0;
+}
+.icon-button svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.model-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+.model-tools > span { margin-right: auto; font-size: var(--font-label); }
+.prompt-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+.saved-image-buttons .image-heart {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+.saved-image-buttons .image-heart[aria-pressed="true"] {
+  color: var(--favourite);
+  border-color: var(--favourite-line);
+  background-color: var(--favourite-bg);
 }
 .prompt-action {
   width: 100%;
@@ -1120,8 +1157,8 @@ dialog::backdrop {
 .image-grid button:focus-visible,
 #gallery-grid button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 #gallery-grid button.kept-image::after {
-  content: "✓"; position: absolute; top: 6px; right: 6px; background: var(--primary);
-  color: var(--accent-text); padding: 1px 7px; border-radius: 50%; pointer-events: none;
+  content: "♥"; position: absolute; top: 6px; right: 6px; background: var(--favourite-bg);
+  color: var(--favourite); padding: 1px 7px; border-radius: 50%; pointer-events: none;
 }
 #generation-history { margin: 20px 0; }
 .generation-history-entry {
@@ -1503,7 +1540,6 @@ dialog::backdrop {
   #workspace[data-layout="studio"] .card { --panel-padding: 16px; }
   #workspace[data-layout="studio"] textarea.positive { height: clamp(180px, 24dvh, 320px); min-height: 180px; }
   #workspace[data-layout="studio"] .prompt-editor.expanded textarea.positive { height: clamp(360px, 60dvh, 720px); }
-  #workspace[data-layout="studio"] .workflow-actions { flex-wrap: wrap; }
   #workspace[data-layout="studio"] .control-grid { grid-template-columns: minmax(0, 1fr); }
   #workspace[data-layout="studio"] #job-images { grid-template-columns: minmax(0, 1fr); }
   #workspace[data-layout="studio"] #job-images button { height: clamp(200px, 48dvh, 650px); }

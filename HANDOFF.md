@@ -1,5 +1,29 @@
 # Session handoff — 2026-10-21
 
+## Current follow-up — image Favourites and compact controls
+
+- The user explicitly chose an image like/favourite system, replacing the visible
+  Keep category. Existing marks are retained using the same private sidecar,
+  `keep` action / `kept` API fields and output/file-version/browser scoping.
+- Separate History and Favourites shortcuts open prompt history and liked images.
+  Image hearts toggle in the central selected-image panel and phone viewer, with
+  a matching gallery heart badge. Gallery's former Kept label is now Favourites.
+  Existing prompt favourites remain available as Starred prompts inside History;
+  clearing prompt history does not clear image Favourites.
+- Workflow refresh is a compact SVG button beside the workflow selector. The
+  shared model refresh button sits beside the first model input, is retained when
+  model controls rebuild, and still refreshes all choices through the existing
+  endpoint. A compact broom by Models requests the existing idle-only VRAM
+  cleanup. Tooltips, accessible labels, keyboard behavior and 44px targets remain.
+- No new dependency, persistence store, model polling or generation behavior.
+  Shell cache refreshed. **35 focused tests passed** for image actions, prompt
+  history, sharing, mobile core and gallery sync. Chromium and Linux WebKit
+  responsive/recovery and extras checks passed: heart add/remove, Favourites
+  shortcut, reload, phone/desktop consistency, unchanged originals, icon placement
+  and touch targets, prompt stars, metadata/privacy and reconnect behavior.
+  JavaScript syntax and `git diff --check` passed. Checks use protocol fixtures,
+  not physical Apple hardware or GPU inference; full pytest was not rerun.
+
 ## Current follow-up — workflow selector cleanup
 
 - The user reported confusing extra workflow entries and authorized cleanup.

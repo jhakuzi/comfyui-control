@@ -35,7 +35,14 @@ presets, history or original workflow files are deleted by this organization.
   and processing use a moving highlight without inventing a percentage. It pauses
   while reconnecting and resets when the job ends. The button remains disabled
   during an active job; Cancel retains its existing behavior.
-- **Gallery:** the desktop sidebar has All images, Kept, History and Trash views.
+- **History / Favourites:** separate buttons near the prompt open prompt history
+  and liked images. Image hearts toggle Favourites in the central selected-image
+  panel or phone viewer. Existing Keep marks carry across unchanged. Prompt stars
+  remain separately available as **Starred prompts** inside History.
+- **Refresh / cleanup:** compact refresh icons sit beside the workflow selector
+  and first model selector. The small broom by Models requests idle VRAM cleanup.
+  Icons have accessible labels, tooltips and 44px touch targets.
+- **Gallery:** the desktop sidebar has All images, Favourites, History and Trash views.
   History lists this browser's jobs; selecting one never submits a generation.
   Phones keep the Gallery tab and full-size viewer. Comparison remains available.
   Previews use 768px thumbnails, or 1280px on high-density screens; phones keep
@@ -110,15 +117,15 @@ For SSH, use the source environment's executable with `--start-server --start-we
 For updates, close it, run `git pull --ff-only` in this checkout and reinstall
 with `.venv-test/bin/python -m pip install .`.
 
-**VRAM cleanup** below the workflow refresh controls unloads idle models using
+The **VRAM cleanup** broom by Models unloads idle models using
 ComfyUI's existing API. It is disabled while work is queued or running. The
 server checks the queue again before requesting cleanup; the next generation
 will reload its models.
 
 ## Saved-image actions
 
-- **Keep:** mark/unmark the selected image for this browser's Kept filter in the
-  recent gallery. No file is moved. Marks survive app restarts and are scoped to
+- **Heart / Favourites:** like/unlike the selected image for this browser's
+  Favourites gallery. No file is moved. Likes survive app restarts and are scoped to
   browser identity, output folder and file version.
 - **Edit:** enter an instruction for the selected saved image. Uses the saved
   `VeryComfy_Qwen21_Turbo_EDIT_ONLY.json` workflow in ComfyUI.
@@ -137,7 +144,7 @@ will reload its models.
 
 Trash supports local output and the existing NFS worker path. Another browser's
 mobile output cannot be trashed, even when metadata sharing is enabled; ordinary
-ComfyUI output without mobile ownership can be managed. Keep marks are private to
+ComfyUI output without mobile ownership can be managed. Favourites are private to
 each browser. Trashed files are excluded from the gallery and public job image
 lists, while the original generation journal is retained. Remote-only ComfyUI
 files cannot be moved to Trash through the image proxy.
@@ -154,7 +161,7 @@ before retrying. A disconnected NAS is not evidence that its files were deleted.
    accessible while scrolling, then check the completed image and Save image.
 4. Refresh or briefly disconnect during generation; confirm recovery and no
    duplicate request. Try Gallery, comparison selection and closing the viewer.
-5. Select an older image, mark it Keep, refresh and check Kept. Trash that image,
+5. Select an older image, tap its heart, refresh and check Favourites. Trash that image,
    confirm other files remain, then restore it. Try actions while changing selection.
 
 Chromium and Linux WebKit checks exercise layout, generation/recovery, comparison,

@@ -8,7 +8,7 @@ class PromptHistoryView {
     this.favorites = false;
     this.epoch = 0;
     this.el = (id) => document.getElementById(id);
-    this.el("prompt-history").addEventListener("click", () => this.open());
+    this.el("prompt-history").addEventListener("click", () => this.open(false));
     this.el("close-prompt-history").addEventListener("click", () => this.el("prompt-history-dialog").close());
     this.el("prompt-history-dialog").addEventListener("close", () => { this.epoch++; this.entries = []; this.render(); });
     this.el("prompt-history-search").addEventListener("input", () => this.render());
@@ -16,7 +16,7 @@ class PromptHistoryView {
       this.el(id).addEventListener("click", () => { this.favorites = favorites; this.render(); });
     }
     this.el("clear-prompt-history").addEventListener("click", () => this.action(async () => {
-      if (!confirm("Clear your prompt history, including favorites? Your images and saved workflows are kept.")) return;
+      if (!confirm("Clear your prompt history, including starred prompts? Your favourite images and saved workflows are kept.")) return;
       await this.api("/api/prompts", { method: "DELETE", body: "{}" });
       this.entries = [];
       this.render();
@@ -31,7 +31,9 @@ class PromptHistoryView {
     finally { if (button) button.disabled = false; }
   }
 
-  async open() {
+  async open(favorites = false) {
+    this.favorites = favorites;
+    this.el("prompt-history-search").value = "";
     const epoch = ++this.epoch;
     this.el("prompt-history-status").textContent = "Loading your prompts…";
     this.el("prompt-history-dialog").showModal();
@@ -59,7 +61,7 @@ class PromptHistoryView {
     this.el("history-favorites").setAttribute("aria-pressed", String(this.favorites));
     const list = this.el("prompt-history-list");
     list.replaceChildren();
-    if (!items.length) list.append(el("p", query ? "No matching prompts." : this.favorites ? "No favorite prompts yet." : "Prompts appear here after a generation is accepted.", "hint"));
+    if (!items.length) list.append(el("p", query ? "No matching prompts." : this.favorites ? "No starred prompts yet." : "Prompts appear here after a generation is accepted.", "hint"));
     for (const entry of items) {
       const card = el("article", undefined, "prompt-entry");
       const reuse = el("button", undefined, "prompt-reuse");
@@ -72,7 +74,7 @@ class PromptHistoryView {
         this.el("prompt-history-dialog").close();
       }, reuse));
       const actions = el("div", undefined, "actions");
-      const favorite = el("button", entry.favorite ? "★ Favorite" : "☆ Favorite");
+      const favorite = el("button", entry.favorite ? "★ Starred prompt" : "☆ Star prompt");
       favorite.type = "button";
       favorite.setAttribute("aria-pressed", String(entry.favorite));
       favorite.addEventListener("click", () => this.action(async () => {

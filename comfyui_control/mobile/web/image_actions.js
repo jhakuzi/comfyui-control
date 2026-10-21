@@ -12,11 +12,12 @@ class SavedImageActions {
     this.buttons = new Map();
     const row = document.createElement("div");
     row.className = "actions saved-image-buttons";
-    for (const [key, label] of [["keep", "Keep"], ["edit", "Edit"], ["upscale", "Upscale"], ["trash", "Trash"]]) {
+    for (const [key, label] of [["keep", "♡"], ["edit", "Edit"], ["upscale", "Upscale"], ["trash", "Trash"]]) {
       const button = document.createElement("button");
       button.type = "button";
       button.textContent = label;
       button.dataset.action = key;
+      if (key === "keep") button.classList.add("image-heart");
       if (key === "trash") button.classList.add("danger");
       button.addEventListener("click", () => this.perform(key));
       row.append(button);
@@ -30,6 +31,14 @@ class SavedImageActions {
     container.append(row, this.unavailable, this.status);
   }
 
+  renderHeart(kept) {
+    const button = this.buttons.get("keep");
+    button.textContent = kept ? "♥" : "♡";
+    button.setAttribute("aria-label", kept ? "Remove image from Favourites" : "Add image to Favourites");
+    button.setAttribute("aria-pressed", String(!!kept));
+    button.title = kept ? "Remove image from Favourites" : "Add image to Favourites";
+  }
+
   async select(item) {
     const epoch = ++this.epoch;
     this.item = item ? { ...item } : null;
@@ -39,18 +48,17 @@ class SavedImageActions {
     this.unavailable.textContent = "";
     this.buttons.forEach((button) => { button.disabled = true; });
     if (!item) return;
-    this.buttons.get("keep").textContent = item.kept ? "Kept ✓" : "Keep";
-    this.buttons.get("keep").setAttribute("aria-pressed", String(!!item.kept));
+    this.renderHeart(item.kept);
     try {
       const result = await this.api(`/api/images/${encodeURIComponent(item.id)}/actions`);
       if (epoch !== this.epoch) return;
       this.capabilities = result;
       this.item.kept = result.kept;
-      this.buttons.get("keep").textContent = result.kept ? "Kept ✓" : "Keep";
-      this.buttons.get("keep").setAttribute("aria-pressed", String(result.kept));
+      this.renderHeart(result.kept);
       this.buttons.forEach((button, key) => {
         button.disabled = !result.actions[key]?.available;
-        button.title = result.actions[key]?.reason || "";
+        if (key !== "keep" || !result.actions[key]?.available)
+          button.title = result.actions[key]?.reason || "";
       });
       this.unavailable.textContent = ["edit", "upscale"].map((key) => result.actions[key]?.reason).filter(Boolean).join(" ");
       if (!result.actions.trash.available) this.status.textContent = result.actions.trash.reason;
@@ -62,7 +70,7 @@ class SavedImageActions {
   async perform(action) {
     if (!this.item || !this.capabilities?.actions[action]?.available || this.pending) return;
     const item = { ...this.item }, capability = this.capabilities, epoch = this.epoch;
-    if (action === "trash" && !confirm(`Move “${item.filename}” to Trash?${item.kept ? " This image is marked Kept." : ""} You can restore it from Gallery → Trash.`)) return;
+    if (action === "trash" && !confirm(`Move “${item.filename}” to Trash?${item.kept ? " This image is in Favourites." : ""} You can restore it from Gallery → Trash.`)) return;
     this.pending = true;
     this.buttons.forEach((button) => { button.disabled = true; });
     this.status.textContent = action === "trash" ? "Moving image to Trash…"

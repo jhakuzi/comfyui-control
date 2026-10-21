@@ -515,11 +515,15 @@ async def main(browser_name, root):
                 assert box and box['y'] + box['height'] <= page.viewport_size['height'], box
             await actions.locator('[data-action="keep"]').click()
             await expect(actions.locator('[data-action="keep"]')).to_have_attribute('aria-pressed', 'true')
-            await page.locator('#gallery-kept').click()
+            await expect(actions.locator('[data-action="keep"]')).to_have_text('♥')
+            await expect(actions.locator('[data-action="keep"]')).to_have_attribute('aria-label', 'Remove image from Favourites')
+            await page.locator('#image-favourites').click()
             await expect(page.locator('#gallery-grid button')).to_have_count(1)
+            await expect(page.locator('#gallery-kept')).to_have_text('Favourites')
             await page.reload()
             await expect(page.locator('#selected-image-name')).to_have_text('image02.png')
             await expect(page.locator('#gallery-kept')).to_have_attribute('aria-pressed', 'true')
+            await expect(actions.locator('[data-action="keep"]')).to_have_attribute('aria-pressed', 'true')
             await expect(prompt).to_have_value(external['text']['inputs']['text'])
             await page.locator('#gallery-all').click()
             original = (output / 'image02.png').read_bytes()
@@ -532,6 +536,15 @@ async def main(browser_name, root):
             await page.locator('#trash-list button').click()
             await expect(page.locator('#trash-status')).to_contain_text('empty')
             assert (output / 'image02.png').read_bytes() == original
+            await page.locator('#gallery-all').click()
+            await page.get_by_role('button', name='View image02.png', exact=True).click()
+            await expect(actions.locator('[data-action="keep"]')).to_be_enabled()
+            await actions.locator('[data-action="keep"]').click()
+            await expect(actions.locator('[data-action="keep"]')).to_have_text('♡')
+            await page.locator('#image-favourites').click()
+            await expect(page.locator('#gallery-grid button')).to_have_count(0)
+            assert (output / 'image02.png').read_bytes() == original
+            assert len(stub.submissions) == 1
             await page.locator('#gallery-jobs').click()
             await expect(page.locator('#generation-history-list button')).to_have_count(1)
             await page.locator('#generation-history-list button').click()
@@ -572,6 +585,8 @@ async def main(browser_name, root):
             await page.set_viewport_size(dict(width=390, height=844))
             await select_page(page, 'gallery')
             await view_image(page, 'image02.png')
+            await expect(page.locator('#viewer-image-actions [data-action="keep"]')).to_have_attribute('aria-pressed', 'false')
+            await page.locator('#viewer-image-actions [data-action="keep"]').click()
             await expect(page.locator('#viewer-image-actions [data-action="keep"]')).to_have_attribute('aria-pressed', 'true')
             assert await page.locator('#selected-image-preview').get_attribute('src') is None
             await page.screenshot(path=str(root / 'workspace-phone.png'))
@@ -606,7 +621,7 @@ async def main(browser_name, root):
                 reuse='mobile jobs and desktop PNG: exact seed, variation, no auto-submit, missing metadata, unchanged files',
                 previews='768px at 1x, 1280px at 2x; private sessions remain isolated',
                 cross_device='opt-in laptop to phone reuse/variation; independent history/jobs; disabling sharing restores image restrictions',
-                image_actions='older-image targeting, Keep/filter/reload, unavailable workflow actions, Trash/restore, browser job history and phone viewer',
+                image_actions='older-image hearts, Favourites shortcut, unlike, reload, phone/desktop consistency, unavailable workflow actions, Trash/restore and history',
                 gallery='desktop sidebar, keyboard comparison, accessible close', tablet='touch expansion, rotation, isolated draft', javascript_errors=errors)))
             await browser.close()
     finally:

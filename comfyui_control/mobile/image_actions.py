@@ -120,17 +120,17 @@ class ImageLibrary:
         if not self.valid:
             raise ValueError('The saved image library could not be read. Back it up before repairing it.')
         if type(keep) is not bool:
-            raise ValueError('Keep must be true or false.')
+            raise ValueError('Favourite must be true or false.')
         key = self.key(scope, owner)
         entries = dict(self.kept.get(key, {}))
         if keep:
             if len(entries) >= 2000 and item['id'] not in entries:
-                raise ValueError('The Kept list is full (2,000 images). Remove a mark first.')
+                raise ValueError('Favourites is full (2,000 images). Remove a favourite first.')
             entries[item['id']] = item.get('modified', '')
         else:
             entries.pop(item['id'], None)
         updated = {**self.kept, key: entries}
         if len(json.dumps(updated).encode()) > 4 * 1024**2:
-            raise ValueError('The saved image library is full. Remove some Keep marks first.')
+            raise ValueError('The saved image library is full. Remove some favourites first.')
         save_json(self.path, updated)
         self.kept = updated

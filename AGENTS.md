@@ -33,7 +33,7 @@ and presents simpler controls on phones, tablets and desktops.
 | `mobile/server.py`, `mobile/settings.py` | aiohttp routes, SSE, request/identity/security checks, authentication and connection preferences. |
 | `mobile/workflows.py`, `workflow_sources.py` | Immutable API graphs, explicit mappings, metadata-described controls, saved workflow discovery/import. |
 | `mobile/editor_subgraphs.py`, `input_metadata.py` | Bounded subgraph expansion and shared ComfyUI V3 dynamic-input metadata interpretation. |
-| `mobile/image_actions.py`, `image_pixels.py`, `image_metadata.py`, `prompt_history.py` | Saved-image actions/Keep marks, pixel encoding, metadata and private prompt history. |
+| `mobile/image_actions.py`, `image_pixels.py`, `image_metadata.py`, `prompt_history.py` | Saved-image actions/Favourites, pixel encoding, metadata and private prompt history. |
 | `mobile/web/` | Buildless HTML/CSS/JavaScript; `app.js` coordinates existing views; comparison, history, details and actions have separate modules. |
 | `tests/`, `tests/manual/`, `tests/fixtures/` | pytest regression suite, explicit browser/real-server checks and redacted workflow fixtures. |
 | `packaging/`, `.github/workflows/`, `downloads/` | ZIP/SRPM builders, Fedora packaging, controlled release automation and downloadable artifacts. |
@@ -130,7 +130,9 @@ the user's authorization; follow `docs/MAINTAINING.md` and `packaging/README.md`
   reconnect behavior. Phone lock/disconnection does not stop ComfyUI generation.
   Actions must identify a specific current saved image, not the latest result.
 - Retain originals for Edit/Upscale; uploaded pixel copies strip PNG metadata.
-  Keep marks are private sidecars. Trash is recoverable app-managed storage, not
+  Image Favourites reuse the existing private Keep sidecar and `keep`/`kept` API
+  fields; preserve those for compatibility. Prompt stars remain separate in
+  prompt history. Trash is recoverable app-managed storage, not
   permanent deletion. Guard image version, ownership, traversal and symlinks.
 - Preserve Host/Origin validation, CSP, request limits, optional authentication
   and per-client privacy. Opt-in image metadata sharing must not expose another
