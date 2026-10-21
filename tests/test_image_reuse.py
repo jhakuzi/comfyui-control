@@ -49,6 +49,7 @@ def test_png_reuse_preserves_complete_graph_and_deduplicates_presets(tmp_path):
         second = await service.prepare_image_reuse(item['id'], 'laptop')
         assert first['preset'] == second['preset'] and len(service.presets.list()) == 1
         preset = service.presets.get(first['preset'])
+        assert preset['image_reuse'] is True
         assert render(preset, first['values'])[0] == graph
         assert preset['graph'] == graph and path.read_bytes() == original
         assert first['disabled_loras'] == [] and not service.jobs

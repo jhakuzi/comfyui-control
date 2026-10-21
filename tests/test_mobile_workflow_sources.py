@@ -8,7 +8,7 @@ import pytest
 
 from comfyui_control.mobile.workflow_sources import editor_to_api, import_graph, saved_workflows, saved_workflow_graph
 from comfyui_control.mobile.workflows import suggested_mappings, validate_mappings, render
-from comfyui_control.mobile.settings import MobileSettings
+from comfyui_control.mobile.settings import MobileSettings, save_json
 from comfyui_control.mobile.service import MobileService, revision
 from comfyui_control.mobile.server import MobileHTTP
 
@@ -230,6 +230,39 @@ def test_saved_catalog_is_confined_and_import_reuses_mappings(tmp_path, request,
             await client.close()
     asyncio.run(scenario())
 
+
+
+def test_preset_catalog_describes_sources_without_deleting_stored_snapshots(tmp_path):
+    async def scenario():
+        service = MobileService(tmp_path / 'data', MobileSettings(require_auth=False), tmp_path / 'out')
+        graph = {'text': {'class_type': 'CustomText', 'inputs': {'text': 'Saved prompt'}}}
+        records = {}
+        for name, marker in [('manual', {}), ('folder', {'comfy_source': 'nested/Portrait.json'}),
+                             ('action', {'image_workflow': {'action': 'edit', 'source': 'Edit.json'}}),
+                             ('image', {'image_reuse': True})]:
+            item = service.presets.create(name, graph)
+            item.update(marker)
+            save_json(service.presets.path(item['id']), item)
+            records[name] = item
+        before = {p.name: p.read_bytes() for p in service.presets.directory.glob('*.json')}
+        client = TestClient(TestServer(MobileHTTP(service).app()))
+        await client.start_server()
+        try:
+            await client.get('/api/session')
+            response = await client.get('/api/presets')
+            assert response.status == 200
+            items = {item['id']: item for item in await response.json()}
+            assert len(items) == 4
+            assert items[records['folder']['id']]['comfy_source'] == 'nested/Portrait.json'
+            assert items[records['action']['id']]['internal'] is True
+            assert items[records['image']['id']]['image_reuse'] is True
+            assert not items[records['manual']['id']]['internal']
+            assert items[records['manual']['id']]['comfy_source'] is None
+            assert all('graph' not in item for item in items.values())
+            assert before == {p.name: p.read_bytes() for p in service.presets.directory.glob('*.json')}
+        finally:
+            await client.close()
+    asyncio.run(scenario())
 
 def test_unused_decoder_does_not_block_a_valid_output_branch():
     editor={'nodes':[

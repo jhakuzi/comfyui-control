@@ -1,5 +1,28 @@
 # Session handoff — 2026-10-21
 
+## Current follow-up — workflow selector cleanup
+
+- The user reported confusing extra workflow entries and authorized cleanup.
+  The selector had mixed every persisted preset with the ComfyUI folder catalog,
+  including older folder snapshots and internal action presets.
+- ComfyUI files now appear first and once per filename, with manual imports in
+  a separate group. Action presets and newly tagged image-reuse snapshots are
+  excluded from normal choices. Explicit image/history reuse and its reload
+  retain one Current saved settings entry when needed. Existing untagged presets
+  are not guessed from their names or deleted.
+- Existing folder imports carry `comfy_source`; preset catalog responses now
+  expose that source and internal/reuse flags. No graph, mappings or job records
+  are removed. Offline saved copies are grouped/deduplicated by source while
+  retaining the currently selected copy. Folder refresh preserves unsent edits.
+- The service-worker shell cache version was refreshed. Verification: **41 passed**
+  across workflow-source, image-reuse/sharing, mobile integration and desktop
+  mobile-settings tests. Chromium and Linux WebKit (GGUF mode) selector checks
+  passed for grouping, retained snapshots, offline copies, draft preservation,
+  explicit snapshot reload and exact submitted settings. The broader Chromium
+  responsive/recovery check also passed. JavaScript syntax and `git diff --check`
+  passed. These use protocol fixtures; real Editing and the known Upscale fixture
+  failure are still deferred. No release or package rebuild was performed.
+
 ## Current follow-up — wide workspace and motion
 
 - The user likes the phone UI and plans further real-device testing. Keep its

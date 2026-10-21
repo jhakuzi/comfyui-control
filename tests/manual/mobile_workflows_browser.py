@@ -17,11 +17,12 @@ from test_mobile_integration import ComfyStub
 from test_mobile_workflow_sources import flux_saved
 from comfyui_control.mobile.workflow_sources import editor_to_api
 from comfyui_control.mobile.workflows import suggested_mappings, fields_for
-from comfyui_control.mobile.settings import MobileSettings
+from comfyui_control.mobile.settings import MobileSettings, save_json
 from comfyui_control.mobile.service import MobileService, revision, json_safe
 from comfyui_control.mobile.server import MobileHTTP
+from comfyui_control.mobile.client import ComfyError
 
-async def main(gguf=False):
+async def main(gguf=False, browser_name='chromium'):
     root=Path(tempfile.mkdtemp(prefix='comfy-mobile-controls-'))
     editor,info=flux_saved.__wrapped__()
     loader='LoaderGGUF' if gguf else 'ArbitraryDiffusion'
@@ -57,6 +58,17 @@ async def main(gguf=False):
         'values':{f['key']:'Unsent before upgrading' if f['role']=='positive' else f['default'] for f in fields_for(preset,info)},
         'mappings':preset['mappings'],'randomSeed':False,'disabledLoras':[]})
     other=service.presets.create('A second preset',graph)
+    # Retained snapshots and action presets must not clutter the normal list.
+    snapshots = []
+    for name, marker in [('Old folder snapshot', {'comfy_source': 'nested/Flux Portrait.json'}),
+                         ('Older folder snapshot', {'comfy_source': 'nested/Flux Portrait.json'}),
+                         ('Internal upscale', {'image_workflow': {'action': 'upscale', 'source': 'upscale.json'}}),
+                         ('Reused image snapshot', {'image_reuse': True})]:
+        item = service.presets.create(name, graph)
+        item = service.presets.map(item['id'], suggested_mappings(graph, info))
+        item.update(marker)
+        save_json(service.presets.path(item['id']), item)
+        snapshots.append(item)
     settings.default_preset=preset['id']
     await service.start()
     runner=web.AppRunner(MobileHTTP(service).app(),access_log=None,shutdown_timeout=1)
@@ -67,13 +79,18 @@ async def main(gguf=False):
     errors=[]
     try:
       async with async_playwright() as p:
-        browser=await p.chromium.launch(headless=True,args=['--no-sandbox'])
-        context=await browser.new_context(viewport={'width':390,'height':844},device_scale_factor=2,is_mobile=True,has_touch=True)
+        browser=await getattr(p, browser_name).launch(headless=True,
+            **({'args': ['--no-sandbox']} if browser_name == 'chromium' else {}))
+        context=await browser.new_context(viewport={'width':390,'height':844},device_scale_factor=2,is_mobile=True,has_touch=True,service_workers='block')
         await context.add_init_script('localStorage.setItem('+json.dumps('comfy-mobile-draft-'+preset['id'])+','+json.dumps(json.dumps(legacy_draft))+');')
         page=await context.new_page()
         page.on('pageerror',lambda error:errors.append(str(error)))
         await page.goto(url)
         await expect(page.locator('#preset')).to_have_value(preset['id'])
+        assert await page.locator('#preset optgroup').evaluate_all('els => els.map(el => el.label)') == ['Saved in ComfyUI', 'Imported presets']
+        for item in snapshots:
+            assert await page.locator('#preset option[value="' + item['id'] + '"]').count() == 0
+            assert service.presets.get(item['id']) == item
         assert await page.locator('#login').is_hidden()
         await page.locator('[data-role="diffusion_model"]').wait_for()
         assert await page.locator('#model-controls .control').count()==3
@@ -92,8 +109,36 @@ async def main(gguf=False):
             await expect(page.locator('#model-controls select').first).to_have_attribute('data-role','diffusion_model')
         await page.locator('#preset').select_option('saved:nested/Flux Portrait.json')
         await expect(page.locator('#preset')).not_to_have_value('saved:nested/Flux Portrait.json')
+        await expect(page.locator('#generate')).to_be_enabled()
         selected=await page.locator('#preset').input_value()
         assert selected!=preset['id']
+        assert await page.locator('#preset optgroup[label="Saved in ComfyUI"] option').count() == 2
+        assert await page.locator('#preset optgroup[label="Imported presets"] option').count() == 2
+        await page.locator('[data-role="positive"]').fill('Keep the active folder draft')
+        await page.locator('#refresh-workflows').click()
+        await expect(page.locator('#refresh-workflows')).to_be_enabled()
+        await expect(page.locator('#preset')).to_have_value(selected)
+        await expect(page.locator('[data-role="positive"]')).to_have_value('Keep the active folder draft')
+        original_request = service.client.request
+        async def unavailable(method, path, **kwargs):
+            if path.startswith('/userdata?'):
+                raise ComfyError('Catalog temporarily unavailable')
+            return await original_request(method, path, **kwargs)
+        service.client.request = unavailable
+        await page.locator('#refresh-workflows').click()
+        await expect(page.locator('#refresh-workflows')).to_be_enabled()
+        await expect(page.locator('#workflow-source-note')).to_contain_text('unavailable')
+        assert await page.locator('#preset optgroup[label="Saved copies · ComfyUI unavailable"] option').count() == 1
+        await expect(page.locator('#preset')).to_have_value(selected)
+        await expect(page.locator('[data-role="positive"]')).to_have_value('Keep the active folder draft')
+        service.client.request = original_request
+        await page.locator('#refresh-workflows').click()
+        await expect(page.locator('#refresh-workflows')).to_be_enabled()
+        await expect(page.locator('#workflow-source-note')).to_be_hidden()
+        assert await page.locator('#preset optgroup[label="Saved copies · ComfyUI unavailable"]').count() == 0
+        await expect(page.locator('#preset')).to_have_value(selected)
+        for item in snapshots:
+            assert service.presets.get(item['id']) == item
         await page.locator('[data-role="diffusion_model"]').select_option('another.gguf')
         await page.locator('[data-role="vae"]').select_option('other-vae.safetensors')
         await page.locator('[data-role="text_encoder"]').select_option('other-text.gguf')
@@ -136,7 +181,18 @@ async def main(gguf=False):
         await expect(page.locator('#notice')).to_contain_text('custom widgets')
         await expect(page.locator('#preset')).to_have_value(selected)
         assert not errors,errors
-        print(json.dumps({'login':'optional; fresh browser opens without a password','default':'selected from desktop preferences with multiple presets',
+        # Explicit image reuse can restore its single current snapshot after a
+        # reload without exposing the other internal records as normal choices.
+        await page.evaluate('id => selectWorkflow(id)', snapshots[-1]['id'])
+        await page.reload()
+        await expect(page.locator('#preset')).to_have_value(snapshots[-1]['id'])
+        assert await page.locator('#preset optgroup[label="Current saved settings"] option').count() == 1
+        assert await page.locator('#preset option[value="' + snapshots[-2]['id'] + '"]').count() == 0
+        assert len(stub.submissions) == 1
+        await page.locator('#preset').select_option(preset['id'])
+        await expect(page.locator('#preset optgroup[label="Current saved settings"]')).to_have_count(0)
+        print(json.dumps({'browser':browser_name,'login':'optional; fresh browser opens without a password','default':'selected from desktop preferences with multiple presets',
+            'selector':'live files first, manual imports separate, hidden retained action/reuse snapshots, offline copies deduplicated, refresh preserves draft',
             'saved_workflow':'selected from ComfyUI catalog and imported','controls':'three model selectors, sampler/scheduler, steps/CFG sliders, calculator fields',
             'legacy_preset_and_unsent_draft_upgrade':'passed','diffusion_loader':loader,'diffusion_model_selection':'selectable; submitted value verified',
             'advanced_gguf_mapping_presented_in_main_model_section':gguf,
@@ -152,4 +208,6 @@ async def main(gguf=False):
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--gguf',action='store_true',help='Use the GGUF schema with an existing Advanced mapping.')
-    asyncio.run(main(parser.parse_args().gguf))
+    parser.add_argument('--browser', choices=('chromium', 'webkit'), default='chromium')
+    args = parser.parse_args()
+    asyncio.run(main(args.gguf, args.browser))

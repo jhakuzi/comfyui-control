@@ -1010,6 +1010,8 @@ class MobileService:
                 raise ValueError('This image\'s mobile generation record is no longer available. Select an existing workflow with matching input mappings to reuse it.')
             preset = self.presets.create(('Image · ' + Path(item['filename']).stem)[:100], graph)
             preset = self.presets.map(preset['id'], suggested_mappings(graph, self.info), automatic=True)
+            preset['image_reuse'] = True
+            save_json(self.presets.path(preset['id']), preset)
         description = await self.describe(preset)
         return dict(preset=description['id'], revision=description['revision'], disabled_loras=[],
                     values={field['key']: graph[field['node']]['inputs'][field['input']] for field in description['fields']},

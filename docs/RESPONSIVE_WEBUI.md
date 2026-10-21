@@ -3,6 +3,14 @@
 Open the **same Mobile WebUI URL** on your phone, iPad or laptop. No device
 setting, second server or separate installation is needed.
 
+The workflow selector lists **Saved in ComfyUI** files first, once per filename,
+then **Imported presets**. Retained folder snapshots and internal Edit/Upscale
+presets do not appear as additional normal choices. Explicit image/history reuse
+can show its single **Current saved settings** entry. If the ComfyUI folder list
+is unavailable, saved copies remain selectable without duplicate filenames.
+Refreshing the list preserves the selected workflow and unsent edits; no stored
+presets, history or original workflow files are deleted by this organization.
+
 - **Phone / narrow window:** existing compact controls and bottom Generate/progress dock.
 - **Desktop / large landscape iPad:** settings and prompts on the left, a large
   selected-image preview in the center, and gallery/history on the right.

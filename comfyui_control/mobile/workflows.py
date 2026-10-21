@@ -284,7 +284,10 @@ class Presets:
         for path in sorted(self.directory.glob("*.json")):
             try:
                 item = self.get(path.stem)
-                result.append({"id": item["id"], "name": item["name"], "mapped": bool(item["mappings"])})
+                result.append({"id": item["id"], "name": item["name"], "mapped": bool(item["mappings"]),
+                               "comfy_source": item.get("comfy_source"),
+                               "internal": bool(item.get("image_workflow")),
+                               "image_reuse": bool(item.get("image_reuse"))})
             except (ValueError, OSError, KeyError):
                 continue
         return result

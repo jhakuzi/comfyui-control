@@ -16,6 +16,7 @@ let preset = null,
   draft = {},
   disabledLoras = new Set(),
   randomSeed = true;
+let workflowPresets = [], savedWorkflowNames = null;
 let state = { jobs: [], online: false },
   selectedJob = null,
   events = null,
@@ -309,57 +310,91 @@ function updateGenerate() {
 }
 async function loadPresets(selectId) {
   const items = await api("/api/presets");
-  $("preset").replaceChildren(new Option("Choose a workflow…", ""));
-  for (const item of items) $("preset").add(new Option(item.name, item.id));
-  $("empty-presets").hidden = items.length > 0;
+  workflowPresets = items;
+  const ordinary = items.filter((item) => !item.internal && !item.image_reuse);
   const stored = [
     selectId,
     readStore("preset", ""),
     items.find((item) => item.default)?.id,
-    items.length === 1 ? items[0].id : "",
+    ordinary.length === 1 ? ordinary[0].id : "",
   ].find((id) => items.some((item) => item.id === id));
+  await loadSavedWorkflows(stored || "");
   if (stored) {
-    $("preset").value = stored;
     await choosePreset(stored);
   }
-  await loadSavedWorkflows();
 }
-async function loadSavedWorkflows() {
-  $("preset").querySelector("optgroup")?.remove();
+function renderWorkflowChoices(selectedId = preset?.id || "") {
+  const select = $("preset");
+  select.replaceChildren(new Option("Choose a workflow…", ""));
+  const current = workflowPresets.find((item) => item.id === selectedId);
+  const addGroup = (label, options) => {
+    if (!options.length) return;
+    const group = node("optgroup");
+    group.label = label;
+    group.append(...options);
+    select.append(group);
+  };
+  addGroup("Saved in ComfyUI", (savedWorkflowNames || []).map((name) => {
+    const option = new Option(name.replace(/\.json$/i, ""),
+      !current?.internal && current?.comfy_source === name ? current.id : "saved:" + name);
+    option.dataset.comfySource = name;
+    return option;
+  }));
+  addGroup("Imported presets", workflowPresets
+    .filter((item) => !item.comfy_source && !item.internal && !item.image_reuse)
+    .map((item) => new Option(item.name, item.id)));
+  if (savedWorkflowNames === null) {
+    const copies = new Map();
+    for (const item of workflowPresets.filter((entry) => entry.comfy_source && !entry.internal)) {
+      if (!copies.has(item.comfy_source) || item.id === selectedId)
+        copies.set(item.comfy_source, item);
+    }
+    addGroup("Saved copies · ComfyUI unavailable", [...copies.values()]
+      .map((item) => new Option(item.comfy_source.replace(/\.json$/i, ""), item.id)));
+  }
+  // A requested history/image snapshot remains usable without exposing every
+  // internal preset as another normal workflow choice.
+  if (current && ![...select.options].some((option) => option.value === current.id))
+    addGroup("Current saved settings", [new Option(current.name, current.id)]);
+  select.value = selectedId;
+  if (select.selectedIndex < 0) select.value = "";
+  $("empty-presets").hidden = select.options.length > 1;
+}
+async function loadSavedWorkflows(selectedId) {
   $("refresh-workflows").disabled = true;
   try {
-    const names = await api("/api/workflows/saved");
-    if (names.length) {
-      const group = node("optgroup");
-      group.label = "Saved in ComfyUI";
-      for (const name of names)
-        group.append(new Option(name.replace(/\.json$/i, ""), "saved:" + name));
-      $("preset").append(group);
-    }
+    const names = savedWorkflowNames = await api("/api/workflows/saved");
     $("workflow-source-note").hidden = !!names.length;
     $("workflow-source-note").textContent =
       "Save a workflow in ComfyUI to select it here, or choose one from the desktop app.";
   } catch {
+    savedWorkflowNames = null;
     $("workflow-source-note").hidden = false;
     $("workflow-source-note").textContent =
       "Saved ComfyUI workflows are unavailable. Start ComfyUI, then refresh this list. Your mobile presets remain available.";
   } finally {
+    renderWorkflowChoices(selectedId ?? preset?.id ?? "");
     $("refresh-workflows").disabled = false;
   }
 }
 async function selectWorkflow(id) {
-  if (!id.startsWith("saved:")) return choosePreset(id);
+  const source = [...$("preset").options].find((option) => option.value === id)?.dataset.comfySource;
+  if (!id.startsWith("saved:") && !source) {
+    await choosePreset(id);
+    renderWorkflowChoices(id);
+    return;
+  }
   const previous = preset;
   busy = true;
   updateGenerate();
   try {
     const item = await api("/api/workflows/saved", {
       method: "POST",
-      body: JSON.stringify({ name: id.slice(6) }),
+      body: JSON.stringify({ name: source || id.slice(6) }),
     });
     await loadPresets(item.id);
   } catch (error) {
-    $("preset").value = previous?.id || "";
+    renderWorkflowChoices(previous?.id || "");
     throw error;
   } finally {
     busy = false;
@@ -1588,7 +1623,7 @@ $("preset").addEventListener(
   "change",
   guarded(() => selectWorkflow($("preset").value)),
 );
-$("refresh-workflows").addEventListener("click", loadSavedWorkflows);
+$("refresh-workflows").addEventListener("click", () => loadSavedWorkflows());
 $("cleanup-vram").addEventListener("click", async () => {
   if ($("cleanup-vram").disabled) return;
   cleaningVram = true;
