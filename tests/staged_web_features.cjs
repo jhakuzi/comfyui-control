@@ -21,8 +21,14 @@ async function main() {
   assert.equal(result.label, 'Sampling · 40%');
   assert.equal(view('running', {}, {connected:false}).kind, 'paused');
   assert.equal(view('running', {phase:'processing'}).progress, .4);
-  assert.equal(view('running', {progress:{value:20,max:20}}).label, 'Processing');
+  assert.equal(view('running', {progress:{value:20,max:20}}).label, 'Sampling · 100%');
+  assert.equal(view('running', {progress:{value:20,max:20}}).progress, 1);
   assert.equal(view('running', {progress:{value:1,max:10}}).progress, .1);
+  assert.equal(view('running', {phase:'sampling',progress:{value:99,max:100}}).progress, .99);
+  assert.equal(view('running', {phase:'processing',progress:{value:99,max:100}}).kind, 'indeterminate');
+  assert.equal(view('running', {phase:'preparing',progress:{value:4,max:10}}).label, 'Loading models');
+  assert.equal(view('running', {progress:{value:4,max:0}}).kind, 'indeterminate');
+  assert.equal(view('running', {progress:{value:'4',max:10}}).kind, 'indeterminate');
   assert.equal(view('complete').kind, 'success');
   now = 1500;
   assert.equal(view('complete').kind, 'idle');
@@ -32,6 +38,10 @@ async function main() {
   assert.equal(view('cancelled').kind, 'cancelled');
   progress.reset();
   assert.equal(view('complete').kind, 'idle');
+  progress.rejected('rejected-job');
+  assert.equal(progress.update().label, 'Submission failed');
+  now += 1500;
+  assert.equal(progress.update().kind, 'idle');
   const style = {}, button = {dataset:{}, style:{setProperty:(key,value)=>style[key]=value}, setAttribute:(key,value)=>button[key]=value};
   const label = {};
   Feedback.paint(button, label, result);

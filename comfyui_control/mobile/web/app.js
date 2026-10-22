@@ -39,6 +39,8 @@ let uiReady = false,
   uiState = readStore("ui", {});
 let noticeTimer,
   pendingSubmission = readStore("pending", null);
+const generateFeedback = new ComfyGenerateFeedback();
+let generateFeedbackTimer;
 
 function readStore(key, fallback) {
   try {
@@ -102,6 +104,8 @@ async function api(path, options = {}) {
   return body;
 }
 function showLogin() {
+  clearTimeout(generateFeedbackTimer);
+  generateFeedback.reset();
   stopGallerySync();
   galleryRevision = "";
   comparison.clearImages();
@@ -238,11 +242,15 @@ function updateGenerate() {
     !state.online ||
     preset.missing_nodes.length > 0 ||
     !!(job && activeStatuses.has(job.status));
-  $("generate").textContent = busy
-    ? "Submitting"
-    : pendingSubmission
-      ? "Retry submission"
-      : "✦ Generate";
+  const feedback = generateFeedback.update({ jobs: state.jobs, selectedJob: job,
+    busy, submitting, pending: !!pendingSubmission, connected, online: state.online, recovering });
+  ComfyGenerateFeedback.paint($("generate"), $("generate-label"), feedback);
+  clearTimeout(generateFeedbackTimer);
+  if (generateFeedback.feedback) {
+    // One local redraw clears terminal feedback. No requests or new listeners.
+    generateFeedbackTimer = setTimeout(updateGenerate,
+      Math.max(1, generateFeedback.feedback.expires - Date.now() + 1));
+  }
   syncGenerationDock();
 }
 async function loadPresets(selectId) {
@@ -762,6 +770,7 @@ async function generate(event) {
     if ([400, 403, 404, 413, 415, 422].includes(error.status)) {
       pendingSubmission = null;
       writeStore("pending", null);
+      generateFeedback.rejected(body.request_id);
       notice(error.message);
     } else
       notice(

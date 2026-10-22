@@ -1,27 +1,36 @@
-# Main-based feature port (UI integration deferred)
+# Main-based feature port (Generate integrated)
 
 Branch: `integration/main-feature-ports`. Base: main `7e500d9`. Feature source:
 `testing/webui-desktop-forge` at `292f216`. No merge or wholesale commit cherry-pick
-is used. This stage ports backend features and prepares unloaded client modules.
-It does not add controls, dialogs, navigation, layout or styling to the live app.
+is used. Backend features and client modules were ported first. Generate button
+feedback is now activated separately; all image-action UI integration stays deferred.
 
 ## Presentation boundary
 
-Every pre-existing file under `mobile/web/` is unchanged from main. This includes
-HTML, application JS, CSS, prompt favourites, manifest and service worker. Main's
+Main's original `style.css`, prompt favourites, comparison, image details and
+manifest are unchanged. The HTML loads only the Generate helper/styles and wraps
+the existing button label; the application calls it from `updateGenerate()` using
+the existing state and events. The service-worker shell includes those two assets
+with a new cache name. Main's
 `--accent: #e7f67b`, phone/tablet/desktop breakpoints, tabs, dock, previews and
 button geometry stay intact. The Qt desktop/settings UI and release versions are
 also unchanged. No Forge presentation coordinator/adapters or theme are included.
 
-Four new `web/feature_*` files are packaged as dormant components. They are absent
-from `index.html`, the public asset allowlist and the service-worker shell; HTTP
-requests cannot load them. Future UI integration requires a separate request.
+Only `feature_generate.js/css` are loaded and publicly served. The two image-action
+components remain absent from `index.html`, the public asset allowlist and the
+service-worker shell; HTTP requests cannot load them. Their UI integration requires
+a separate request.
 
-- `feature_generate.js/css`: explicit progress state/paint helpers and an overlay
-  using main's colors, without layout declarations. The future adapter supplies
-  main's job/state, calls `update()` and `paint()` on the existing button, and
-  schedules a refresh after the controller's feedback duration. No listener,
-  timer, request or DOM change happens on script load. Reduced motion is supported.
+- `feature_generate.js/css`: progress state/paint helpers and an overlay using
+  main's yellow accent. Sampling fills the button by the actual reported fraction,
+  including 100%; queueing/loading/processing use a subtle moving highlight.
+  Reconnect pauses animation. Completion, cancellation, execution failure and
+  definitive submission rejection briefly update the label. Main's existing
+  button enablement, submission journal and backend status mappings are retained
+  (upstream interruption of running work is currently reported as failed).
+  A local expiry timer clears terminal feedback without requests. There is no new
+  polling or event listener. Reduced motion disables interpolation and movement
+  while preserving actual progress. Dimensions, placement and typography stay intact.
 - `feature_image_actions.js`: portable selected-image component with optional
   presentation callbacks, no `ComfyPresentation` dependency and no automatic mount.
 - `feature_image_api.js`: workflow/VRAM/Wastebin transport. The future adapter
@@ -90,7 +99,8 @@ for tests and adds no build/runtime dependency.
 
 `tests/fixtures/main_presentation_baseline.json` pins main's original presentation,
 controller/settings and version files. `test_feature_port_boundaries.py` checks
-those bytes, the public shell and dormant-asset exclusions. It also checks that
+those bytes, the narrow Generate integration exceptions, the public shell and
+dormant-asset exclusions. It also checks that
 image actions leave main's picker/mappings unchanged and create single jobs.
 
 ```bash
@@ -99,17 +109,23 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 mkdir -p /tmp/main-feature-baseline
 git archive 7e500d9 | tar -x -C /tmp/main-feature-baseline
 .venv/bin/python tests/manual/main_feature_port_browser.py --browser chromium --baseline-root /tmp/main-feature-baseline --output /tmp/main-feature-parity-check
+.venv/bin/python tests/manual/mobile_generate_button_browser.py --browser chromium --output /tmp/main-generate-check
 ```
 
 Use `--browser webkit` for the other supported engine and fresh output directories.
 The parity script serves the actual main and ported backends in separate processes
 and compares create/gallery/running pixels at nine compact, tablet and desktop
-sizes (one-channel antialiasing tolerance only). A separate fixture page explicitly
-activates the staged animation to verify unchanged button geometry and reduced
-motion. The live app remains untouched.
+sizes (one-channel antialiasing tolerance only). Idle/gallery screenshots remain
+unmasked. Running screenshots mask the authorized Generate feedback and suppress
+the button shadow equally on both pages; button geometry is compared separately.
+The Generate browser test uses real protocol events and form submissions on
+desktop/mobile to check actual 40/99/100% fill, indeterminate stages, completion,
+failure/rejection, queued/running cancellation, reconnect, offline completion,
+unchanged typography/dimensions/theme and reduced motion. It also verifies no
+duplicate submissions or requests from the terminal-feedback timer.
 
 Final validation for this port: 427 Python tests passed; Chromium and WebKit passed
 main's original responsive/reconnect/reuse/privacy tests and the main pixel/layout
-comparison plus isolated animation checks. Protocol and local filesystem fixtures
+comparison and desktop/mobile Generate flow checks. Protocol and local filesystem fixtures
 do not establish real Qwen/SeedVR GPU inference, installed-node compatibility,
 NAS hardware, VPN or physical iOS behavior.

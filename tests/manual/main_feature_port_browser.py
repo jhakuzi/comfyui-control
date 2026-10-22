@@ -1,4 +1,4 @@
-"""Compare main and the feature backend without loading staged UI components.
+"""Compare main and the feature port outside the authorized Generate feedback.
 
 Use an exported main tree as --baseline-root. A separate isolated page checks
 that the staged Generate animation preserves button geometry and main's palette.
@@ -101,7 +101,7 @@ async def main(engine, output, baseline):
                 await page.locator('[data-role="positive"]').fill('Unsent main draft')
                 await expect(page.locator('#connection')).to_have_text('ComfyUI online')
                 assert await page.evaluate('getComputedStyle(document.documentElement).getPropertyValue("--accent").trim()') == '#e7f67b'
-                assert not await page.evaluate('Object.keys(window).some(key => key.startsWith("ComfyGenerate") || key.startsWith("ComfySavedImage") || key.startsWith("ComfyImageFeature"))')
+                assert not await page.evaluate('!!(window.ComfySavedImageActions || window.ComfyImageFeatureAPI)')
             sizes = [(390,844),(430,932),(768,1024),(1024,1366),(1280,800),(1440,900),(1920,1080),(2560,1440),(844,390)]
             for state in ('create','gallery','running'):
                 for index,page in enumerate(pages):
@@ -114,8 +114,13 @@ async def main(engine, output, baseline):
                             headers={'Origin':urls[index].rstrip('/'),'Content-Type':'application/json'})
                         assert response.ok
                         await expect(page.locator('#job-title')).to_have_text('Creating your image')
+                        # The button is masked below. Its original shadow also
+                        # changes opacity with active feedback, so suppress it
+                        # equally on both pages for the surrounding-pixel check.
+                        await page.locator('#generate').evaluate('el => el.style.setProperty("box-shadow", "none", "important")')
                 for width,height in sizes:
                     screenshots=[]
+                    button_boxes=[]
                     for index,page in enumerate(pages):
                         await page.set_viewport_size(dict(width=width,height=height))
                         await page.evaluate('window.scrollTo(0,0)')
@@ -124,10 +129,13 @@ async def main(engine, output, baseline):
                         # Let main's existing ResizeObservers finish dock placement.
                         await page.evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
                         target=output/f'{state}-{width}x{height}-{index}.png'
-                        await page.screenshot(path=str(target),full_page=True,animations='disabled')
+                        button_boxes.append(await page.locator('#generate').bounding_box())
+                        await page.screenshot(path=str(target),full_page=True,animations='disabled',
+                            mask=[page.locator('#generate')] if state == 'running' else [])
                         screenshots.append(target)
+                    assert button_boxes[0] == button_boxes[1], button_boxes
                     same_pixels(*screenshots)
-            # The animation is activated only on this independent fixture page.
+            # Also exercise the helper independently of the controller.
             fixture=await contexts[1].new_page()
             await fixture.set_content('<div class="generate-bar" style="width:300px;position:static"><button class="primary" id="generate"><span data-generate-label>✦ Generate</span></button></div>')
             await fixture.add_style_tag(content=(ROOT/'comfyui_control/mobile/web/style.css').read_text())
@@ -150,7 +158,7 @@ async def main(engine, output, baseline):
                 child.stdin.write(b'\n')
                 await child.stdin.drain()
                 await asyncio.wait_for(child.wait(),10)
-    print(f'{engine}: main pixels/layout/navigation match in create/gallery/running at nine sizes; staged animation geometry and reduced motion passed')
+    print(f'{engine}: main pixels/layout/navigation match outside the active Generate button at nine sizes; animation geometry and reduced motion passed')
 
 
 if __name__=='__main__':

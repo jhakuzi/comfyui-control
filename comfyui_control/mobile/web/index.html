@@ -21,9 +21,11 @@
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <link rel="icon" href="/icon.png" />
     <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/feature_generate.css" />
     <script src="/comparison.js" defer></script>
     <script src="/prompt_history.js" defer></script>
     <script src="/image_details.js" defer></script>
+    <script src="/feature_generate.js" defer></script>
     <script src="/app.js" defer></script>
     <title>comfyui-control Mobile</title>
   </head>
@@ -236,7 +238,7 @@
               <span>View result</span>
             </button>
             <button class="primary" id="generate" type="submit" form="generate-form" disabled>
-              <span aria-hidden="true">✦</span> Generate
+              <span id="generate-label" data-generate-label>✦ Generate</span>
             </button>
           </div>
         </aside>

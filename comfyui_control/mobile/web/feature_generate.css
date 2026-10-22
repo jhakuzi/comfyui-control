@@ -1,8 +1,9 @@
-/* Staged, unloaded animation. All colors come from main; no layout, sizing,
+/* Generate animation. All colors come from the current theme; no layout, sizing,
    typography, navigation or theme declarations belong in this file. */
-#generate[data-progress] { position: relative; isolation: isolate; overflow: hidden; }
-#generate[data-progress] [data-generate-label] { position: relative; z-index: 1; font: inherit; }
-#generate[data-progress]::before {
+#generate[data-progress]:where(:not([data-progress="idle"])) { position: relative; isolation: isolate; overflow: hidden; }
+#generate [data-generate-label] { font: inherit; }
+#generate[data-progress]:where(:not([data-progress="idle"])) [data-generate-label] { position: relative; z-index: 1; }
+#generate[data-progress]:where(:not([data-progress="idle"]))::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -15,7 +16,9 @@
 }
 #generate[data-progress="determinate"],
 #generate[data-progress="indeterminate"],
-#generate[data-progress="paused"] { background: var(--surface); color: var(--text); opacity: 1; }
+#generate[data-progress="paused"],
+#generate[data-progress="failed"],
+#generate[data-progress="cancelled"] { background: var(--surface); color: var(--text); opacity: 1; }
 #generate[data-progress="determinate"]::before { opacity: .22; }
 #generate[data-progress="indeterminate"]::before {
   width: 35%;
@@ -30,5 +33,6 @@
   to { transform: scaleX(1); opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  #generate[data-progress]::before { animation: none; transition: none; }
+  #generate[data-progress]:not([data-progress="idle"])::before { animation: none; transition: none; }
+  #generate[data-progress="indeterminate"]::before { transform: none; }
 }

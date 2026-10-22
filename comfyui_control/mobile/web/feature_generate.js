@@ -1,7 +1,6 @@
 "use strict";
-/* Staged feature: no DOM lookup, listeners, timers or application state store.
-   A future adapter supplies main's current job/state and explicitly paints its
-   existing button. Main does not load this file. */
+/* Generate feedback only: the existing controller supplies job/state updates.
+   No DOM lookup, listeners, polling, requests or application state store. */
 window.ComfyGenerateFeedback = class GenerateFeedback {
   constructor({ now = () => Date.now(), duration = 1400 } = {}) {
     this.now = now;
@@ -14,6 +13,11 @@ window.ComfyGenerateFeedback = class GenerateFeedback {
     this.progressId = null;
     this.lastProgress = 0;
     this.feedback = null;
+  }
+
+  rejected(requestId) {
+    this.observed.delete(requestId);
+    this.feedback = { kind: "failed", label: "Submission failed", expires: this.now() + this.duration };
   }
 
   update({ jobs = [], selectedJob = null, busy = false, submitting = false,
@@ -50,11 +54,12 @@ window.ComfyGenerateFeedback = class GenerateFeedback {
           (job.phase === "processing" ? "Processing" : "Loading models");
         if (job.status === "running" && job.phase === "processing") result.progress = this.lastProgress;
         const value = job.progress?.value, max = job.progress?.max;
-        if (job.status === "running" && Number.isFinite(value) && Number.isFinite(max) && max > 0) {
+        const sampling = !job.phase || job.phase === "sampling";
+        if (job.status === "running" && sampling && Number.isFinite(value) && Number.isFinite(max) && max > 0) {
           const fraction = Math.max(0, Math.min(1, value / max));
-          result.kind = fraction < 1 ? "determinate" : "indeterminate";
-          result.progress = this.lastProgress = Math.min(fraction, 0.98);
-          result.label = fraction < 1 ? `Sampling · ${Math.floor(fraction * 100)}%` : "Processing";
+          result.kind = "determinate";
+          result.progress = this.lastProgress = fraction;
+          result.label = `Sampling · ${Math.floor(fraction * 100)}%`;
         }
       }
     } else if (this.feedback && this.now() < this.feedback.expires) {
