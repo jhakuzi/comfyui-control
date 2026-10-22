@@ -405,7 +405,7 @@ def _open_directory(parent, name, create=False):
 
 
 def _trash_directory(root, create=False):
-    parent = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    parent = open_output_directory(root)
     try:
         result = _open_directory(parent, TRASH_DIRECTORY, create)
         info = os.fstat(result)
@@ -467,10 +467,44 @@ def image_library(root, operation, data):
                 try:
                     record, _ = _trash_record(trash, token, owner, scope)
                     if not record.get('restored'):
-                        records.append({k: record[k] for k in ('token', 'filename', 'subfolder', 'created')})
+                        entry = _open_directory(trash, record['token'])
+                        try:
+                            info = os.stat('image' + Path(record['filename']).suffix.lower(), dir_fd=entry, follow_symlinks=False)
+                            identity = dict(directories=[list(file_identity(os.fstat(trash))[:2]),
+                                                        list(file_identity(os.fstat(entry))[:2])], file=file_identity(info))
+                        finally:
+                            os.close(entry)
+                        records.append({**{k: record[k] for k in ('token', 'filename', 'subfolder', 'created')},
+                                        'identity': identity})
                 except (OSError, ValueError, KeyError, TypeError):
                     continue
-            return sorted(records, key=lambda item: item['created'], reverse=True)[:200]
+            return sorted(records, key=lambda item: item['created'], reverse=True)
+        if operation in ('legacy-read', 'legacy-delete'):
+            record, stored = _trash_record(trash, data.get('token'), owner, scope)
+            entry = _open_directory(trash, record['token'])
+            try:
+                fd = os.open(stored, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=entry)
+                with os.fdopen(fd, 'rb') as stream:
+                    info = os.fstat(stream.fileno())
+                    if not stat.S_ISREG(info.st_mode):
+                        raise ValueError('Image is not a regular file.')
+                    identity = dict(directories=[list(file_identity(os.fstat(trash))[:2]),
+                                                list(file_identity(os.fstat(entry))[:2])], file=file_identity(info))
+                    if identity != data.get('identity'):
+                        raise ValueError('The stored image or location changed. Nothing was deleted.')
+                    if operation == 'legacy-read':
+                        contents = stream.read(MAX_IMAGE + 1)
+                        if len(contents) > MAX_IMAGE:
+                            raise ValueError('Image exceeds the image size limit.')
+                        return contents
+                    if file_identity(os.stat(stored, dir_fd=entry, follow_symlinks=False)) != file_identity(info):
+                        raise ValueError('Image changed. Nothing was deleted.')
+                    os.unlink(stored, dir_fd=entry)
+                os.unlink('record.json', dir_fd=entry)
+            finally:
+                os.close(entry)
+            os.rmdir(record['token'], dir_fd=trash)
+            return {'ok': True}
         if operation == 'restore':
             record, stored = _trash_record(trash, data.get('token'), owner, scope)
             entry = _open_directory(trash, record['token'])
@@ -527,9 +561,90 @@ def image_library(root, operation, data):
         os.close(trash)
 
 
+def open_output_directory(root):
+    parent = os.open('/', os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for part in Path(os.path.abspath(root)).parts[1:]:
+            child = _open_directory(parent, part)
+            os.close(parent)
+            parent = child
+        return parent
+    except BaseException:
+        os.close(parent)
+        raise
+
+
+def file_identity(info):
+    return [info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns]
+
+
+def virtual_image(root, operation, data):
+    """Read/check/unlink an original, anchored to the configured output directory.
+
+    Never follow symlinks, including above the configured root. Fingerprints bind
+    markers to the root, every parent and the exact regular file. No filesystem
+    writes occur during identify/read; only an explicitly requested delete unlinks.
+    """
+    descriptor = data['image']
+    filename, subfolder = descriptor.get('filename'), descriptor.get('subfolder', '')
+    if (not isinstance(filename, str) or not isinstance(subfolder, str) or not filename
+            or Path(filename).name != filename or '\\' in filename + subfolder):
+        raise ValueError('Invalid original image location.')
+    relative = Path(subfolder) / filename
+    if (descriptor.get('type', 'output') != 'output' or relative.is_absolute() or '..' in relative.parts
+            or TRASH_DIRECTORY in relative.parts or relative.suffix.lower() not in {'.png', '.jpg', '.jpeg', '.webp'}):
+        raise ValueError('Invalid original image location.')
+    # Start at / so even a symlink in the configured root's ancestors fails closed.
+    parent = open_output_directory(root)
+    try:
+        directories = [list(file_identity(os.fstat(parent))[:2])]
+        for part in relative.parts[:-1]:
+            child = _open_directory(parent, part)
+            os.close(parent)
+            parent = child
+            directories.append(list(file_identity(os.fstat(parent))[:2]))
+        fd = os.open(relative.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
+        with os.fdopen(fd, 'rb') as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode):
+                raise ValueError('Image is not a regular file.')
+            identity = dict(directories=directories, file=file_identity(info))
+            if operation == 'identify':
+                if str(info.st_mtime_ns) != descriptor.get('modified'):
+                    raise ValueError('This image changed. Refresh the gallery before deleting it.')
+                return identity
+            if identity != data.get('identity'):
+                raise ValueError('The original file or output location changed. Nothing was deleted. Restore this entry and refresh the gallery.')
+            if operation == 'wastebin-read':
+                contents = stream.read(MAX_IMAGE + 1)
+                if len(contents) > MAX_IMAGE or file_identity(os.fstat(stream.fileno())) != identity['file']:
+                    raise ValueError('Image changed or exceeds the image size limit.')
+                return contents
+            if operation != 'delete':
+                raise ValueError('Unknown Wastebin operation.')
+            current = open_output_directory(root)
+            try:
+                for part in relative.parts[:-1]:
+                    child = _open_directory(current, part)
+                    os.close(current)
+                    current = child
+                if file_identity(os.fstat(current))[:2] != file_identity(os.fstat(parent))[:2]:
+                    raise ValueError('The original directory changed. Nothing was deleted.')
+            finally:
+                os.close(current)
+            # Recheck the directory entry immediately before unlinking through its
+            # held parent FD; a substituted symlink/file must never be followed.
+            if file_identity(os.stat(relative.name, dir_fd=parent, follow_symlinks=False)) != identity['file']:
+                raise ValueError('The original file changed. Nothing was deleted.')
+            os.unlink(relative.name, dir_fd=parent)
+            return {'ok': True}
+    finally:
+        os.close(parent)
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('operation', choices=('setup', 'remove', 'probe', 'scan', 'read', 'trash', 'restore', 'trash-list'))
+    parser.add_argument('operation', choices=('setup', 'remove', 'probe', 'scan', 'read', 'trash', 'restore', 'trash-list', 'identify', 'delete', 'wastebin-read', 'legacy-delete', 'legacy-read'))
     parser.add_argument('first')
     parser.add_argument('second', nargs='?', default='')
     args = parser.parse_args()
@@ -547,8 +662,16 @@ def main():
                     raise OSError('Network output is not mounted. Retry the connection from the desktop app.')
             if args.operation == 'scan':
                 result = scan(root, data)
-            elif args.operation in ('trash', 'restore', 'trash-list'):
+            elif args.operation in ('identify', 'delete', 'wastebin-read'):
+                result = virtual_image(root, args.operation, data)
+                if args.operation == 'wastebin-read':
+                    sys.stdout.buffer.write(result)
+                    return 0
+            elif args.operation in ('trash', 'restore', 'trash-list', 'legacy-delete', 'legacy-read'):
                 result = image_library(root, args.operation, data)
+                if args.operation == 'legacy-read':
+                    sys.stdout.buffer.write(result)
+                    return 0
             else:
                 sys.stdout.buffer.write(read_image(root, data))
                 return 0

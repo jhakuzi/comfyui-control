@@ -49,7 +49,7 @@ Generation, resolution and LoRAs occupy one bounded column. Completed images and
 live image previews scale to the same bottom edge as those settings, preserving
 aspect ratios and room for compact image actions. The existing Favourites heart
 moves reversibly to the image's upper-right corner, following its rendered bounds
-rather than the surrounding letterbox. Edit/Upscale/Details/Trash use four equal
+rather than the surrounding letterbox. Edit/Upscale/Details/Delete use four equal
 columns, and Reuse settings/New variation use two aligned columns. The Save image
 and arrow row retains its existing layout. Empty workflow-status text is hidden
 on desktop so the gaps between Save/actions/reuse rows are consistently 6px. While viewing a saved image, an empty
@@ -108,7 +108,7 @@ mobile closes the popup and restores the original controls. All new desktop
 containers are marked `data-desktop-slot`.
 
 The coordinator exposes optional image-action presentation hooks. The shared
-renderer delegates only presentation of unavailable Trash actions: desktop shows
+renderer delegates only presentation of unavailable Delete actions: desktop shows
 the existing reason on attempted use, while mobile retains its disabled button
 and explanatory text. Unavailable actions still return before any API mutation;
 backend ownership checks are unchanged. Theme/component skins, mobile/tablet
@@ -178,6 +178,7 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 .venv/bin/python tests/manual/mobile_generation_browser.py --browser chromium --output /tmp/control-generation-check
 .venv/bin/python tests/manual/desktop_gallery_browser.py --browser chromium --output /tmp/control-desktop-gallery-check
 .venv/bin/python tests/manual/desktop_viewer_actions_browser.py --browser chromium --output /tmp/control-desktop-viewer-check
+.venv/bin/python tests/manual/mobile_wastebin_browser.py --browser chromium --output /tmp/control-wastebin-check
 .venv/bin/python tests/manual/mobile_saved_editors_browser.py --browser chromium --enlarged --output /tmp/control-enlarged-editors-check
 ```
 
@@ -214,7 +215,7 @@ The desktop viewer check compares original control identities and normal/hover/
 disabled computed styles between regular and enlarged previews. It checks the
 three-row geometry, scroll bounds, keyboard/collection navigation, actual Save
 downloads, nested dialogs, permission and confirmation handling, favourites,
-Trash/restore, exact seed/settings reuse, variation, delayed-action targeting and
+Delete/restore, exact seed/settings reuse, variation, delayed-action targeting and
 mobile restoration. Run the saved-editor script both with and without `--enlarged`
 to exercise actual Edit/Upscale submissions with the same redacted workflow graphs.
 

@@ -5,6 +5,8 @@ still come from ComfyUI; only these literal inputs are replaced for an action.
 """
 import hashlib
 import json
+import time
+import uuid
 from pathlib import PurePosixPath
 
 from .settings import save_json
@@ -93,10 +95,22 @@ class ImageLibrary:
     def __init__(self, path):
         self.path = path
         self.valid = True
+        self.deleted = {}
         try:
             if path.stat().st_size > 4 * 1024**2:
                 raise ValueError('Image library is too large.')
             self.kept = json.loads(path.read_text())
+            if self.kept.get('version') == 2:
+                saved = self.kept
+                self.kept = saved['kept']
+                self.deleted = saved['deleted']
+                if not isinstance(self.deleted, dict) or not all(
+                    isinstance(token, str) and isinstance(record, dict) and record.get('token') == token
+                    and isinstance(record.get('owner'), str) and isinstance(record.get('scope'), str)
+                    and isinstance(record.get('image'), dict) and isinstance(record.get('identity'), dict)
+                    for token, record in self.deleted.items()
+                ):
+                    raise ValueError('Invalid Wastebin metadata.')
             if not isinstance(self.kept, dict) or not all(
                 isinstance(key, str) and isinstance(value, dict) and
                 all(isinstance(k, str) and isinstance(v, str) for k, v in value.items())
@@ -105,9 +119,11 @@ class ImageLibrary:
                 raise ValueError('Invalid image library.')
         except FileNotFoundError:
             self.kept = {}
-        except (OSError, ValueError):
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            self.deleted = {}
             self.kept = {}
             self.valid = False  # Never overwrite a damaged library automatically.
+        self.index_deleted()
 
     @staticmethod
     def key(scope, owner):
@@ -132,5 +148,63 @@ class ImageLibrary:
         updated = {**self.kept, key: entries}
         if len(json.dumps(updated).encode()) > 4 * 1024**2:
             raise ValueError('The saved image library is full. Remove some favourites first.')
-        save_json(self.path, updated)
+        self.save(updated, self.deleted)
         self.kept = updated
+
+    def save(self, kept, deleted):
+        if not self.valid:
+            raise ValueError('The saved image library could not be read. Back it up before repairing it.')
+        updated = dict(version=2, kept=kept, deleted=deleted)
+        if len(json.dumps(updated).encode()) > 4 * 1024**2:
+            raise ValueError('The saved image library is full.')
+        save_json(self.path, updated)
+
+    def index_deleted(self):
+        # Derived indexes keep gallery/SSE filtering independent of bin size.
+        self.deleted_versions = {(record['scope'], record['image'].get('id'), record['image'].get('modified'))
+                                 for record in self.deleted.values()}
+        self.deleted_ids = {(scope, identifier) for scope, identifier, _ in self.deleted_versions}
+
+    def deleted_image(self, scope, item):
+        # Job journals may not yet contain a filesystem timestamp.
+        if not item.get('modified'):
+            return (scope, item.get('id')) in self.deleted_ids
+        return (scope, item.get('id'), item['modified']) in self.deleted_versions
+
+    def entries(self, scope, owner):
+        return [record for record in self.deleted.values()
+                if record['scope'] == scope and record['owner'] == owner and not record.get('purged')]
+
+    def entry(self, scope, owner, token):
+        record = self.deleted.get(token)
+        if not record or record['scope'] != scope or record['owner'] != owner or record.get('purged'):
+            raise ValueError('This Wastebin entry belongs to another browser or output folder, or is no longer available.')
+        return record
+
+    def delete(self, scope, owner, item, identity, legacy=None):
+        updated = dict(self.deleted)
+        if len(updated) >= 2000:
+            # Finished tombstones can age out; active/failed markers never do.
+            finished = sorted((entry for entry in updated.values() if entry.get('purged')),
+                              key=lambda entry: entry['created'])
+            for entry in finished[:len(updated) - 1999]:
+                updated.pop(entry['token'])
+        if len(updated) >= 2000:
+            raise ValueError('Wastebin is full (2,000 images). Restore or permanently delete some images first.')
+        record = dict(token=legacy['token'] if legacy else uuid.uuid4().hex, scope=scope, owner=owner, image=item,
+                      identity=identity, created=legacy['created'] if legacy else time.time(), error='', legacy=bool(legacy))
+        updated[record['token']] = record
+        self.save(self.kept, updated)
+        self.deleted = updated
+        self.index_deleted()
+        return record
+
+    def update_deleted(self, token, record=None):
+        updated = dict(self.deleted)
+        if record is None:
+            updated.pop(token, None)
+        else:
+            updated[token] = record
+        self.save(self.kept, updated)
+        self.deleted = updated
+        self.index_deleted()

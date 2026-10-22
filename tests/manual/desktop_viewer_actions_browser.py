@@ -267,7 +267,7 @@ async def main(engine, root):
                 await expect(page.locator('#desktop-image-zoom')).not_to_be_visible()
                 await expect(page.get_by_role('button',name='View landscape.png',exact=True)).to_have_count(0)
                 await page.locator('#gallery-trash').click()
-                await page.locator('#trash-list button').click()
+                await page.locator('#trash-list').get_by_role('button', name='Restore', exact=True).click()
                 await expect(page.locator('#trash-status')).to_contain_text('empty')
                 assert (output/'landscape.png').read_bytes()==originals['landscape.png']
                 await page.locator('#gallery-all').click()

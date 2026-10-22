@@ -266,8 +266,22 @@ class MobileHTTP:
             raise ValueError('Confirm restoring this image.')
         return json_response(await self.service.image_trash(request[OWNER], request.match_info['token']))
 
+    async def delete_permanently(self, request):
+        return json_response(await self.service.delete_permanently(
+            request[OWNER], await object_body(request), request.match_info.get('token')))
+
+    async def wastebin_thumbnail(self, request):
+        try:
+            contents = await self.service.wastebin_thumbnail(request[OWNER], request.match_info['token'])
+        except (OSError, ValueError) as exc:
+            raise web.HTTPNotFound(text=str(exc)) from None
+        # No disk/path or private metadata is exposed; use the shared thumbnail
+        # encoder but not the image cache, which may outlive a restore/delete.
+        return web.Response(body=await self.encode_image(contents, thumbnail=True, size=384), content_type='image/jpeg')
+
     async def image(self, request):
-        if request.match_info['id'] in self.service.unavailable_images:
+        if request.match_info['id'] in self.service.unavailable_images or self.service.image_library.deleted_image(
+                self.service.output_scope, self.service.images.get(request.match_info['id'], {'id': request.match_info['id']})):
             raise web.HTTPNotFound(text='This image is no longer available. Refresh the gallery.')
         thumb_size = int(request.query.get('size', '384')) if request.query.get('thumbnail') == '1' else 384
         if thumb_size not in {384, 768, 1280}:
@@ -411,6 +425,9 @@ class MobileHTTP:
             web.post('/api/images/{id}/reuse', self.image_reuse),
             web.get('/api/images/{id}/actions', self.image_actions), web.post('/api/images/{id}/actions', self.image_actions),
             web.get('/api/trash', self.trash), web.post('/api/trash/{token}/restore', self.restore_image),
+            web.get('/api/trash/{token}/thumbnail', self.wastebin_thumbnail),
+            web.post('/api/trash/{token}/delete', self.delete_permanently),
+            web.post('/api/trash/empty', self.delete_permanently),
             web.get('/api/prompts', self.prompts), web.delete('/api/prompts', self.prompts),
             web.put('/api/prompts/{id}', self.prompt), web.delete('/api/prompts/{id}', self.prompt),
             web.get('/api/gallery', self.gallery), web.get('/api/images/{id}', self.image), web.get('/api/preview', self.preview),

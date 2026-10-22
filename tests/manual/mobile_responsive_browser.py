@@ -565,10 +565,10 @@ async def main(browser_name, root):
             page.once('dialog', lambda dialog: dialog.accept())
             await actions.locator('[data-action="trash"]').click()
             await expect(page.get_by_role('button', name='View image02.png', exact=True)).to_have_count(0)
-            assert not (output / 'image02.png').exists() and (output / 'image00.png').exists()
+            assert (output / 'image02.png').read_bytes() == original and (output / 'image00.png').exists()
             await page.locator('#gallery-trash').click()
             await expect(page.locator('#trash-list .trash-entry')).to_have_count(1)
-            await page.locator('#trash-list button').click()
+            await page.locator('#trash-list').get_by_role('button', name='Restore', exact=True).click()
             await expect(page.locator('#trash-status')).to_contain_text('empty')
             assert (output / 'image02.png').read_bytes() == original
             await page.locator('#gallery-all').click()

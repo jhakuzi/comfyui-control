@@ -79,7 +79,7 @@ presets, history or original workflow files are deleted by this organization.
 - **Refresh / cleanup:** compact refresh icons sit beside the workflow selector
   and first model selector. The small broom by Models requests idle VRAM cleanup.
   Icons have accessible labels, tooltips and 44px touch targets.
-- **Gallery:** the full-width desktop gallery has All images, Favourites, History and Trash views.
+- **Gallery:** the full-width desktop gallery has All images, Favourites, History and Wastebin views.
   History lists this browser's jobs; selecting one never submits a generation.
   Phones keep the Gallery tab and full-size viewer. Comparison remains available.
   Previews use 768px thumbnails, or 1280px on high-density screens; phones keep
@@ -186,21 +186,28 @@ will reload its models.
   cancellation and reconnect recovery. Your main workflow and prompt draft stay
   selected. Missing workflows disable the corresponding action with instructions.
   See [workflow setup and exact bindings](IMAGE_WORKFLOW_INTEGRATION.md).
-- **Trash:** after confirmation naming the image, move it into the output
-  folder's private `.comfyui-control-trash` directory. **Trash → Restore** returns
-  it to its original location without overwriting a replacement. There is no
-  permanent-delete or automatic-empty operation. This is app-managed storage,
-  separate from the desktop's system Trash.
+- **Delete:** after confirmation naming the image, mark it in the persistent local
+  image-library metadata. The original file stays in place, untouched. Deleted
+  images disappear from normal gallery and public job image lists; the original
+  generation journal is retained.
+- **Wastebin:** open it from Gallery or the bin icon beside VRAM cleanup. It shows
+  this browser's deleted images with thumbnails and original filenames. Restore
+  removes the marker immediately, even if the original storage is offline.
+- **Delete permanently / Empty Wastebin:** explicitly confirm removal of the
+  selected file or displayed Wastebin snapshot. The existing bounded worker
+  unlinks only files beneath the configured local/NFS output location after
+  checking the recorded directory and regular-file identities. Changed/replaced
+  files, symlinks, missing/unmounted storage and permission failures fail safely;
+  unsuccessful entries retain their markers and error messages. A timeout can
+  leave an uncertain result: inspect storage before retrying. Missing files are
+  never treated as proof that a failed request succeeded.
 
-Trash supports local output and the existing NFS worker path. Another browser's
-mobile output cannot be trashed, even when metadata sharing is enabled; ordinary
-ComfyUI output without mobile ownership can be managed. Favourites are private to
-each browser. Trashed files are excluded from the gallery and public job image
-lists, while the original generation journal is retained. Remote-only ComfyUI
-files cannot be moved to Trash through the image proxy.
-
-If storage times out, refresh both Gallery and Trash to check the final location
-before retrying. A disconnected NAS is not evidence that its files were deleted.
+The Wastebin follows existing browser ownership and output-folder isolation.
+Metadata sharing grants no delete permission. Ordinary ComfyUI output without
+mobile ownership can still be managed. Remote-only image proxies cannot delete
+files. The old `/api/trash` URLs/action key remain compatible; new Delete requests
+use `action: "delete"`. Images physically moved by older versions remain visible,
+restorable and eligible for confirmed permanent deletion through the same panel.
 
 ## Check on your devices
 
@@ -212,13 +219,13 @@ before retrying. A disconnected NAS is not evidence that its files were deleted.
    bottom dock. Check the completed image and Save image.
 4. Refresh or briefly disconnect during generation; confirm recovery and no
    duplicate request. Try Gallery, comparison selection and closing the viewer.
-5. Select an older image, tap its heart, refresh and check Favourites. Trash that image,
+5. Select an older image, tap its heart, refresh and check Favourites. Delete that image,
    confirm other files remain, then restore it. Try actions while changing selection.
 
 Chromium and Linux WebKit checks exercise layout, generation/recovery, comparison,
-metadata reuse, image hearts, Trash/restore and browser isolation with a simulated ComfyUI
+metadata reuse, image hearts, Wastebin deletion/restore and browser isolation with a simulated ComfyUI
 backend and temporary images. Physical Apple devices, VPN routes, GPU inference
-and actual NAS Trash/restore still need manual testing for this branch.
+and actual NAS Wastebin deletion/restore still need manual testing for this branch.
 Repeat browser checks with Playwright:
 
 ```bash

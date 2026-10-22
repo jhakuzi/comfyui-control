@@ -83,6 +83,7 @@ class MobileService:
         self.unavailable_images = set()
         self.gallery_time = 0
         self.gallery_lock = asyncio.Lock()
+        self.legacy_trash_checked = set()
         self.image_workflow_lock = asyncio.Lock()
         self.workflow_names_lock = asyncio.Lock()
         self.workflow_names = []
@@ -176,7 +177,8 @@ class MobileService:
     def public_job(self, job):
         result = {k: v for k, v in job.items() if k not in {"graph", "scope", "owner", "prompt_history_recorded", "metadata"}}
         if 'images' in result:
-            result['images'] = [item for item in result['images'] if item.get('id') not in self.unavailable_images]
+            result['images'] = [item for item in result['images'] if item.get('id') not in self.unavailable_images
+                                and not self.image_library.deleted_image(self.output_scope, item)]
         return result
 
     def state(self, include_details=True, owner=None):
@@ -719,7 +721,8 @@ class MobileService:
             return [{**item, 'kept': self.image_library.contains(self.output_scope, owner, item),
                      'reuse': self.image_reuse_status(item, owner), 'job': item.get('job') if owner is None or
                      self.jobs.get(item.get('job'), {}).get('owner') == owner else None}
-                    for item in ordered if item['id'] not in self.unavailable_images][:200]
+                    for item in ordered if item['id'] not in self.unavailable_images
+                    and not self.image_library.deleted_image(self.output_scope, item)][:200]
 
     async def scan_gallery(self):
         # Shared across clients; filesystem work runs off the HTTP/Qt threads.
@@ -775,7 +778,16 @@ class MobileService:
             if self.local_comfy and item['type'] == 'output' and identifier in references and identifier not in valid:
                 self.images.pop(identifier, None)
                 self.unavailable_images.add(identifier)
-        for created, modified, path in sorted(found, reverse=True)[:200]:
+        discovered = 0
+        deleted = {(record['image'].get('id'), record['image'].get('modified'))
+                   for record in self.image_library.deleted.values() if record['scope'] == scope}
+        for created, modified, path in sorted(found, reverse=True):
+            identifier = hashlib.sha256((scope + ':output:' + str(path)).encode()).hexdigest()[:32]
+            if (identifier, modified) in deleted:
+                continue
+            if discovered >= 200:
+                break
+            discovered += 1
             ref = self.image_ref({"filename": path.name, "subfolder": str(path.parent) if path.parent != Path(".") else "", "type": "output"})
             if ref:
                 valid[ref['id']] = (created, modified)
@@ -791,7 +803,8 @@ class MobileService:
         def created(item):
             return item.get("created", self.jobs.get(item.get("job"), {}).get("created", 0))
         ordered = sorted(self.images.values(), key=created, reverse=True)
-        self.images = {item["id"]: item for item in ordered[:500]}
+        self.images = {item["id"]: item for item in ordered if not self.image_library.deleted_image(scope, item)}
+        self.images = dict(list(self.images.items())[:500])
         known = set(self.images) | {item.get('id') for job in self.current_jobs() for item in job.get('images', [])}
         self.unavailable_images.intersection_update(known)
         self.gallery_time = time.monotonic()
@@ -799,13 +812,13 @@ class MobileService:
     def image_action_capabilities(self, identifier, owner):
         """Sharing pixels/settings never grants permission to remove an image."""
         item = self.images.get(identifier)
-        if not item or identifier in self.unavailable_images:
+        if not item or identifier in self.unavailable_images or self.image_library.deleted_image(self.output_scope, item):
             raise ValueError('This saved image is no longer available. Refresh the gallery.')
         saved = item.get('type') == 'output'
         own = self._metadata_allowed(item, owner, allow_shared=False)
         local = self.local_comfy or self.network_output
-        reason = ('Trash is available only for saved images in the configured local output folder.' if not saved or not local
-                  else 'Only the browser that generated this image can move it to Trash.' if not own else '')
+        reason = ('Delete is available only for saved images in the configured local or network output folder.' if not saved or not local
+                  else 'Only the browser that generated this image can delete it.' if not own else '')
         return {'image_id': identifier, 'modified': item.get('modified', ''),
                 'kept': self.image_library.contains(self.output_scope, owner, item),
                 'actions': {'keep': {'available': saved, 'reason': '' if saved else 'Favourites are available for saved output images.'},
@@ -945,6 +958,8 @@ class MobileService:
         if not isinstance(body, dict):
             raise ValueError('Send an image action object.')
         action = body.get('action')
+        if action == 'delete':
+            action = 'trash'  # Retain the existing API key for older WebUI clients.
         if action not in {'keep', 'trash', 'edit', 'upscale'}:
             raise ValueError('Unknown image action.')
         if action in IMAGE_WORKFLOWS:
@@ -963,17 +978,19 @@ class MobileService:
                 result = {'image_id': identifier, 'kept': body['keep']}
             elif action == 'trash':
                 if body.get('confirm') is not True:
-                    raise ValueError('Confirm moving this specific image to Trash.')
+                    raise ValueError('Confirm deleting this specific image to the Wastebin.')
                 if not item.get('modified'):
-                    raise ValueError('Refresh the gallery before moving this image to Trash.')
+                    raise ValueError('Refresh the gallery before deleting this image.')
                 try:
-                    record = json.loads(await self.network_io('trash', dict(image=item, owner=owner, scope=scope, modified=body['modified'])))
+                    identity = json.loads(await self.network_io('identify', {'image': item}))
                 except OSError as exc:
-                    raise ValueError(f'Could not move this image to Trash: {exc}. Refresh Gallery and Trash to check its location.') from None
-                result = {'image_id': identifier, 'trash': record}
-                if scope == self.output_scope:
-                    self.images.pop(identifier, None)
-                    self.image_unavailable(identifier)
+                    raise ValueError(f'Could not mark this image as deleted: {exc}. The original was not modified.') from None
+                if scope != self.output_scope:
+                    raise ValueError('The output folder changed. Nothing was marked as deleted.')
+                if not self._metadata_allowed(item, owner, allow_shared=False):
+                    raise ValueError('Image ownership changed. Nothing was marked as deleted.')
+                record = await asyncio.to_thread(self.image_library.delete, scope, owner, item, identity)
+                result = {'image_id': identifier, 'trash': self.public_trash(record)}
             else:
                 raise ValueError('This image workflow has no configured execution handler.')
             self.gallery_time = 0
@@ -981,22 +998,113 @@ class MobileService:
                 self.broadcast()
             return result
 
+    @staticmethod
+    def public_trash(record):
+        item = record['image']
+        return dict(token=record['token'], filename=item['filename'], subfolder=item.get('subfolder', ''),
+                    created=record['created'], error=record.get('error', ''),
+                    thumbnail=f"/api/trash/{record['token']}/thumbnail")
+
     async def image_trash(self, owner, token=None):
         if not (self.local_comfy or self.network_output):
-            raise ValueError('Trash is available only for the configured local output folder.')
+            raise ValueError('Wastebin is available only for the configured local or network output folder.')
         async with self.gallery_lock:
             scope = self.output_scope
-            data = {'owner': owner, 'scope': scope}
-            if token is not None:
-                data['token'] = token
-            try:
-                result = json.loads(await self.network_io('restore' if token is not None else 'trash-list', data))
-            except OSError as exc:
-                raise ValueError(f'Could not {"restore the image" if token is not None else "read Trash"}: {exc}') from None
-            if token is not None and scope == self.output_scope:
-                self.image_ref(result)
+            if token in self.image_library.deleted:
+                record = self.image_library.entry(scope, owner, token)
+                if record.get('legacy'):
+                    try:
+                        await self.network_io('restore', dict(owner=owner, scope=scope, token=token))
+                    except OSError as exc:
+                        raise ValueError(f'Could not restore the image: {exc}') from None
+                await asyncio.to_thread(self.image_library.update_deleted, token)
                 self.gallery_time = 0
-            return result
+                self.broadcast()
+                return {'filename': record['image']['filename'], 'restored': True}
+            if token is not None:
+                raise ValueError('This Wastebin entry belongs to another browser or output folder, or is no longer available.')
+            # Import old physically moved entries into the same local metadata.
+            # Each browser/scope is checked once; listing virtual markers remains
+            # available even if the old output folder cannot currently be read.
+            key = (scope, owner)
+            legacy_notice = ''
+            if key not in self.legacy_trash_checked:
+                try:
+                    legacy = json.loads(await self.network_io('trash-list', dict(owner=owner, scope=scope), timeout=1))
+                except OSError as exc:
+                    if not self.image_library.entries(scope, owner):
+                        raise ValueError(f'Could not read Wastebin on the output storage: {exc}') from None
+                    legacy = []
+                    legacy_notice = f'Older Wastebin entries could not be checked: {exc}'
+                else:
+                    legacy_notice = None
+                if scope != self.output_scope:
+                    raise ValueError('The output folder changed. Refresh Wastebin.')
+                for entry in legacy:
+                    if scope != self.output_scope:
+                        raise ValueError('The output folder changed. Refresh Wastebin.')
+                    if entry['token'] not in self.image_library.deleted:
+                        item = dict(self.image_ref(dict(filename=entry['filename'], subfolder=entry['subfolder'], type='output')))
+                        item['modified'] = str(entry['identity']['file'][3])
+                        await asyncio.to_thread(self.image_library.delete, scope, owner, item, entry['identity'], entry)
+                if legacy_notice is None:
+                    self.legacy_trash_checked.add(key)
+            entries = [self.public_trash(record) for record in self.image_library.entries(scope, owner)]
+            if legacy_notice:
+                for entry in entries:
+                    entry['notice'] = legacy_notice
+            return sorted(entries, key=lambda record: record['created'], reverse=True)
+
+    async def wastebin_thumbnail(self, owner, token):
+        async with self.gallery_lock:
+            record = self.image_library.entry(self.output_scope, owner, token)
+            return await self.network_io('legacy-read' if record.get('legacy') else 'wastebin-read', record)
+
+    async def delete_permanently(self, owner, body, token=None):
+        if not isinstance(body, dict) or body.get('confirm') is not True:
+            raise ValueError('Explicitly confirm permanent deletion. This cannot be undone.')
+        # Bulk confirmation covers the displayed snapshot only, never entries
+        # added by another request while the operation is in flight.
+        tokens = [token] if token is not None else body.get('tokens')
+        if (not isinstance(tokens, list) or not tokens or len(tokens) > 2000
+                or any(not isinstance(value, str) for value in tokens) or len(set(tokens)) != len(tokens)):
+            raise ValueError('Choose the Wastebin entries to permanently delete.')
+        if not (self.local_comfy or self.network_output):
+            raise ValueError('Permanent deletion requires the configured local or network output folder.')
+        async with self.gallery_lock:
+            scope = self.output_scope
+            # Authorize the entire snapshot before doing any filesystem work.
+            records = [self.image_library.entry(scope, owner, value) for value in tokens]
+            results = []
+            blocked = None
+            for record in records:
+                if scope != self.output_scope:
+                    message = 'The output folder changed. Deletion was not attempted; refresh Wastebin.'
+                    await asyncio.to_thread(self.image_library.update_deleted, record['token'], {**record, 'error': message})
+                    results.append(dict(token=record['token'], error=message))
+                    continue
+                try:
+                    if blocked:
+                        raise OSError(blocked)
+                    if not self._metadata_allowed(record['image'], owner, allow_shared=False):
+                        raise ValueError('Image ownership changed. Permanent deletion is not permitted.')
+                    await self.network_io('legacy-delete' if record.get('legacy') else 'delete', record)
+                except (OSError, ValueError) as exc:
+                    if isinstance(exc, TimeoutError):
+                        blocked = 'Storage timed out. Remaining deletions were not attempted.'
+                    message = f'Could not delete {record["image"]["filename"]}: {exc}. Kept in Wastebin; check storage before retrying.'
+                    await asyncio.to_thread(self.image_library.update_deleted, record['token'], {**record, 'error': message})
+                    results.append(dict(token=record['token'], error=message))
+                else:
+                    # Keep a tombstone so journal replay cannot resurrect deleted
+                    # outputs or let a retry remove a replacement at the same path.
+                    await asyncio.to_thread(self.image_library.update_deleted, record['token'],
+                                            {**record, 'purged': True, 'error': ''})
+                    self.image_unavailable(record['image']['id'])
+                    results.append(dict(token=record['token'], deleted=True))
+            self.gallery_time = 0
+            self.broadcast()
+            return {'results': results}
 
     async def image_parameters(self, identifier, owner=None):
         from .image_metadata import parameters, png_parameters
@@ -1047,7 +1155,7 @@ class MobileService:
     async def prepare_image_reuse(self, identifier, owner):
         from .image_metadata import png_graph
         item = self.images.get(identifier)
-        if not item or identifier in self.unavailable_images:
+        if not item or identifier in self.unavailable_images or self.image_library.deleted_image(self.output_scope, item):
             raise ValueError('Image is no longer available. Refresh the gallery.')
         status = self.image_reuse_status(item, owner)
         if not status['available']:
@@ -1117,9 +1225,9 @@ class MobileService:
         except OSError:
             return {'positive': [], 'negative': [], 'parameters': [], 'additional': [], 'unavailable': True}
 
-    async def network_io(self, operation, data):
+    async def network_io(self, operation, data, timeout=8):
         worker = Path(__file__).parents[1] / 'network_output.py'
-        return await run_background([sys.executable, '-I', str(worker), operation, str(self.output_dir)], data)
+        return await run_background([sys.executable, '-I', str(worker), operation, str(self.output_dir)], data, timeout=timeout)
 
     def local_image(self, item, root=None):
         if self.network_output or item.get("type") != "output":

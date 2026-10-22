@@ -1,5 +1,39 @@
 # Session handoff — 2026-10-22
 
+## Current delivery: virtual Wastebin
+
+Implemented on `testing/webui-desktop-forge`, based on `a7a1fe4`. The user
+explicitly authorized committing and pushing this verified batch to that testing
+branch. No merge or release is authorized.
+
+- Delete replaces the visible Trash action. It writes versioned markers into
+  the existing local `image-library.json` sidecar; originals stay in place.
+  Gallery/public job images hide marked versions. Restore removes the marker
+  without accessing output storage. Existing Favourites data is retained.
+- Existing gallery Trash panel/URLs are reused as Wastebin, with thumbnails,
+  filenames, Restore, confirmed Delete permanently and confirmed Empty Wastebin.
+  A shared pictographic shortcut sits immediately after VRAM cleanup. Desktop
+  and mobile adapters, theme tokens and generation logic are unchanged.
+- Permanent deletion uses the bounded filesystem worker, configured output root,
+  no-follow directory traversal and recorded directory/file identities. Ownership,
+  browser/output scope and full bulk snapshots are checked before deletion.
+  Failed/uncertain operations retain markers and persisted errors; bulk requests
+  stop attempting storage work after a timeout. Older physically moved entries
+  are imported into the same metadata and remain restorable/deletable.
+- Final Python suite: **444 passed**. Chromium and WebKit passed the new
+  `mobile_wastebin_browser.py` flow at 1440×900 and 390×844, plus existing responsive,
+  presentation-isolation/live-state and enlarged-viewer/action regressions.
+  JS/Python syntax and whitespace checks passed. Updated existing browser checks
+  retain their assertions while selecting Restore explicitly and expecting files
+  to remain after virtual Delete. New tests cover replacement/symlink/root/path
+  guards, HTTP confirmation/privacy, output changes, partial batches, NAS timeouts,
+  read-only failures, unmounted managed NFS and legacy compatibility.
+- Browser artifacts: `/tmp/wastebin-final-{chromium,webkit}` and
+  `/tmp/wastebin-{responsive,isolation,viewer}-{chromium,webkit}`. These are protocol
+  and filesystem fixtures, not proof of real NAS, GPU, VPN or physical iOS behavior.
+  Real NFS testing remains installation-specific.
+
+
 ## Current delivery: even enlarged-viewer padding
 
 After pushed `0bbdc48`, the user noticed unequal border-to-content spacing in a

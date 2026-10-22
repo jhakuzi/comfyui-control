@@ -1075,7 +1075,11 @@ dialog::backdrop {
 .generation-history-entry .hint { margin: 0; font-size: .7rem; }
 .generation-history-entry[aria-pressed="true"] { border-color: var(--accent-line); background: var(--selected-sheen) var(--accent-soft); }
 .trash-entry { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: .8rem; }
-.trash-entry > span { min-width: 0; }
+.trash-entry { flex-wrap: wrap; }
+.trash-entry > img { width: 64px; height: 64px; object-fit: contain; border-radius: var(--radius-small); }
+.trash-entry-details { flex: 1 1 120px; min-width: 0; overflow-wrap: anywhere; }
+.trash-entry-details .hint { margin: 4px 0 0; }
+.trash-entry .actions { flex-wrap: wrap; margin: 0; }
 .trash-entry button { flex-shrink: 0; }
 [hidden] {
   display: none !important;

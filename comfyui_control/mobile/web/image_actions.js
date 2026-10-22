@@ -12,7 +12,7 @@ class SavedImageActions {
     this.buttons = new Map();
     const row = document.createElement("div");
     row.className = "actions saved-image-buttons";
-    for (const [key, label] of [["keep", "♡"], ["edit", "Edit"], ["upscale", "Upscale"], ["trash", "Trash"]]) {
+    for (const [key, label] of [["keep", "♡"], ["edit", "Edit"], ["upscale", "Upscale"], ["trash", "Delete"]]) {
       const button = document.createElement("button");
       button.type = "button";
       button.textContent = label;
@@ -84,10 +84,10 @@ class SavedImageActions {
       return;
     }
     const item = { ...this.item }, capability = this.capabilities, epoch = this.epoch;
-    if (action === "trash" && !confirm(`Move “${item.filename}” to Trash?${item.kept ? " This image is in Favourites." : ""} You can restore it from Gallery → Trash.`)) return;
+    if (action === "trash" && !confirm(`Delete “${item.filename}”?${item.kept ? " This image is in Favourites." : ""} The file will stay in place. You can restore it from Wastebin.`)) return;
     this.pending = true;
     this.buttons.forEach((button) => { button.disabled = true; });
-    this.status.textContent = action === "trash" ? "Moving image to Trash…"
+    this.status.textContent = action === "trash" ? "Deleting image…"
       : action === "edit" || action === "upscale" ? "Preparing image…" : "Saving…";
     try {
       if (action === "edit" || action === "upscale") {
@@ -96,7 +96,7 @@ class SavedImageActions {
         return;
       }
       const result = await this.api(`/api/images/${encodeURIComponent(item.id)}/actions`, {
-        method: "POST", body: JSON.stringify({ action, modified: capability.modified,
+        method: "POST", body: JSON.stringify({ action: action === "trash" ? "delete" : action, modified: capability.modified,
           ...(action === "keep" ? { keep: !item.kept } : { confirm: true }) }),
       });
       await this.changed(item, result);

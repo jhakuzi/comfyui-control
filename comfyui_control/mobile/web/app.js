@@ -32,6 +32,7 @@ let fullStatePending = false;
 let imageReuseEpoch = 0;
 let viewerFromGallery = false;
 let selectedImage = null, galleryFilter = "all", trashEpoch = 0;
+let wastebinEntries = [], wastebinPending = false;
 let inspectingSavedImage = false;
 const completedResultsSeen = new Set();
 const observedActiveJobs = new Set();
@@ -1489,28 +1490,75 @@ function renderGenerationHistory() {
   }
 }
 
+async function wastebinAction(tokens, restore = false) {
+  if (wastebinPending) return;
+  wastebinPending = true;
+  for (const button of $("trash-panel").querySelectorAll("button")) button.disabled = true;
+  let message = "";
+  try {
+    if (restore) {
+      await api(`/api/trash/${encodeURIComponent(tokens[0])}/restore`, { method: "POST", body: JSON.stringify({ confirm: true }) });
+      notice("Image restored.");
+    } else {
+      const results = [];
+      // Keep requests bounded while retaining exactly the confirmed snapshot.
+      for (let offset = 0; offset < tokens.length; offset += 20) {
+        const result = await api("/api/trash/empty", { method: "POST", timeoutMs: 180000,
+          body: JSON.stringify({ confirm: true, tokens: tokens.slice(offset, offset + 20) }) });
+        results.push(...result.results);
+      }
+      const failed = results.filter((entry) => entry.error);
+      message = failed.length ? `${failed.length} deletion(s) failed. The images remain in Wastebin; see the errors below.` : "Permanently deleted.";
+    }
+  } catch (error) {
+    message = error.message;
+  } finally {
+    wastebinPending = false;
+    await loadTrash();
+    if (message && galleryFilter === "trash") $("trash-status").textContent = message;
+    await loadGallery(true);
+  }
+}
+
 async function loadTrash() {
   const epoch = ++trashEpoch;
-  $("trash-status").textContent = "Loading Trash…";
-  $("trash-list").replaceChildren();
+  $("trash-status").textContent = "Loading Wastebin…";
+  $("empty-wastebin").disabled = true;
   try {
     const entries = await api("/api/trash");
     if (epoch !== trashEpoch || galleryFilter !== "trash") return;
-    $("trash-status").textContent = entries.length ? "" : "Trash is empty for this browser.";
+    wastebinEntries = entries;
+    $("trash-list").replaceChildren();
+    $("empty-wastebin").disabled = wastebinPending || !entries.length;
+    $("trash-status").textContent = entries.find((entry) => entry.notice)?.notice || (entries.length ? "" : "Wastebin is empty for this browser.");
     for (const entry of entries) {
       const row = node("div", undefined, "trash-entry");
-      const button = node("button", "Restore", "small");
-      button.type = "button";
-      button.addEventListener("click", guarded(async () => {
-        button.disabled = true;
-        try {
-          await api(`/api/trash/${encodeURIComponent(entry.token)}/restore`, { method: "POST", body: JSON.stringify({ confirm: true }) });
-          await loadTrash();
-          await loadGallery(true);
-          notice(`Restored ${entry.filename}.`);
-        } finally { button.disabled = false; }
-      }));
-      row.append(node("span", [entry.subfolder, entry.filename].filter(Boolean).join("/")), button);
+      const image = node("img");
+      image.src = entry.thumbnail;
+      image.alt = entry.filename;
+      image.loading = "lazy";
+      image.addEventListener("error", () => {
+        image.hidden = true;
+        status.textContent ||= "Thumbnail unavailable. Storage may be offline; Restore is still available.";
+      });
+      const details = node("div", undefined, "trash-entry-details");
+      const status = node("p", entry.error || "", "hint");
+      status.setAttribute("role", "status");
+      details.append(node("span", entry.filename), status);
+      const actions = node("div", undefined, "actions");
+      const restore = node("button", "Restore", "small");
+      restore.type = "button";
+      restore.disabled = wastebinPending;
+      restore.addEventListener("click", () => wastebinAction([entry.token], true));
+      const remove = node("button", "Delete permanently", "small danger");
+      remove.type = "button";
+      remove.disabled = wastebinPending;
+      remove.addEventListener("click", () => {
+        if (confirm(`Permanently delete “${entry.filename}” from its original location? This cannot be undone.`))
+          wastebinAction([entry.token]);
+      });
+      actions.append(restore, remove);
+      row.append(image, details, actions);
       $("trash-list").append(row);
     }
   } catch (error) {
@@ -1524,7 +1572,7 @@ async function savedImageChanged(item, result) {
     if (viewerItems[viewerIndex]?.id === item.id && $("image-dialog").open) $("image-dialog").close();
     gallery = gallery.filter((image) => image.id !== item.id);
     comparison.gallery(gallery);
-    notice(`Moved ${item.filename} to Trash. Restore it from Gallery → Trash.`);
+    notice(`Deleted ${item.filename}. Restore it from Wastebin.`);
   } else {
     gallery = gallery.map((image) => image.id === item.id ? { ...image, kept: result.kept } : image);
     if (selectedImage?.id === item.id) selectSavedImage({ ...selectedImage, kept: result.kept });
@@ -1917,6 +1965,19 @@ $("image-favourites").addEventListener("click", () => {
   renderLibrary();
   $("gallery-kept").focus({ preventScroll: true });
   ComfyPresentation.focusGallery(disclosureMotion.matches);
+});
+$("open-wastebin").addEventListener("click", () => {
+  galleryFilter = "trash";
+  selectTab("gallery");
+  renderLibrary();
+  saveUI();
+  loadTrash();
+  ComfyPresentation.focusGallery(disclosureMotion.matches);
+});
+$("empty-wastebin").addEventListener("click", () => {
+  const tokens = wastebinEntries.map((entry) => entry.token);
+  if (tokens.length && confirm(`Empty Wastebin? Permanently delete ${tokens.length} image(s) from their original locations? This cannot be undone.`))
+    wastebinAction(tokens);
 });
 $("refresh-gallery").addEventListener("click", () => loadGallery(true));
 for (const [id, filter] of [["gallery-all", "all"], ["gallery-kept", "kept"], ["gallery-jobs", "jobs"], ["gallery-trash", "trash"]]) {
