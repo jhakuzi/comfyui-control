@@ -1,6 +1,7 @@
 """Small asynchronous client for ComfyUI's documented HTTP/WS interfaces."""
 import asyncio
 import json
+from pathlib import PurePosixPath
 
 import aiohttp
 
@@ -15,6 +16,29 @@ class ComfyClient:
     def __init__(self, session, base_url):
         self.session = session
         self.base = base_url.rstrip("/")
+
+    async def upload_image(self, contents, name):
+        data = aiohttp.FormData()
+        data.add_field('image', contents, filename=name, content_type='image/png')
+        data.add_field('type', 'input')
+        # LoadImage's standard combo lists files directly in input/, not nested
+        # directories. A unique prefix avoids replacing existing inputs.
+        data.add_field('subfolder', '')
+        data.add_field('overwrite', 'false')
+        try:
+            async with self.session.post(self.base + '/upload/image', data=data,
+                                         timeout=aiohttp.ClientTimeout(total=30)) as response:
+                if response.status != 200:
+                    raise ComfyError(f'ComfyUI could not accept the source image (HTTP {response.status}). No generation was queued.')
+                result = await response.json()
+            filename, subfolder = result.get('name'), result.get('subfolder', '')
+            if (result.get('type') != 'input' or not isinstance(filename, str) or not filename
+                    or PurePosixPath(filename).name != filename or '\\' in filename
+                    or subfolder != '' or filename in {'.', '..'}):
+                raise ComfyError('ComfyUI returned an invalid uploaded-image location. No generation was queued.')
+            return filename
+        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError, AttributeError) as exc:
+            raise ComfyError('The source image could not be uploaded to ComfyUI. No generation was queued; reconnect and try again.') from exc
 
     async def request(self, method, path, data=None, expected_type=dict):
         try:

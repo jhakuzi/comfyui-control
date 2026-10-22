@@ -21,7 +21,7 @@ from PySide6.QtGui import QColor, QImage
 from comfyui_control.mobile.server import MobileHTTP
 from comfyui_control.mobile.service import MobileService
 from comfyui_control.mobile.settings import MobileSettings
-from test_mobile_integration import ComfyStub
+from test_mobile_integration import ComfyStub, until
 
 
 async def main(browser_name, root):
@@ -72,7 +72,7 @@ async def main(browser_name, root):
             page = await context.new_page()
             page.on('pageerror', lambda error: errors.append(str(error)))
             await page.goto(url)
-            await expect(page.locator('#generation-empty')).to_be_visible()
+            await expect(page.locator('#desktop-result-preview')).to_be_visible()
             await page.locator('#preset').select_option(preset['id'])
             prompt = page.locator('[data-role="positive"]')
             await expect(prompt).to_be_visible()
@@ -126,6 +126,7 @@ async def main(browser_name, root):
             await expect(page.locator('#header-generation #progress')).to_be_visible()
             assert await page.locator('#progress').count() == 1
             assert len(stub.submissions) == 1
+            await until(lambda:not service.refresh_task or service.refresh_task.done())
             stub.running, stub.pending = stub.pending, []
             job = list(service.jobs.values())[-1]
             await stub.emit('execution_start', dict(prompt_id=job['prompt_id']))
@@ -137,16 +138,25 @@ async def main(browser_name, root):
             await expect(page.locator('#stat-vram')).to_have_text('6.0 GiB')
             for ws in stub.sockets:
                 await ws.send_bytes(struct.pack('>II', 1, 2) + (output / 'image00.png').read_bytes())
+            # Desktop reserves an empty result until completion; Phone retains live previews.
+            await expect(page.locator('#preview')).to_have_js_property('hidden', False)
+            await expect(page.locator('#preview')).to_be_hidden()
+            await page.set_viewport_size(dict(width=390, height=844))
             await expect(page.locator('#preview')).to_be_visible()
+            await page.set_viewport_size(dict(width=1440, height=900))
             await page.locator('#advanced').evaluate('el => el.open=true')
             await page.locator('#mapping').evaluate('el => el.open=true')
 
             async def reachable(identifiers=('generate', 'progress', 'cancel')):
                 for identifier in identifiers:
+                    # Desktop's requested full-height panel scrolls with the form.
+                    await page.evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+                    if await page.evaluate('wideLayout.matches'):
+                        await page.locator('#' + identifier).evaluate('el => el.scrollIntoView({block: "center"})')
                     bounds = await page.locator('#' + identifier).bounding_box()
                     assert bounds and bounds['y'] >= 0 and bounds['y'] + bounds['height'] <= page.viewport_size['height'] + 1, (identifier, bounds)
                     assert await page.evaluate('({x,y,id}) => !!document.elementFromPoint(x,y)?.closest("#"+id)',
-                        dict(id=identifier, x=bounds['x'] + bounds['width']/2, y=bounds['y'] + bounds['height']/2))
+                        dict(id=identifier, x=bounds['x'] + bounds['width']/2, y=bounds['y'] + bounds['height']/2)), (identifier, bounds)
 
             for width, height in [(1024, 1366), (1366, 1024), (1440, 900), (1000, 600), (390, 844)]:
                 await page.set_viewport_size(dict(width=width, height=height))
@@ -205,8 +215,9 @@ async def main(browser_name, root):
             await stub.emit('execution_success', dict(prompt_id=job['prompt_id']))
             await asyncio.sleep(.2)
             await context.set_offline(False)
-            await expect(page.locator('#job-output #job-images img')).to_be_visible()
+            await expect(page.locator('#desktop-result-preview #job-images img')).to_be_visible()
             await expect(page.locator('#job-title')).to_have_text('Your image is ready')
+            await expect(page.locator('#job-title')).to_be_hidden()
             await expect(page.locator('#header-generation')).to_be_hidden()
             assert await page.locator('#job-card #job-metrics').count() == 1
             await page.reload()

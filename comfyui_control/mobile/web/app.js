@@ -39,6 +39,8 @@ let uiReady = false,
   uiState = readStore("ui", {});
 let noticeTimer,
   pendingSubmission = readStore("pending", null);
+const generateFeedback = new ComfyGenerateFeedback();
+let generateFeedbackTimer;
 
 function readStore(key, fallback) {
   try {
@@ -69,7 +71,7 @@ function notice(message) {
 async function api(path, options = {}) {
   const controller = new AbortController();
   requests.add(controller);
-  const timeout = setTimeout(() => controller.abort(), 8000);
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs || 8000);
   let response, text;
   try {
     response = await fetch(path, {
@@ -102,6 +104,11 @@ async function api(path, options = {}) {
   return body;
 }
 function showLogin() {
+  imageWorkflowDialogs?.close();
+  selectedImageActions?.select(null);
+  imageActionSignature = "";
+  clearTimeout(generateFeedbackTimer);
+  generateFeedback.reset();
   stopGallerySync();
   galleryRevision = "";
   comparison.clearImages();
@@ -170,6 +177,7 @@ function selectTab(name) {
   $("create-tab").classList.toggle("selected", name === "create");
   $("gallery-tab").classList.toggle("selected", name === "gallery");
   syncGenerationDock();
+  syncSelectedImageActions();
   saveUI();
   if (name === "gallery") loadGallery(true);
   else stopGallerySync();
@@ -190,12 +198,20 @@ function syncJobMetrics(active) {
   }
   header.hidden = !atTop;
 }
+// Derive the desktop result from the existing jobs, keeping Phone selection intact.
+function previewImages() {
+  const job = currentJob();
+  if (wideLayout.matches && (submitting || !job?.images?.length || activeStatuses.has(job.status)))
+    return state.jobs.slice().reverse().find((entry) => entry.status === "complete" && entry.images?.length)?.images || [];
+  return job?.images || [];
+}
 function syncGenerationDock() {
   const job = currentJob(),
     active = !!job && activeStatuses.has(job.status),
     dock = $("generation-dock"),
     card = $("job-card"),
-    destination = active ? dock : $("job-output");
+    destination = active && (!wideLayout.matches || !$("gallery-page").hidden) ? dock : $("job-output");
+  $("generation-panel").dataset.completed = String(job?.status === "complete");
   renderGenerationStats(job);
   syncJobMetrics(active);
   $("job-output").hidden = !$("gallery-page").hidden;
@@ -238,15 +254,24 @@ function updateGenerate() {
     !state.online ||
     preset.missing_nodes.length > 0 ||
     !!(job && activeStatuses.has(job.status));
-  $("generate").textContent = busy
-    ? "Submitting"
-    : pendingSubmission
-      ? "Retry submission"
-      : "✦ Generate";
+  const feedback = generateFeedback.update({ jobs: state.jobs, selectedJob: job,
+    busy, submitting, pending: !!pendingSubmission, connected, online: state.online, recovering });
+  ComfyGenerateFeedback.paint($("generate"), $("generate-label"), feedback);
+  clearTimeout(generateFeedbackTimer);
+  if (generateFeedback.feedback) {
+    // One local redraw clears terminal feedback. No requests or new listeners.
+    generateFeedbackTimer = setTimeout(updateGenerate,
+      Math.max(1, generateFeedback.feedback.expires - Date.now() + 1));
+  }
+  renderImages($("job-images"), previewImages());
   syncGenerationDock();
+  syncSelectedImageActions();
 }
-async function loadPresets(selectId) {
+async function loadPresets(selectId, reuse, description, current = () => true) {
   const items = await api("/api/presets");
+  if (!current()) return;
+  if (description && !items.some((item) => item.id === description.id))
+    items.push({ id: description.id, name: description.name });
   $("preset").replaceChildren(new Option("Choose a workflow…", ""));
   for (const item of items) $("preset").add(new Option(item.name, item.id));
   $("empty-presets").hidden = items.length > 0;
@@ -258,7 +283,7 @@ async function loadPresets(selectId) {
   ].find((id) => items.some((item) => item.id === id));
   if (stored) {
     $("preset").value = stored;
-    await choosePreset(stored);
+    await choosePreset(stored, reuse, description?.id === stored ? description : null);
   }
   await loadSavedWorkflows();
 }
@@ -304,7 +329,7 @@ async function selectWorkflow(id) {
     updateGenerate();
   }
 }
-async function choosePreset(id, reuse) {
+async function choosePreset(id, reuse, description) {
   const epoch = ++presetEpoch;
   preset = null;
   $("refresh-models").hidden = !id;
@@ -328,7 +353,7 @@ async function choosePreset(id, reuse) {
     $(target).hidden = true;
   if (!id) return;
   writeStore("preset", id);
-  const loaded = await api("/api/presets/" + encodeURIComponent(id));
+  const loaded = description || await api("/api/presets/" + encodeURIComponent(id));
   if (epoch !== presetEpoch) return;
   preset = loaded;
   const stored = reuse || readStore("draft-" + id, {});
@@ -733,9 +758,6 @@ function requestId() {
 async function generate(event) {
   event.preventDefault();
   if (busy || !preset || !connected || recovering) return;
-  busy = true;
-  submitting = true;
-  updateGenerate();
   const body = pendingSubmission || {
     request_id: requestId(),
     preset: preset.id,
@@ -744,10 +766,16 @@ async function generate(event) {
     random_seed: randomSeed,
     disabled_loras: [...disabledLoras],
   };
+  try { await submitGeneration(body); } catch { /* Existing notice explains the failure. */ }
+}
+async function submitGeneration(body) {
+  busy = true;
+  submitting = true;
+  updateGenerate();
   pendingSubmission = JSON.parse(JSON.stringify(body));
   writeStore("pending", pendingSubmission);
   try {
-    const job = await api("/api/generate", {
+    const job = body.action ? await imageFeatureAPI.retry() : await api("/api/generate", {
       method: "POST",
       body: JSON.stringify(body),
     });
@@ -758,16 +786,19 @@ async function generate(event) {
     writeStore("job", job.id);
     state = await api("/api/state");
     applyState(state);
+    return job;
   } catch (error) {
     if ([400, 403, 404, 413, 415, 422].includes(error.status)) {
       pendingSubmission = null;
       writeStore("pending", null);
+      generateFeedback.rejected(body.request_id);
       notice(error.message);
     } else
       notice(
         error.message +
           " Tap Retry submission to check the same request safely.",
       );
+    throw error;
   } finally {
     busy = false;
     submitting = false;
@@ -891,7 +922,7 @@ function applyState(value) {
     $("job-card").classList.toggle("has-preview", !!preview);
     if (preview && !$("preview").src.endsWith(preview))
       $("preview").src = preview;
-    renderImages($("job-images"), job.images || []);
+    renderImages($("job-images"), previewImages());
   }
   $("reuse-last").hidden =
     !preset || !state.jobs.some((job) => job.preset === preset.id);
@@ -990,6 +1021,7 @@ function loadGallery(force = false) {
       renderImages($("gallery-grid"), gallery);
       comparison.gallery(gallery);
       $("gallery-empty").hidden = !!gallery.length;
+      syncSelectedImageActions();
     } catch (error) {
       if (force && epoch === galleryEpoch) notice(error.message);
     } finally {
@@ -1018,6 +1050,8 @@ function openImage(items, index) {
   $("image-reuse-status").hidden = !$("image-reuse-status").textContent;
   imageDetails.select(item);
   if (!$("image-dialog").open) $("image-dialog").showModal();
+  if (items === $("job-images").imageItems) $("job-images").dataset.selectedImage = item.id;
+  syncSelectedImageActions();
 }
 async function reuseImage(variation) {
   const epoch = imageReuseEpoch, item = viewerItems[viewerIndex];
@@ -1026,16 +1060,96 @@ async function reuseImage(variation) {
   $("image-reuse-status").textContent = "Loading saved generation settings…";
   $("image-reuse-status").hidden = false;
   try {
-    const job = state.jobs.find((entry) => entry.id === item.job) ||
-      await api(`/api/images/${encodeURIComponent(item.id)}/reuse`, { method: "POST", body: "{}" });
-    if (epoch !== imageReuseEpoch || !$("image-dialog").open) return;
-    if (variation && !job.controls?.some((field) => field.role === "seed"))
-      throw new Error("No seed input is mapped in this workflow. Use Reuse settings, then map its seed in Advanced & workflows to create variations.");
-    await reuseJob(job, variation, () => epoch === imageReuseEpoch && $("image-dialog").open);
+    await reuseSavedImage(item, variation, () => epoch === imageReuseEpoch && $("image-dialog").open);
   } catch (error) {
     if (epoch === imageReuseEpoch) $("image-reuse-status").textContent = error.message;
   } finally {
     if (epoch === imageReuseEpoch) $("reuse-image").disabled = $("vary-image").disabled = false;
+  }
+}
+async function reuseSavedImage(item, variation, current) {
+  const job = state.jobs.find((entry) => entry.id === item.job) ||
+    await api(`/api/images/${encodeURIComponent(item.id)}/reuse`, { method: "POST", body: "{}" });
+  if (!current()) return;
+  if (variation && !job.controls?.some((field) => field.role === "seed"))
+    throw new Error("No seed input is mapped in this workflow. Use Reuse settings, then map its seed in Advanced & workflows to create variations.");
+  await reuseJob(job, variation, current);
+}
+
+function actionImage() {
+  if ($("image-dialog").open) return viewerItems[viewerIndex];
+  const items = previewImages();
+  return items.find((item) => item.id === $("job-images").dataset.selectedImage) || items[0];
+}
+function syncSelectedImageActions(force = false) {
+  const active = desktopImages.active && $("login").hidden;
+  if (active && !selectedImageActions) {
+    imageWorkflowDialogs = new ComfyImageWorkflowDialogs({ read: readStore, write: writeStore });
+    selectedImageActions = new ComfySavedImageActions($("selected-image-actions"), {
+      api, changed: imageActionChanged, workflow: runImageWorkflow,
+      present: ({ pending }) => {
+        if (desktopImages.active) $("same-seed").disabled = $("variation").disabled = pending || !actionImage();
+      },
+    });
+  }
+  const previewing = $("gallery-page").hidden;
+  const item = active && (previewing || $("image-dialog").open) ? actionImage() : null;
+  desktopImages.render({ viewing: $("image-dialog").open, selected: !!item,
+    previewing, pending: !!selectedImageActions?.pending, imageId: item?.id });
+  const canRequest = connected && !recovering && !document.hidden;
+  const signature = JSON.stringify([item?.id, item?.modified, item?.kept, state.online, canRequest]);
+  if (!force && signature === imageActionSignature) return;
+  imageActionSignature = signature;
+  imageWorkflowDialogs?.close();
+  selectedImageActions?.select(item, { connected: canRequest });
+}
+async function imageActionChanged(item, result) {
+  const collections = new Set([gallery, viewerItems, ...state.jobs.map((job) => job.images || [])]);
+  const selected = viewerItems[viewerIndex]?.id;
+  for (const items of collections) {
+    const index = items.findIndex((entry) => entry.id === item.id);
+    if (index < 0) continue;
+    if (result.trash) items.splice(index, 1);
+    else items[index].kept = result.kept;
+  }
+  renderImages($("job-images"), previewImages());
+  renderImages($("gallery-grid"), gallery);
+  comparison.gallery(gallery);
+  if ($("image-dialog").open && result.trash) {
+    if (viewerItems.length) openImage(viewerItems, selected === item.id ? Math.min(viewerIndex, viewerItems.length - 1)
+      : viewerItems.findIndex((entry) => entry.id === selected));
+    else $("image-dialog").close();
+  }
+  syncSelectedImageActions(true);
+  if (result.trash) {
+    notice("Image deleted to Wastebin. The original file remains in place.");
+    refreshFullState();
+  }
+}
+async function runImageWorkflow(item, action, modified) {
+  const current = () => desktopImages.active && actionImage()?.id === item.id && actionImage()?.modified === item.modified;
+  if (busy || pendingSubmission) throw new Error("Finish or retry the pending submission before starting an image action.");
+  if (!connected || recovering || !state.online) throw new Error("Reconnect to ComfyUI before starting an image action.");
+  const parameters = await imageWorkflowDialogs.options(item, action);
+  if (parameters === null || !current()) return;
+  if (busy || pendingSubmission || !connected || recovering || !state.online)
+    throw new Error("Connection or submission state changed. Reconnect and try again; your instruction is kept.");
+  await imageFeatureAPI.workflow({ ...item, modified }, action, parameters);
+  if ($("image-dialog").open) $("image-dialog").close();
+  selectTab("create");
+}
+async function reusePreviewImage(variation) {
+  const item = actionImage();
+  const epoch = imageReuseEpoch;
+  if (!item) throw new Error("Select a saved image to reuse its settings.");
+  if (selectedImageActions?.pending || busy) return;
+  selectedImageActions.pending = true;
+  selectedImageActions.renderCapabilities();
+  try {
+    await reuseSavedImage(item, variation, () => desktopImages.active && imageReuseEpoch === epoch);
+  } finally {
+    selectedImageActions.pending = false;
+    selectedImageActions.renderCapabilities();
   }
 }
 async function reuseJob(job, variation = false, current = () => true) {
@@ -1046,16 +1160,15 @@ async function reuseJob(job, variation = false, current = () => true) {
     throw new Error(
       "This preset’s mappings changed. Choose it again and review the settings before generating.",
     );
-  selectedJob = "new";
-  writeStore("job", "new");
-  await loadPresets(job.preset);
-  if (!current()) return;
-  await choosePreset(job.preset, {
+  await loadPresets(job.preset, {
     revision: job.revision,
     values: job.values,
     randomSeed: variation,
     disabledLoras: job.disabled_loras,
-  });
+  }, loaded, current);
+  if (!current()) return;
+  selectedJob = "new";
+  writeStore("job", "new");
   $("preset").value = job.preset;
   $("image-dialog").close();
   selectTab("create");
@@ -1243,7 +1356,14 @@ new ResizeObserver(() => {
   const height = $("generation-dock").getBoundingClientRect().height;
   document.documentElement.style.setProperty("--generation-dock-height", `${height}px`);
 }).observe($("generation-dock"));
-wideLayout.addEventListener("change", syncGenerationDock);
+wideLayout.addEventListener("change", () => {
+  renderImages($("job-images"), previewImages());
+  // Restore Phone's original terminal-only visibility after a desktop round trip.
+  const terminal = ["complete", "failed", "cancelled"].includes(currentJob()?.status);
+  $("same-seed").hidden = $("variation").hidden = !terminal;
+  syncGenerationDock();
+  syncSelectedImageActions();
+});
 new ResizeObserver(([entry]) => {
   document.documentElement.style.setProperty("--masthead-height", `${entry.target.getBoundingClientRect().height}px`);
 }).observe(document.querySelector(".masthead"));
@@ -1329,7 +1449,7 @@ $("new-request").addEventListener("click", () => {
 $("same-seed").addEventListener(
   "click",
   guarded(() =>
-    reuseJob(
+    desktopImages.active ? reusePreviewImage(false) : reuseJob(
       state.jobs.find((job) => job.id === selectedJob),
       false,
     ),
@@ -1338,7 +1458,7 @@ $("same-seed").addEventListener(
 $("variation").addEventListener(
   "click",
   guarded(() =>
-    reuseJob(
+    desktopImages.active ? reusePreviewImage(true) : reuseJob(
       state.jobs.find((job) => job.id === selectedJob),
       true,
     ),
@@ -1359,7 +1479,7 @@ $("gallery-tab").addEventListener("click", () => {
 });
 $("refresh-gallery").addEventListener("click", () => loadGallery(true));
 $("close-image").addEventListener("click", () => $("image-dialog").close());
-$("image-dialog").addEventListener("close", () => { imageReuseEpoch++; });
+$("image-dialog").addEventListener("close", () => { imageReuseEpoch++; syncSelectedImageActions(); });
 $("previous-image").addEventListener("click", () =>
   openImage(viewerItems, viewerIndex - 1),
 );
@@ -1465,6 +1585,15 @@ function connectionFailure(error) {
 }
 const comparison = new ImageComparison({ api, notice, read: readStore, write: writeStore, unauthorized: showLogin });
 const imageDetails = new ImageDetails({ api });
+let selectedImageActions = null, imageWorkflowDialogs = null, imageActionSignature = "";
+const desktopImages = new ComfyDesktopImagePresentation({ media: wideLayout,
+  actions: $("selected-image-actions"), preview: $("preview-reuse-actions"),
+  viewer: $("reuse-image").parentElement, reuse: $("same-seed"), variation: $("variation"), images: $("job-images") });
+const imageFeatureAPI = new ComfyImageFeatureAPI({ api, requestId, submit: submitGeneration,
+  readPending: () => pendingSubmission, writePending: (value) => {
+    pendingSubmission = value;
+    writeStore("pending", value);
+  } });
 const promptHistory = new PromptHistoryView({ api, reuse: (entry) => {
   if (!preset) throw new Error("Choose a workflow before reusing a prompt.");
   const changes = [];

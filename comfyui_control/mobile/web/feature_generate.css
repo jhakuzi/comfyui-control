@@ -1,0 +1,38 @@
+/* Generate animation. All colors come from the current theme; no layout, sizing,
+   typography, navigation or theme declarations belong in this file. */
+#generate[data-progress]:where(:not([data-progress="idle"])) { position: relative; isolation: isolate; overflow: hidden; }
+#generate [data-generate-label] { font: inherit; }
+#generate[data-progress]:where(:not([data-progress="idle"])) [data-generate-label] { position: relative; z-index: 1; }
+#generate[data-progress]:where(:not([data-progress="idle"]))::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  opacity: 0;
+  transform: scaleX(var(--generation-progress, 0));
+  transform-origin: left;
+  transition: transform 260ms ease-out, opacity 220ms ease-out;
+  pointer-events: none;
+}
+#generate[data-progress="determinate"],
+#generate[data-progress="indeterminate"],
+#generate[data-progress="paused"],
+#generate[data-progress="failed"],
+#generate[data-progress="cancelled"] { background: var(--surface); color: var(--text); opacity: 1; }
+#generate[data-progress="determinate"]::before { opacity: .22; }
+#generate[data-progress="indeterminate"]::before {
+  width: 35%;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: .22;
+  animation: generate-wait 1.8s ease-in-out infinite alternate;
+}
+#generate[data-progress="success"]::before { animation: generate-complete 320ms ease-out both; }
+@keyframes generate-wait { from { transform: translateX(0); } to { transform: translateX(185%); } }
+@keyframes generate-complete {
+  from { transform: scaleX(var(--generation-finish-from, 0)); opacity: .22; }
+  to { transform: scaleX(1); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #generate[data-progress]:not([data-progress="idle"])::before { animation: none; transition: none; }
+  #generate[data-progress="indeterminate"]::before { transform: none; }
+}

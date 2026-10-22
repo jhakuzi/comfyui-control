@@ -18,6 +18,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 
 MAX_IMAGE = 100 * 1024 * 1024
 MARKER = '# Managed by comfyui-control NFS output\n'
@@ -320,13 +321,16 @@ def probe(spec):
         os.unlink(path)
 
 
+TRASH_DIRECTORY = '.comfyui-control-trash'
+
+
 def safe_path(root, descriptor):
     filename = descriptor.get('filename', '')
     subfolder = descriptor.get('subfolder', '')
     if not isinstance(filename, str) or not isinstance(subfolder, str) or not filename or Path(filename).name != filename or '\\' in filename + subfolder:
         return None
     relative = Path(subfolder) / filename
-    if relative.is_absolute() or '..' in relative.parts or relative.suffix.lower() not in {'.png', '.jpg', '.jpeg', '.webp'}:
+    if relative.is_absolute() or '..' in relative.parts or TRASH_DIRECTORY in relative.parts or relative.suffix.lower() not in {'.png', '.jpg', '.jpeg', '.webp'}:
         return None
     current = root
     for part in relative.parts:
@@ -349,9 +353,15 @@ def read_image(root, descriptor):
             directory = child
         fd = os.open(relative.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
         with os.fdopen(fd, 'rb') as stream:
-            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode):
                 raise ValueError('Image is not a regular file.')
+            expected = descriptor.get('expected_modified')
+            if expected is not None and expected != str(info.st_mtime_ns):
+                raise ValueError('This image changed. Refresh the gallery before acting on it.')
             contents = stream.read(MAX_IMAGE + 1)
+            if expected is not None and expected != str(os.fstat(stream.fileno()).st_mtime_ns):
+                raise ValueError('This image changed while it was being read. Refresh the gallery and try again.')
         if len(contents) > MAX_IMAGE:
             raise ValueError('Image exceeds the 100 MiB network-image limit.')
         return contents
@@ -368,7 +378,7 @@ def scan(root, references):
             valid[item['id']] = [info.st_mtime, str(info.st_mtime_ns)]
     count = 0
     for folder, directories, files in os.walk(root, followlinks=False):
-        directories[:] = [name for name in directories if not (Path(folder) / name).is_symlink()]
+        directories[:] = [name for name in directories if name != TRASH_DIRECTORY and not (Path(folder) / name).is_symlink()]
         for name in files:
             count += 1
             if count > 10000:
@@ -385,9 +395,256 @@ def scan(root, references):
     return {'found': found, 'valid': valid}
 
 
+def _open_directory(parent, name, create=False):
+    if create:
+        try:
+            os.mkdir(name, mode=0o700, dir_fd=parent)
+        except FileExistsError:
+            pass
+    return os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+
+
+def _trash_directory(root, create=False):
+    parent = open_output_directory(root)
+    try:
+        result = _open_directory(parent, TRASH_DIRECTORY, create)
+        info = os.fstat(result)
+        if info.st_uid != os.getuid() or info.st_mode & 0o077:
+            os.close(result)
+            raise ValueError('The app trash must be a private directory owned by this user.')
+        return result
+    finally:
+        os.close(parent)
+
+
+def _trash_record(directory, token, owner, scope):
+    if not isinstance(token, str) or not re.fullmatch('[a-f0-9]{32}', token):
+        raise ValueError('Invalid trash entry.')
+    entry = _open_directory(directory, token)
+    try:
+        fd = os.open('record.json', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=entry)
+        with os.fdopen(fd) as stream:
+            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                raise ValueError('Invalid trash record.')
+            record = json.loads(stream.read(16385))
+        if record.get('owner') != owner or record.get('scope') != scope or record.get('token') != token:
+            raise ValueError('This trash entry belongs to another browser or output folder.')
+        filename = record.get('filename', '')
+        relative = Path(record.get('subfolder', '')) / filename
+        if (not filename or Path(filename).name != filename or relative.is_absolute() or
+                '..' in relative.parts or TRASH_DIRECTORY in relative.parts or '\\' in str(relative) or
+                relative.suffix.lower() not in {'.png', '.jpg', '.jpeg', '.webp'}):
+            raise ValueError('Invalid original image location.')
+        expected = 'image' + relative.suffix.lower()
+        info = os.stat(expected, dir_fd=entry, follow_symlinks=False)
+        if not stat.S_ISREG(info.st_mode):
+            raise ValueError('Trashed image is not a regular file.')
+        return record, expected
+    finally:
+        os.close(entry)
+
+
+def image_library(root, operation, data):
+    """Recoverable same-filesystem moves, bounded by the existing worker runner.
+
+    Directory descriptors prevent following symlinked parents. No paths supplied
+    by an HTTP client reach this function: descriptors come from the gallery.
+    Restore uses a no-overwrite hard link before unlinking the trash copy.
+    """
+    owner, scope = data.get('owner'), data.get('scope')
+    if not isinstance(owner, str) or not re.fullmatch('[a-f0-9]{64}', owner) or not isinstance(scope, str):
+        raise ValueError('A browser identity and output scope are required.')
+    try:
+        trash = _trash_directory(root, create=operation == 'trash')
+    except FileNotFoundError:
+        if operation == 'trash-list':
+            return []
+        raise
+    try:
+        if operation == 'trash-list':
+            records = []
+            for token in os.listdir(trash)[:2000]:
+                try:
+                    record, _ = _trash_record(trash, token, owner, scope)
+                    if not record.get('restored'):
+                        entry = _open_directory(trash, record['token'])
+                        try:
+                            info = os.stat('image' + Path(record['filename']).suffix.lower(), dir_fd=entry, follow_symlinks=False)
+                            identity = dict(directories=[list(file_identity(os.fstat(trash))[:2]),
+                                                        list(file_identity(os.fstat(entry))[:2])], file=file_identity(info))
+                        finally:
+                            os.close(entry)
+                        records.append({**{k: record[k] for k in ('token', 'filename', 'subfolder', 'created')},
+                                        'identity': identity})
+                except (OSError, ValueError, KeyError, TypeError):
+                    continue
+            return sorted(records, key=lambda item: item['created'], reverse=True)
+        if operation in ('legacy-read', 'legacy-delete'):
+            record, stored = _trash_record(trash, data.get('token'), owner, scope)
+            entry = _open_directory(trash, record['token'])
+            try:
+                fd = os.open(stored, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=entry)
+                with os.fdopen(fd, 'rb') as stream:
+                    info = os.fstat(stream.fileno())
+                    if not stat.S_ISREG(info.st_mode):
+                        raise ValueError('Image is not a regular file.')
+                    identity = dict(directories=[list(file_identity(os.fstat(trash))[:2]),
+                                                list(file_identity(os.fstat(entry))[:2])], file=file_identity(info))
+                    if identity != data.get('identity'):
+                        raise ValueError('The stored image or location changed. Nothing was deleted.')
+                    if operation == 'legacy-read':
+                        contents = stream.read(MAX_IMAGE + 1)
+                        if len(contents) > MAX_IMAGE:
+                            raise ValueError('Image exceeds the image size limit.')
+                        return contents
+                    if file_identity(os.stat(stored, dir_fd=entry, follow_symlinks=False)) != file_identity(info):
+                        raise ValueError('Image changed. Nothing was deleted.')
+                    os.unlink(stored, dir_fd=entry)
+                os.unlink('record.json', dir_fd=entry)
+            finally:
+                os.close(entry)
+            os.rmdir(record['token'], dir_fd=trash)
+            return {'ok': True}
+        if operation == 'restore':
+            record, stored = _trash_record(trash, data.get('token'), owner, scope)
+            entry = _open_directory(trash, record['token'])
+            parent = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                for part in Path(record['subfolder']).parts:
+                    child = _open_directory(parent, part, create=True)
+                    os.close(parent)
+                    parent = child
+                try:
+                    os.link(stored, record['filename'], src_dir_fd=entry, dst_dir_fd=parent, follow_symlinks=False)
+                except FileExistsError:
+                    raise ValueError('An image already exists at the original location. Nothing was overwritten.') from None
+                os.unlink(stored, dir_fd=entry)
+                os.unlink('record.json', dir_fd=entry)
+            finally:
+                os.close(parent)
+                os.close(entry)
+            os.rmdir(record['token'], dir_fd=trash)
+            return {'filename': record['filename'], 'subfolder': record['subfolder'], 'type': 'output'}
+        descriptor = data['image']
+        path = safe_path(root, descriptor)
+        if path is None:
+            raise FileNotFoundError('This saved image is no longer available.')
+        relative = path.relative_to(root)
+        parent = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        entry = None
+        try:
+            for part in relative.parts[:-1]:
+                child = _open_directory(parent, part)
+                os.close(parent)
+                parent = child
+            info = os.stat(relative.name, dir_fd=parent, follow_symlinks=False)
+            if not stat.S_ISREG(info.st_mode) or str(info.st_mtime_ns) != data.get('modified'):
+                raise ValueError('This image changed. Refresh the gallery before moving it to Trash.')
+            import uuid
+            token = uuid.uuid4().hex
+            os.mkdir(token, mode=0o700, dir_fd=trash)
+            entry = _open_directory(trash, token)
+            record = dict(token=token, owner=owner, scope=scope, filename=relative.name,
+                          subfolder=str(relative.parent) if relative.parent != Path('.') else '', created=time.time())
+            fd = os.open('record.json', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=entry)
+            with os.fdopen(fd, 'w') as stream:
+                json.dump(record, stream)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.rename(relative.name, 'image' + relative.suffix.lower(), src_dir_fd=parent, dst_dir_fd=entry)
+            return {k: record[k] for k in ('token', 'filename', 'subfolder', 'created')}
+        finally:
+            os.close(parent)
+            if entry is not None:
+                os.close(entry)
+    finally:
+        os.close(trash)
+
+
+def open_output_directory(root):
+    parent = os.open('/', os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for part in Path(os.path.abspath(root)).parts[1:]:
+            child = _open_directory(parent, part)
+            os.close(parent)
+            parent = child
+        return parent
+    except BaseException:
+        os.close(parent)
+        raise
+
+
+def file_identity(info):
+    return [info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns]
+
+
+def virtual_image(root, operation, data):
+    """Read/check/unlink an original, anchored to the configured output directory.
+
+    Never follow symlinks, including above the configured root. Fingerprints bind
+    markers to the root, every parent and the exact regular file. No filesystem
+    writes occur during identify/read; only an explicitly requested delete unlinks.
+    """
+    descriptor = data['image']
+    filename, subfolder = descriptor.get('filename'), descriptor.get('subfolder', '')
+    if (not isinstance(filename, str) or not isinstance(subfolder, str) or not filename
+            or Path(filename).name != filename or '\\' in filename + subfolder):
+        raise ValueError('Invalid original image location.')
+    relative = Path(subfolder) / filename
+    if (descriptor.get('type', 'output') != 'output' or relative.is_absolute() or '..' in relative.parts
+            or TRASH_DIRECTORY in relative.parts or relative.suffix.lower() not in {'.png', '.jpg', '.jpeg', '.webp'}):
+        raise ValueError('Invalid original image location.')
+    # Start at / so even a symlink in the configured root's ancestors fails closed.
+    parent = open_output_directory(root)
+    try:
+        directories = [list(file_identity(os.fstat(parent))[:2])]
+        for part in relative.parts[:-1]:
+            child = _open_directory(parent, part)
+            os.close(parent)
+            parent = child
+            directories.append(list(file_identity(os.fstat(parent))[:2]))
+        fd = os.open(relative.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
+        with os.fdopen(fd, 'rb') as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode):
+                raise ValueError('Image is not a regular file.')
+            identity = dict(directories=directories, file=file_identity(info))
+            if operation == 'identify':
+                if str(info.st_mtime_ns) != descriptor.get('modified'):
+                    raise ValueError('This image changed. Refresh the gallery before deleting it.')
+                return identity
+            if identity != data.get('identity'):
+                raise ValueError('The original file or output location changed. Nothing was deleted. Restore this entry and refresh the gallery.')
+            if operation == 'wastebin-read':
+                contents = stream.read(MAX_IMAGE + 1)
+                if len(contents) > MAX_IMAGE or file_identity(os.fstat(stream.fileno())) != identity['file']:
+                    raise ValueError('Image changed or exceeds the image size limit.')
+                return contents
+            if operation != 'delete':
+                raise ValueError('Unknown Wastebin operation.')
+            current = open_output_directory(root)
+            try:
+                for part in relative.parts[:-1]:
+                    child = _open_directory(current, part)
+                    os.close(current)
+                    current = child
+                if file_identity(os.fstat(current))[:2] != file_identity(os.fstat(parent))[:2]:
+                    raise ValueError('The original directory changed. Nothing was deleted.')
+            finally:
+                os.close(current)
+            # Recheck the directory entry immediately before unlinking through its
+            # held parent FD; a substituted symlink/file must never be followed.
+            if file_identity(os.stat(relative.name, dir_fd=parent, follow_symlinks=False)) != identity['file']:
+                raise ValueError('The original file changed. Nothing was deleted.')
+            os.unlink(relative.name, dir_fd=parent)
+            return {'ok': True}
+    finally:
+        os.close(parent)
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('operation', choices=('setup', 'remove', 'probe', 'scan', 'read'))
+    parser.add_argument('operation', choices=('setup', 'remove', 'probe', 'scan', 'read', 'trash', 'restore', 'trash-list', 'identify', 'delete', 'wastebin-read', 'legacy-delete', 'legacy-read'))
     parser.add_argument('first')
     parser.add_argument('second', nargs='?', default='')
     args = parser.parse_args()
@@ -405,6 +662,16 @@ def main():
                     raise OSError('Network output is not mounted. Retry the connection from the desktop app.')
             if args.operation == 'scan':
                 result = scan(root, data)
+            elif args.operation in ('identify', 'delete', 'wastebin-read'):
+                result = virtual_image(root, args.operation, data)
+                if args.operation == 'wastebin-read':
+                    sys.stdout.buffer.write(result)
+                    return 0
+            elif args.operation in ('trash', 'restore', 'trash-list', 'legacy-delete', 'legacy-read'):
+                result = image_library(root, args.operation, data)
+                if args.operation == 'legacy-read':
+                    sys.stdout.buffer.write(result)
+                    return 0
             else:
                 sys.stdout.buffer.write(read_image(root, data))
                 return 0
