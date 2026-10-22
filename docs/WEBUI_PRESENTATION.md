@@ -72,11 +72,31 @@ use the shared prompt-history component.
 
 Double-clicking the desktop saved-image preview opens a centered native dialog
 with a dimmed backdrop and the existing shadow token. Enter/Space on the focused
-preview also opens it. The original image and Favourites heart move through
-`place()` into the popup, preserving the same action handler and state. Close or
-Escape restores them and returns keyboard focus; desktop viewport resizing keeps
-the image contained. Changing the selected image, returning to sign-in, or
-switching to mobile closes the popup. All preview accessibility attributes are restored on mobile.
+preview also opens it. The original image, Favourites heart and complete selected-
+image action components move through `place()` into the popup. The same Save/arrow,
+four-action and two-reuse rows sit below the image, using the same IDs, classes,
+style declarations and handlers as the regular preview. Moving the entire
+`selected-image-tools` container keeps the navigation handler's collection context
+intact. No controls, action state, request handling or ordering logic are cloned.
+
+The popup uses the existing `.viewer` scrolling component and `.heading` class.
+Heart/Close float over the image in its upper-right corner, as explicitly
+requested. The three action rows remain in normal flow below the image. The image keeps its viewport-derived size
+and the viewer scrolls vertically to reveal the controls. Desktop component sizing
+rules apply to both original locations without changing the regular preview.
+Left/Right in the popup activate the existing navigation buttons, respecting
+disabled states, text inputs, modifier keys and nested dialogs. Image navigation
+keeps the viewer open and updates its aspect ratio after the image loads. Shared
+workflow/reuse actions close it when they navigate to generation settings; empty
+selection, sign-in and mobile transitions also close it. Close/Escape restores
+all original nodes and returns keyboard focus. Mobile attributes and placements
+are restored by the existing coordinator.
+
+A small shared action-state fix refreshes the current capability state after an
+action ends, even when `select()` advanced its epoch during the refresh. Without
+this, a fast favourite response could permanently disable the current buttons.
+It adds no requests or alternate action path; the same fix is checked in regular,
+enlarged and mobile views, including delayed-response navigation.
 
 The desktop Details button opens a native dialog containing the existing metadata
 controls, moved through `place()`. The shared loader still owns all metadata
@@ -155,6 +175,8 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
 .venv/bin/python tests/manual/mobile_responsive_browser.py --browser chromium --output /tmp/control-responsive-check
 .venv/bin/python tests/manual/mobile_generation_browser.py --browser chromium --output /tmp/control-generation-check
 .venv/bin/python tests/manual/desktop_gallery_browser.py --browser chromium --output /tmp/control-desktop-gallery-check
+.venv/bin/python tests/manual/desktop_viewer_actions_browser.py --browser chromium --output /tmp/control-desktop-viewer-check
+.venv/bin/python tests/manual/mobile_saved_editors_browser.py --browser chromium --enlarged --output /tmp/control-enlarged-editors-check
 ```
 
 Use `--browser webkit` for the other supported test engine. Playwright browser
@@ -185,6 +207,14 @@ It verifies full-width tiles and the exact eight-row cap at all four target widt
 unified comparison controls and their behavior, Advanced below the gallery, six
 prompt cards with inset Delete buttons, search/reuse/deletion, centered labels and
 a mobile restoration check. It does not replace the mobile pixel/isolation checks.
+
+The desktop viewer check compares original control identities and normal/hover/
+disabled computed styles between regular and enlarged previews. It checks the
+three-row geometry, scroll bounds, keyboard/collection navigation, actual Save
+downloads, nested dialogs, permission and confirmation handling, favourites,
+Trash/restore, exact seed/settings reuse, variation, delayed-action targeting and
+mobile restoration. Run the saved-editor script both with and without `--enlarged`
+to exercise actual Edit/Upscale submissions with the same redacted workflow graphs.
 
 The dedicated isolation check disables the inactive presentation stylesheet and
 verifies the active UI is unchanged, checks unique/live controls, and exercises a

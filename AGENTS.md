@@ -199,10 +199,15 @@ the user's authorization; follow `docs/MAINTAINING.md` and `packaging/README.md`
 ## Current WebUI direction
 
 The presentation-layer separation is complete; see `docs/WEBUI_PRESENTATION.md`
-for adapter ownership and verification. Next task: refine the desktop/laptop
-layout using AUTOMATIC1111 / Forge as a layout reference, preserving our existing
-visual design, Generate/cancel controls and all functionality. Use the desktop
-adapters and preserve mobile strictly; do not change generation logic or APIs.
+for adapter ownership and verification. The Forge-inspired desktop workspace is
+implemented on `testing/webui-desktop-forge`. Its enlarged preview moves the
+original image/action components through `place()`, with the same three action
+rows below the image and Favourite/Close floating over its top-right corner.
+Keep those corner controls floating; do not move them into a separate header.
+Reuse original handlers and navigation context, preserve regular-preview styling,
+and keep mobile strictly unchanged. See `tests/manual/desktop_viewer_actions_browser.py`
+and the saved-editor check with `--enlarged` for action/state regression coverage.
+Do not change generation logic or APIs for layout work.
 After every push, provide the full fresh-clone, venv, install and launch testing
 command for the pushed branch.
 

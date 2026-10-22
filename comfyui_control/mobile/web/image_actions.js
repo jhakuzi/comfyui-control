@@ -104,9 +104,9 @@ class SavedImageActions {
       if (epoch === this.epoch) this.status.textContent = error.message;
     } finally {
       this.pending = false;
-      if (epoch === this.epoch) {
-        this.renderCapabilities();
-      }
+      // select() may have advanced the epoch while the action refreshed the image.
+      // Render the current capabilities so a fast response cannot leave it disabled.
+      this.renderCapabilities();
     }
   }
 }

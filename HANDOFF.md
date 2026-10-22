@@ -1,6 +1,78 @@
-# Session handoff — 2026-10-21
+# Session handoff — 2026-10-22
 
-## Latest work: enlarged desktop preview and equal row gaps
+## Current delivery: full action rows and floating corner controls
+
+The user requested the enlarged viewer to reuse all regular-preview actions and
+styling, with the same three button rows, top-right Favourite/Close controls,
+vertical scrolling, collection/keyboard navigation, and preserved permissions,
+selection, generation, gallery/comparison and mobile behavior. They subsequently
+requested restoring the floating Favourite/Close controls, updating AGENTS.md and
+this handoff, and explicitly authorized committing/pushing this batch to
+`testing/webui-desktop-forge`. Parent commit is `f91e5be`. No release or merge is
+authorized; follow-up pushes require a new request.
+
+- Desktop `placePreview()` moves the complete `selected-image-tools`,
+  `selected-image-actions`, `.selected-image-reuse` and `selected-reuse-status`
+  components into a desktop slot below the original image, alongside the existing
+  heart. IDs, Map state and handlers remain identical. The container ID/parent
+  relationship used by shared navigation is preserved; ordering is not reimplemented.
+- Reuse `.viewer` and `.heading` for scrolling and the top-right controls. Share
+  the same desktop 36px button sizing rule across regular/enlarged contexts; all
+  other row selectors and component skins are reused. The user explicitly wants
+  Favourite/Close floating over the image at its top-right, as before; only the
+  three action rows stay in normal flow below the image. Keep the image large and
+  scroll to the rows rather than shrink them.
+- Left/Right delegates to the original arrow buttons. Text inputs, nested dialogs,
+  modifier shortcuts and disabled arrows are respected. Navigation keeps the
+  popup open and updates aspect ratio on image load. Shared action navigation to
+  Create closes it; selection clearing/sign-in/mobile close and restore all nodes.
+- Unavoidable shared fix in `image_actions.js`: always render the *current*
+  capabilities after clearing `pending`. A fast favourite response can otherwise
+  advance `select()`'s epoch before `finally`, leaving buttons disabled forever.
+  Status/error writes remain epoch-guarded. No requests, backend behavior, theme,
+  mobile files, shared HTML or application logic were added/changed for layout.
+- Public cache version 10. Added `desktop_viewer_actions_browser.py`; extended
+  `mobile_saved_editors_browser.py` with opt-in `--enlarged` (default regular tests
+  and assertions retained). Updated presentation docs.
+
+Verification of this batch:
+
+- After restoring floating corner controls: **431 passed** in the full suite;
+  Chromium and WebKit both passed the complete viewer-action check, including
+  explicit 8px top/right placement at all four desktop sizes and mobile restoration.
+  Logs: `/tmp/control-viewer-floating-{chromium,webkit}.log` and
+  `/tmp/control-viewer-floating-pytest.log`. Screenshots in the corresponding
+  browser output directories confirm the overlay and unchanged three action rows.
+
+- Final full Python suite: **431 passed**. An initial run hit the previously
+  documented old-job equality timing failure (430 passed, 1 failed); the final run
+  passed without modifying any Python application code or test assertion.
+- Chromium and WebKit: strict regular desktop geometry/skin parity and compact
+  pixel comparisons against `f91e5be`, at five desktop and five compact sizes.
+  No `--desktop-redesign` exception was used for these regular-preview checks.
+- Both engines passed the new paired regular/enlarged tests: same original nodes,
+  identical normal/hover/disabled button styles, four desktop sizes, scroll bounds,
+  Save downloads targeting the navigated image, nested Details/Edit/Upscale dialogs,
+  exact collection order, disabled single-image arrows, favourites twice in place,
+  foreign-image restrictions, missing PNG metadata errors, Trash cancel/confirm/
+  restore, exact 64-bit reuse/variation without submission, and mobile restoration.
+  A delayed favourite response during popup navigation preserves the new selection
+  and re-enables its current controls. Mobile favourite toggling also passed.
+- Both engines passed actual supplied-editor Edit/Upscale submissions with and
+  without `--enlarged`: upload targeting, graph/connection preservation, draft,
+  multiplier, original pixels, reload, and reuse were checked. Both passed broad
+  responsive/reconnect/privacy/gallery/comparison/image-action regression checks
+  and presentation isolation with exact seeds, unique/live controls and cancellation.
+- Desktop and mobile screenshots inspected in both engines; JS/Python syntax,
+  protected-file and whitespace checks passed. Protocol fixtures do not prove
+  real GPU inference, physical iOS, VPN or NAS compatibility.
+
+Artifacts: `/tmp/control-viewer-*`. Final race/action logs are
+`control-viewer-race-{chromium,webkit}.log`; full suite is
+`control-viewer-actions-final-pytest.log`. Strict baseline export:
+`/tmp/control-viewer-actions-baseline/comfyui_control/mobile/web`.
+
+## Previously pushed: enlarged desktop preview and equal row gaps
 
 The user requested equal spacing between Save/actions/reuse rows and double-click
 on the desktop preview to enlarge it in a centered floating box, with a shadow,

@@ -33,6 +33,12 @@ window.ComfyDesktopPresentation = (() => {
     const controls = enlarged ? $("desktop-zoom-controls") : destination;
     if (heart && heart.parentElement !== controls)
       place(heart, controls, enlarged ? $("desktop-close-zoom") : null);
+    // Move whole shared components so IDs, handlers and navigation context stay intact.
+    const actionDestination = enlarged ? $("desktop-zoom-actions") : $("selected-image-panel");
+    for (const node of [$("selected-image-tools"), $("selected-image-actions"),
+      document.querySelector(".selected-image-reuse"), $("selected-reuse-status")]) {
+      if (node.parentElement !== actionDestination) place(node, actionDestination);
+    }
   }
   async function copyDetails() {
     const root = $("image-metadata");
@@ -73,14 +79,25 @@ window.ComfyDesktopPresentation = (() => {
     const zoom = desktopNode("dialog", "desktop-image-zoom");
     zoom.setAttribute("aria-label", "Enlarged image preview");
     const zoomStage = desktopNode("div", "desktop-zoom-stage");
-    const zoomControls = desktopNode("div", "desktop-zoom-controls");
+    const zoomControls = desktopNode("div", "desktop-zoom-controls", null, "heading");
+    const zoomViewer = desktopNode("div", null, null, "viewer");
+    const zoomActions = desktopNode("div", "desktop-zoom-actions");
     const closeZoom = desktopNode("button", "desktop-close-zoom", "Close", "small");
     closeZoom.type = "button";
     zoomControls.append(closeZoom);
     zoomStage.append(zoomControls);
-    zoom.append(zoomStage);
+    zoomViewer.append(zoomStage, zoomActions);
+    zoom.append(zoomViewer);
     document.body.append(zoom);
     closeZoom.addEventListener("click", () => zoom.close());
+    zoom.addEventListener("keydown", (event) => {
+      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey ||
+        !["ArrowLeft", "ArrowRight"].includes(event.key) ||
+        event.target.closest("input, textarea, select, [contenteditable]:not([contenteditable='false']), [role='textbox'], [role='slider']") ||
+        document.querySelector("dialog[open]:not(#desktop-image-zoom)")) return;
+      event.preventDefault();
+      $(event.key === "ArrowLeft" ? "previous-image" : "next-image").click();
+    });
     zoom.addEventListener("close", () => {
       if (!ComfyPresentation.desktop.matches || zoom.open) return;
       placePreview(ComfyPresentation.place);
@@ -136,11 +153,18 @@ window.ComfyDesktopPresentation = (() => {
     observer.observe($("settings-card"));
     observer.observe($("prompt-controls"));
     const image = $("selected-image-preview");
+    const sizeZoomImage = () => {
+      if (ComfyPresentation.desktop.matches && zoom.open && image.naturalWidth)
+        zoomStage.style.setProperty("--desktop-zoom-ratio", String(image.naturalWidth / image.naturalHeight));
+    };
+    image.addEventListener("load", sizeZoomImage);
     const enlarge = () => {
       if (!ComfyPresentation.desktop.matches || !image.naturalWidth || !image.getAttribute("src") || zoom.open) return;
       zoomStage.style.setProperty("--desktop-zoom-ratio", String(image.naturalWidth / image.naturalHeight));
       zoom.showModal();
       placePreview(ComfyPresentation.place);
+      closeZoom.focus({ preventScroll: true });
+      zoomViewer.scrollTop = 0;
     };
     image.addEventListener("dblclick", enlarge);
     image.addEventListener("keydown", (event) => {
@@ -243,7 +267,8 @@ window.ComfyDesktopPresentation = (() => {
       summary.setAttribute("aria-disabled", "true");
     }
   }
-  function navigate() {
+  function navigate(name) {
+    if (name === "create" && $("desktop-image-zoom")?.open) $("desktop-image-zoom").close();
     $("create-page").hidden = false;
     $("gallery-page").hidden = false;
   }
@@ -267,7 +292,7 @@ window.ComfyDesktopPresentation = (() => {
     dock.hidden = false;
   }
   function selectedPreview({ item, place }) {
-    if ($("desktop-image-zoom")?.open && ($("workspace").hidden || !item || $("selected-image-preview").getAttribute("src") !== item.url)) {
+    if ($("desktop-image-zoom")?.open && ($("workspace").hidden || !item)) {
       $("desktop-image-zoom").close();
       placePreview(place);
     }
@@ -284,7 +309,7 @@ window.ComfyDesktopPresentation = (() => {
     return { moved, inline };
   }
   function inspectImage(item, inspect, reducedMotion) {
-    if (inspect && item)
+    if (inspect && item && !$("desktop-image-zoom")?.open)
       $("generation-panel").scrollIntoView({ block: "start", behavior: reducedMotion ? "instant" : "smooth" });
   }
   function openImage(items, index, select) {

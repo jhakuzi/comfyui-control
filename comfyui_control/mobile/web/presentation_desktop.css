@@ -433,8 +433,8 @@
   gap: 6px;
   margin-top: 6px;
 }
-:where(html[data-presentation="desktop"]) #selected-image-panel button,
-:where(html[data-presentation="desktop"]) #selected-image-panel .button { min-height: 36px; padding: 6px 8px; }
+:where(html[data-presentation="desktop"]) :is(#selected-image-panel, #desktop-zoom-actions) button,
+:where(html[data-presentation="desktop"]) :is(#selected-image-panel, #desktop-zoom-actions) .button { min-height: 36px; padding: 6px 8px; }
 :where(html[data-presentation="desktop"]) #selected-image-panel > .heading { margin-bottom: 6px; }
 :where(html[data-presentation="desktop"]) #desktop-image-details { width: min(860px, calc(100% - 48px)); }
 :where(html[data-presentation="desktop"]) #desktop-image-details > .viewer > .heading {
@@ -627,15 +627,22 @@
 }
 :where(html[data-presentation="desktop"]) #desktop-image-zoom {
   width: fit-content;
+  min-width: min(480px, calc(100dvw - 48px - var(--safe-area-left) - var(--safe-area-right)));
   max-width: calc(100dvw - 48px - var(--safe-area-left) - var(--safe-area-right));
   max-height: calc(100dvh - 48px - var(--safe-area-top) - var(--safe-area-bottom));
-  padding: 8px;
+  padding: 4px;
   box-shadow: var(--shadow-dialog);
+}
+:where(html[data-presentation="desktop"]) #desktop-image-zoom > .viewer {
+  max-height: calc(100dvh - 66px - var(--safe-area-top) - var(--safe-area-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 :where(html[data-presentation="desktop"]) #desktop-image-zoom::backdrop { background: var(--backdrop); }
 :where(html[data-presentation="desktop"]) #desktop-zoom-stage {
   position: relative;
-  width: min(calc(100dvw - 66px - var(--safe-area-left) - var(--safe-area-right)),
+  margin: 0 auto;
+  width: min(calc(100dvw - 80px - 2 * var(--panel-padding) - var(--safe-area-left) - var(--safe-area-right)),
     calc((100dvh - 66px - var(--safe-area-top) - var(--safe-area-bottom)) * var(--desktop-zoom-ratio)));
   aspect-ratio: var(--desktop-zoom-ratio);
 }
@@ -651,9 +658,10 @@
   position: absolute;
   top: 8px;
   right: 8px;
-  display: flex;
-  align-items: center;
+  z-index: 1;
+  justify-content: flex-end;
   gap: 6px;
+  margin: 0;
 }
 :where(html[data-presentation="desktop"]) #desktop-zoom-controls > button {
   min-height: 36px;

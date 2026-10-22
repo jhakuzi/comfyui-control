@@ -23,7 +23,7 @@ from test_editor_workflow_compatibility import fixture, metadata
 from test_mobile_integration import until
 
 
-async def main(engine, root):
+async def main(engine, root, enlarged=False):
     root.mkdir(parents=True, exist_ok=True)
     output = root / 'output'
     picture(output / 'source.png')
@@ -59,10 +59,16 @@ async def main(engine, root):
             await page.locator('#preset').select_option(preset['id'])
             await page.locator('[data-role="positive"]').fill('Preserve my normal generation draft')
             await page.get_by_role('button', name='View source.png', exact=True).click()
+            if enlarged:
+                await page.locator('#selected-image-preview').focus()
+                await page.keyboard.press('Enter')
+                await expect(page.locator('#desktop-image-zoom')).to_be_visible()
             await page.locator('#selected-image-actions [data-action="edit"]').click()
             await page.locator('#edit-image-prompt').fill('Adjust the lighting')
             await page.locator('#edit-image-form button[type="submit"]').click()
             await until(lambda: len(stub.submissions) == 1)
+            if enlarged:
+                await expect(page.locator('#desktop-image-zoom')).not_to_be_visible()
             expected = editor_to_api(fixture('qwen-editor'), stub.object_info)
             expected['88']['inputs']['image'] = stub.uploads[0]['name']
             expected['89']['inputs']['prompt'] = 'Adjust the lighting'
@@ -78,10 +84,16 @@ async def main(engine, root):
                 'status': {'completed':True,'status_str':'success','messages':[]}}
             await service.refresh()
             await expect(page.locator('#selected-image-name')).to_have_text('edited.png')
+            if enlarged:
+                await page.locator('#selected-image-preview').focus()
+                await page.keyboard.press('Enter')
+                await expect(page.locator('#desktop-image-zoom')).to_be_visible()
             await page.locator('#selected-image-actions [data-action="upscale"]').click()
             await page.locator('#upscale-image-multiplier').fill('1.5')
             await page.locator('#upscale-image-form button[type="submit"]').click()
             await until(lambda: len(stub.submissions) == 2)
+            if enlarged:
+                await expect(page.locator('#desktop-image-zoom')).not_to_be_visible()
             expected = editor_to_api(fixture('seedvr-editor'), stub.object_info)
             expected['1']['inputs']['image'] = stub.uploads[1]['name']
             expected['66:57']['inputs']['resize_type.multiplier'] = 1.5
@@ -110,7 +122,13 @@ async def main(engine, root):
                 'status': {'completed':True,'status_str':'success','messages':[]}}
             await service.refresh()
             await expect(page.locator('#selected-image-name')).to_have_text('upscaled.png')
+            if enlarged:
+                await page.locator('#selected-image-preview').focus()
+                await page.keyboard.press('Enter')
+                await expect(page.locator('#desktop-image-zoom')).to_be_visible()
             await page.locator('#reuse-selected-image').click()
+            if enlarged:
+                await expect(page.locator('#desktop-image-zoom')).not_to_be_visible()
             await page.locator('#advanced').evaluate('el => el.open=true')
             await expect(page.locator('#control-action-scale')).to_have_value('1.5')
             assert len(stub.submissions) == 2
@@ -128,5 +146,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--browser', choices=['chromium','webkit'], default='chromium')
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--enlarged', action='store_true', help='Run desktop actions through the enlarged viewer')
     args = parser.parse_args()
-    asyncio.run(main(args.browser, args.output))
+    asyncio.run(main(args.browser, args.output, args.enlarged))
