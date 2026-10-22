@@ -89,6 +89,14 @@ window.ComfyDesktopPresentation = (() => {
     zoomViewer.append(zoomStage, zoomActions);
     zoom.append(zoomViewer);
     document.body.append(zoom);
+    // Keep the native scrollbar in the outer inset, without widening the right gap.
+    const zoomObserver = new ResizeObserver(afterLayout(() => {
+      if (!zoom.open) return;
+      const gutter = `${zoomViewer.offsetWidth - zoomViewer.clientWidth}px`;
+      if (zoomViewer.style.getPropertyValue("--desktop-zoom-scrollbar") !== gutter)
+        zoomViewer.style.setProperty("--desktop-zoom-scrollbar", gutter);
+    }));
+    zoomObserver.observe(zoomViewer);
     closeZoom.addEventListener("click", () => zoom.close());
     zoom.addEventListener("keydown", (event) => {
       if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey ||

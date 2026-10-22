@@ -1,6 +1,28 @@
 # Session handoff — 2026-10-22
 
-## Current delivery: full action rows and floating corner controls
+## Current delivery: even enlarged-viewer padding
+
+After pushed `0bbdc48`, the user noticed unequal border-to-content spacing in a
+scrolled popup screenshot and requested a small correction. The user approved
+the result and explicitly authorized updating AGENTS.md/HANDOFF.md and pushing
+this follow-up to `testing/webui-desktop-forge`. Parent commit is `0bbdc48`;
+no release or merge is authorized.
+
+- Desktop dialog owns the fixed panel-padding inset; the scrolling `.viewer`
+  has no inner padding, keeping its top clipping edge away from the outer border.
+- A desktop ResizeObserver measures the native scrollbar gutter and offsets it
+  into the right inset, preserving equal left/right spacing across engines.
+- Image size, floating Heart/Close, original action rows and mobile remain intact.
+  Public shell cache version is 11. The viewer browser check now verifies equal
+  top/bottom/side insets and the final button-row bottom gap at all four sizes.
+- Chromium and WebKit passed the complete viewer-action check after this change,
+  including the new inset assertions, action targeting and mobile restoration.
+  Screenshots inspected at the top and bottom of the scrollable viewer; JS syntax
+  and whitespace checks passed. Logs/screenshots: `/tmp/control-viewer-even-insets-*`.
+  The Python suite was not rerun for this presentation-only follow-up; the prior
+  pushed batch passed all 431 tests.
+
+## Previously pushed: full action rows and floating corner controls
 
 The user requested the enlarged viewer to reuse all regular-preview actions and
 styling, with the same three button rows, top-right Favourite/Close controls,

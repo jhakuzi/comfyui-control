@@ -82,7 +82,9 @@ intact. No controls, action state, request handling or ordering logic are cloned
 The popup uses the existing `.viewer` scrolling component and `.heading` class.
 Heart/Close float over the image in its upper-right corner, as explicitly
 requested. The three action rows remain in normal flow below the image. The image keeps its viewport-derived size
-and the viewer scrolls vertically to reveal the controls. Desktop component sizing
+and the viewer scrolls vertically to reveal the controls. The dialog keeps an
+even panel-padding inset around the scrolling viewport; the desktop adapter
+measures the native scrollbar gutter so it does not widen the right gap. Desktop component sizing
 rules apply to both original locations without changing the regular preview.
 Left/Right in the popup activate the existing navigation buttons, respecting
 disabled states, text inputs, modifier keys and nested dialogs. Image navigation

@@ -121,7 +121,9 @@ async def main(engine, root):
                         document.querySelector('#selected-image-actions .saved-image-buttons'),
                         document.querySelector('.selected-image-reuse')].map(el=>el.getBoundingClientRect());
                     const viewer=document.querySelector('#desktop-image-zoom > .viewer');
-                    return {imageHeight:img.height,controlsTop:tools.top,controlsRight:tools.right,controlsBottom:tools.bottom,imageTop:img.top,imageRight:img.right,saveWidth:save.width,
+                    const frame=rect('desktop-image-zoom'), viewport=viewer.getBoundingClientRect();
+                    return {insets:[viewport.top-frame.top,frame.bottom-viewport.bottom,img.left-frame.left,frame.right-img.right],
+                        imageHeight:img.height,controlsTop:tools.top,controlsRight:tools.right,controlsBottom:tools.bottom,imageTop:img.top,imageRight:img.right,saveWidth:save.width,
                         previous:previous.width,next:next.width,firstRow:rows[0].top,imageBottom:img.bottom,
                         rowGaps:[rows[1].top-rows[0].bottom,rows[2].top-rows[1].bottom],
                         scroll:viewer.scrollHeight>viewer.clientHeight,noHorizontal:viewer.scrollWidth<=viewer.clientWidth+1};
@@ -129,12 +131,19 @@ async def main(engine, root):
                 assert abs(geometry['controlsTop']-geometry['imageTop']-8)<1, geometry
                 assert abs(geometry['imageRight']-geometry['controlsRight']-8)<1 and geometry['controlsBottom']<geometry['imageBottom'], geometry
                 assert geometry['firstRow']>=geometry['imageBottom']+5, geometry
+                assert max(geometry['insets'])-min(geometry['insets'])<1, geometry
                 assert geometry['previous']==44 and geometry['next']==44 and geometry['saveWidth']>200, geometry
                 assert all(abs(gap-6)<1 for gap in geometry['rowGaps']) and geometry['scroll'] and geometry['noHorizontal'], geometry
                 assert geometry['imageHeight']>height*.75, geometry
                 await page.screenshot(path=str(root / f'viewer-image-{width}.png'))
                 await viewer.evaluate('el=>el.scrollTop=el.scrollHeight')
                 await expect(page.locator('#vary-selected-image')).to_be_in_viewport()
+                bottom_inset = await page.evaluate('''() => {
+                    const frame=document.getElementById('desktop-image-zoom').getBoundingClientRect();
+                    const row=document.querySelector('.selected-image-reuse').getBoundingClientRect();
+                    return frame.bottom-row.bottom;
+                }''')
+                assert abs(bottom_inset-geometry['insets'][0])<1, (bottom_inset, geometry)
                 await page.screenshot(path=str(root / f'viewer-actions-{width}.png'))
             await page.set_viewport_size({'width':1440,'height':900})
             await page.locator('#desktop-close-zoom').click()

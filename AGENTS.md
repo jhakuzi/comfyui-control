@@ -204,6 +204,10 @@ implemented on `testing/webui-desktop-forge`. Its enlarged preview moves the
 original image/action components through `place()`, with the same three action
 rows below the image and Favourite/Close floating over its top-right corner.
 Keep those corner controls floating; do not move them into a separate header.
+Keep the enlarged dialog inset even on all sides, including while scrolled:
+outer dialog padding owns the inset, and the desktop adapter measures the native
+scrollbar gutter so it does not widen the right gap. Preserve the viewer check
+assertions for equal insets and the final action-row bottom gap.
 Reuse original handlers and navigation context, preserve regular-preview styling,
 and keep mobile strictly unchanged. See `tests/manual/desktop_viewer_actions_browser.py`
 and the saved-editor check with `--enlarged` for action/state regression coverage.

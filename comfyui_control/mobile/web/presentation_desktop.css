@@ -630,11 +630,13 @@
   min-width: min(480px, calc(100dvw - 48px - var(--safe-area-left) - var(--safe-area-right)));
   max-width: calc(100dvw - 48px - var(--safe-area-left) - var(--safe-area-right));
   max-height: calc(100dvh - 48px - var(--safe-area-top) - var(--safe-area-bottom));
-  padding: 4px;
+  padding: var(--panel-padding);
   box-shadow: var(--shadow-dialog);
 }
 :where(html[data-presentation="desktop"]) #desktop-image-zoom > .viewer {
-  max-height: calc(100dvh - 66px - var(--safe-area-top) - var(--safe-area-bottom));
+  max-height: calc(100dvh - 50px - 2 * var(--panel-padding) - var(--safe-area-top) - var(--safe-area-bottom));
+  padding: 0;
+  margin-right: calc(-1 * var(--desktop-zoom-scrollbar, 0px));
   overflow-y: auto;
   overscroll-behavior: contain;
 }
