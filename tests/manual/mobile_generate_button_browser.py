@@ -38,7 +38,7 @@ async def check(browser, engine, url, service, stub, output, viewport):
         assert await page.evaluate('getComputedStyle(document.documentElement).getPropertyValue("--accent").trim()') == '#e7f67b'
         assert await button.evaluate('el => getComputedStyle(el).backgroundColor') == 'rgb(231, 246, 123)'
         assert await label.evaluate('el=>getComputedStyle(el).fontSize') == styles['fontSize']
-        assert not await page.evaluate('!!(window.ComfySavedImageActions || window.ComfyImageFeatureAPI)')
+        await expect(page.locator('#selected-image-actions')).to_be_hidden()
 
         async def geometry():
             box=await button.bounding_box()
@@ -55,6 +55,9 @@ async def check(browser, engine, url, service, stub, output, viewport):
             await expect(button).to_have_attribute('data-progress','indeterminate')
             await expect(button).to_be_disabled()
             await geometry()
+            # Let the enqueue status refresh finish before manually advancing
+            # the fixture queue; an old snapshot must not race the next phase.
+            await until(lambda:not service.refresh_task or service.refresh_task.done())
             return list(service.jobs.values())[-1]
 
         async def run(job):

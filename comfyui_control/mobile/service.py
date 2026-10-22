@@ -750,6 +750,11 @@ class MobileService:
                             'trash': {'available': not reason, 'reason': reason}, **workflow_capabilities()}}
 
     async def describe_image_actions(self, identifier, owner):
+        item = self.images.get(identifier)
+        if item and item.get('type') == 'output' and not item.get('modified') and (self.local_comfy or self.network_output):
+            # A freshly completed job can be selected before Gallery has ever
+            # opened. Reuse its bounded scan to resolve the saved file version.
+            await self.gallery(owner)
         result = self.image_action_capabilities(identifier, owner)
         if self.client is None or not self.online:
             return result

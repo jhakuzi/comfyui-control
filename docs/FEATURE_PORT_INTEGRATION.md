@@ -1,25 +1,25 @@
-# Main-based feature port (Generate integrated)
+# Main-based feature port (Generate and desktop image actions integrated)
 
 Branch: `integration/main-feature-ports`. Base: main `7e500d9`. Feature source:
 `testing/webui-desktop-forge` at `292f216`. No merge or wholesale commit cherry-pick
 is used. Backend features and client modules were ported first. Generate button
-feedback is now activated separately; all image-action UI integration stays deferred.
+feedback and desktop image actions are now activated separately. Phone image-action
+UI integration stays deferred. See [WEBUI_PRESENTATION.md](WEBUI_PRESENTATION.md).
 
 ## Presentation boundary
 
 Main's original `style.css`, prompt favourites, comparison, image details and
-manifest are unchanged. The HTML loads only the Generate helper/styles and wraps
-the existing button label; the application calls it from `updateGenerate()` using
-the existing state and events. The service-worker shell includes those two assets
+manifest are unchanged. The HTML loads the Generate and image-action helpers plus
+a small desktop-only presentation adapter. The application uses existing state
+and events. The service-worker shell includes the new public assets
 with a new cache name. Main's
 `--accent: #e7f67b`, phone/tablet/desktop breakpoints, tabs, dock, previews and
 button geometry stay intact. The Qt desktop/settings UI and release versions are
 also unchanged. No Forge presentation coordinator/adapters or theme are included.
 
-Only `feature_generate.js/css` are loaded and publicly served. The two image-action
-components remain absent from `index.html`, the public asset allowlist and the
-service-worker shell; HTTP requests cannot load them. Their UI integration requires
-a separate request.
+Image-action components are mounted only in desktop presentation. Phone retains
+its original layout, controls, labels and navigation and sends no action capability
+requests. No Forge theme or presentation assets are loaded.
 
 - `feature_generate.js/css`: progress state/paint helpers and an overlay using
   main's yellow accent. Sampling fills the button by the actual reported fraction,
@@ -33,9 +33,12 @@ a separate request.
   while preserving actual progress. Dimensions, placement and typography stay intact.
 - `feature_image_actions.js`: portable selected-image component with optional
   presentation callbacks, no `ComfyPresentation` dependency and no automatic mount.
-- `feature_image_api.js`: workflow/VRAM/Wastebin transport. The future adapter
-  must inject main's existing API, UUID generator and pending-submission journal
-  callbacks. It creates no additional store. Uncertain/malformed responses retain
+  Desktop uses one instance for Preview and the existing saved-image viewer.
+- `feature_image_workflows.js`: existing Edit/Upscale dialog behavior with main's
+  component styles. Cancel preserves the original form and generation state.
+- `feature_image_api.js`: workflow/VRAM/Wastebin transport, supplied with main's
+  existing API, UUID generator, pending-submission journal and submission wrapper.
+  It creates no additional store. Uncertain/malformed responses retain
   the original action UUID for an idempotent retry; normal generation retry stays
   with main's existing controller.
 
@@ -99,8 +102,8 @@ for tests and adds no build/runtime dependency.
 
 `tests/fixtures/main_presentation_baseline.json` pins main's original presentation,
 controller/settings and version files. `test_feature_port_boundaries.py` checks
-those bytes, the narrow Generate integration exceptions, the public shell and
-dormant-asset exclusions. It also checks that
+those bytes, the narrow Generate/desktop image markup exceptions, public assets
+and desktop stylesheet isolation. It also checks that
 image actions leave main's picker/mappings unchanged and create single jobs.
 
 ```bash
@@ -124,8 +127,10 @@ failure/rejection, queued/running cancellation, reconnect, offline completion,
 unchanged typography/dimensions/theme and reduced motion. It also verifies no
 duplicate submissions or requests from the terminal-feedback timer.
 
-Final validation for this port: 427 Python tests passed; Chromium and WebKit passed
-main's original responsive/reconnect/reuse/privacy tests and the main pixel/layout
-comparison and desktop/mobile Generate flow checks. Protocol and local filesystem fixtures
+Current validation: 428 Python tests passed; Chromium and WebKit passed desktop
+image-action flows, responsive/reconnect/reuse/privacy tests, Phone pixel/layout
+comparisons after desktop transitions, and desktop/mobile Generate flow checks.
+The Chromium main comparison also preserves empty/gallery/running layouts outside
+the authorized button feedback. Protocol and local filesystem fixtures
 do not establish real Qwen/SeedVR GPU inference, installed-node compatibility,
 NAS hardware, VPN or physical iOS behavior.

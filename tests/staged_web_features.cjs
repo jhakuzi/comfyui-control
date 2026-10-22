@@ -66,6 +66,17 @@ async function main() {
   assert.equal(calls[0][1].body,calls[1][1].body);
   assert.equal(calls[0][0],'/api/images/selected-image/actions');
   assert.deepEqual(accepted,['same-request-id']);
+  // The live controller owns busy/reconnect/feedback around the same transport.
+  let orchestrated=0;
+  const integrated = new API({readPending:()=>pending,writePending:value=>pending=value,requestId:()=> 'integrated-id',
+    api:async()=>({job:{id:'integrated-id'}}),submit:async value=> {
+      orchestrated++;
+      assert.equal(value,pending);
+      return integrated.retry();
+    }});
+  await integrated.workflow({id:'selected',modified:'123'},'upscale');
+  assert.equal(orchestrated,1);
+  assert.equal(pending,null);
   api.api = async ()=> {const error = Error('Invalid');error.status=400;throw error;};
   await assert.rejects(api.workflow({id:'x',modified:'1'},'upscale',{multiplier:1.5}),/Invalid/);
   assert.equal(pending,null);
@@ -102,6 +113,10 @@ async function main() {
   assert.equal(actionView.pending,false);
   assert.equal(actionView.buttons.get('keep').disabled,false);
   assert.equal(actionView.buttons.get('trash').textContent,'Delete');
+  actionView.api = ()=> {throw Error('Disconnected selection must not request capabilities');};
+  await actionView.select({id:'paused',kept:false},{connected:false});
+  assert.ok([...actionView.buttons.values()].every(button=>button.disabled));
+  assert.match(actionView.status.textContent,/Reconnect/);
   console.log('Unloaded feature state, exact retry, malformed/uncertain responses, safety confirmation and action-refresh race passed');
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

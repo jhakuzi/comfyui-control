@@ -50,6 +50,13 @@ async def serve(source, output):
         service.broadcast()
         return web.json_response({'ok':True})
     app.router.add_post('/__fixture__/running', running)
+    async def complete(request):
+        owner = hashlib.sha256(request.cookies['mobile_client'].encode()).hexdigest()
+        service.jobs['fixture-job'].update(status='complete', images=(await service.gallery(owner))[:2])
+        stub.running = []
+        service.broadcast()
+        return web.json_response({'ok':True})
+    app.router.add_post('/__fixture__/complete', complete)
     runner = web.AppRunner(app, access_log=None, shutdown_timeout=1)
     await runner.setup()
     site = web.TCPSite(runner, '127.0.0.1', 0)
@@ -76,7 +83,7 @@ def same_pixels(first, second):
     assert not different, (first, second, different)
 
 
-async def main(engine, output, baseline):
+async def main(engine, output, baseline, phone_only=False):
     from playwright.async_api import async_playwright, expect
     output.mkdir(parents=True)
     children, pages, contexts, errors = [], [], [], []
@@ -101,9 +108,10 @@ async def main(engine, output, baseline):
                 await page.locator('[data-role="positive"]').fill('Unsent main draft')
                 await expect(page.locator('#connection')).to_have_text('ComfyUI online')
                 assert await page.evaluate('getComputedStyle(document.documentElement).getPropertyValue("--accent").trim()') == '#e7f67b'
-                assert not await page.evaluate('!!(window.ComfySavedImageActions || window.ComfyImageFeatureAPI)')
             sizes = [(390,844),(430,932),(768,1024),(1024,1366),(1280,800),(1440,900),(1920,1080),(2560,1440),(844,390)]
-            for state in ('create','gallery','running'):
+            if phone_only:
+                sizes = [(390,844),(430,932),(768,1024),(844,390)]
+            for state in (('create','gallery','running','complete') if phone_only else ('create','gallery','running')):
                 for index,page in enumerate(pages):
                     if state == 'gallery':
                         await page.locator('#gallery-tab').click()
@@ -118,11 +126,26 @@ async def main(engine, output, baseline):
                         # changes opacity with active feedback, so suppress it
                         # equally on both pages for the surrounding-pixel check.
                         await page.locator('#generate').evaluate('el => el.style.setProperty("box-shadow", "none", "important")')
+                    elif state == 'complete':
+                        response = await page.request.post(urls[index]+'__fixture__/complete',data={},
+                            headers={'Origin':urls[index].rstrip('/'),'Content-Type':'application/json'})
+                        assert response.ok
+                        await expect(page.locator('#job-images > button')).to_have_count(2)
+                        # Compare the settled UI, not terminal feedback whose
+                        # expiry differs between the two independent servers.
+                        await expect(page.locator('#generate')).to_have_text('✦ Generate')
                 for width,height in sizes:
                     screenshots=[]
                     button_boxes=[]
                     for index,page in enumerate(pages):
+                        if phone_only:
+                            await page.set_viewport_size(dict(width=1440,height=900))
+                            await page.evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
                         await page.set_viewport_size(dict(width=width,height=height))
+                        if phone_only:
+                            await expect(page.locator('#same-seed')).to_have_text('Same seed')
+                            if index == 1:
+                                await expect(page.locator('#selected-image-actions')).to_be_hidden()
                         await page.evaluate('window.scrollTo(0,0)')
                         await expect(page.locator('[data-role="positive"]')).to_have_value('Unsent main draft')
                         assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
@@ -158,7 +181,7 @@ async def main(engine, output, baseline):
                 child.stdin.write(b'\n')
                 await child.stdin.drain()
                 await asyncio.wait_for(child.wait(),10)
-    print(f'{engine}: main pixels/layout/navigation match outside the active Generate button at nine sizes; animation geometry and reduced motion passed')
+    print(f'{engine}: {"Phone pixels/controls after desktop round trips" if phone_only else "main pixels/layout/navigation outside the active Generate button"} match baseline; animation geometry and reduced motion passed')
 
 
 if __name__=='__main__':
@@ -166,7 +189,8 @@ if __name__=='__main__':
     parser.add_argument('--browser',choices=['chromium','webkit'],default='chromium')
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--baseline-root',type=Path)
+    parser.add_argument('--phone-only',action='store_true')
     parser.add_argument('--serve',action='store_true')
     parser.add_argument('--source',type=Path)
     args=parser.parse_args()
-    asyncio.run(serve(args.source,args.output) if args.serve else main(args.browser,args.output,args.baseline_root))
+    asyncio.run(serve(args.source,args.output) if args.serve else main(args.browser,args.output,args.baseline_root,args.phone_only))

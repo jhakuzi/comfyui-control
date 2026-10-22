@@ -22,10 +22,15 @@
     <link rel="icon" href="/icon.png" />
     <link rel="stylesheet" href="/style.css" />
     <link rel="stylesheet" href="/feature_generate.css" />
+    <link rel="stylesheet" href="/presentation_desktop.css" />
     <script src="/comparison.js" defer></script>
     <script src="/prompt_history.js" defer></script>
     <script src="/image_details.js" defer></script>
     <script src="/feature_generate.js" defer></script>
+    <script src="/feature_image_actions.js" defer></script>
+    <script src="/feature_image_api.js" defer></script>
+    <script src="/feature_image_workflows.js" defer></script>
+    <script src="/presentation_desktop.js" defer></script>
     <script src="/app.js" defer></script>
     <title>comfyui-control Mobile</title>
   </head>
@@ -219,7 +224,8 @@
                 hidden
               />
               <div id="job-images" class="image-grid"></div>
-              <div class="actions">
+              <div id="selected-image-actions" data-desktop-slot hidden></div>
+              <div class="actions" id="preview-reuse-actions">
                 <button id="same-seed" type="button" hidden>Same seed</button
                 ><button id="variation" type="button" hidden>New variation</button
                 ><button id="new-request" type="button" hidden>
@@ -267,6 +273,31 @@
       </div>
       <p id="notice" role="alert" hidden></p>
     </main>
+    <dialog id="upscale-image-dialog" data-desktop-slot aria-labelledby="upscale-image-title">
+      <form id="upscale-image-form" class="viewer">
+        <h2 id="upscale-image-title">Upscale image</h2>
+        <p id="upscale-image-source" class="hint"></p>
+        <label for="upscale-image-multiplier">Scale multiplier (optional)</label>
+        <input id="upscale-image-multiplier" type="number" min="0" step="any" inputmode="decimal" placeholder="Workflow default" />
+        <p class="hint">Leave blank to use the saved workflow multiplier.</p>
+        <div class="actions">
+          <button id="cancel-upscale-image" type="button">Cancel</button>
+          <button class="primary" type="submit">Upscale image</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="edit-image-dialog" data-desktop-slot aria-labelledby="edit-image-title">
+      <form id="edit-image-form" class="viewer">
+        <h2 id="edit-image-title">Edit image</h2>
+        <p id="edit-image-source" class="hint"></p>
+        <label for="edit-image-prompt">What would you like to change?</label>
+        <textarea id="edit-image-prompt" rows="5" maxlength="20000" required placeholder="Describe your changes. Everything else follows the saved edit workflow."></textarea>
+        <div class="actions">
+          <button id="cancel-edit-image" type="button">Cancel</button>
+          <button class="primary" type="submit">Edit image</button>
+        </div>
+      </form>
+    </dialog>
     <dialog id="prompt-history-dialog" aria-labelledby="prompt-history-title">
       <div class="viewer">
         <div class="heading">

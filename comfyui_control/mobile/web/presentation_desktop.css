@@ -1,0 +1,26 @@
+/* Only the requested image-action additions. Existing component skins and main's
+   layout, tokens, typography and spacing remain authoritative. */
+:where(html[data-presentation="desktop"]) #desktop-image-controls {
+  flex-shrink: 0;
+  margin-bottom: 16px;
+}
+:where(html[data-presentation="desktop"]) #desktop-image-controls .saved-image-buttons {
+  margin-top: 0;
+}
+:where(html[data-presentation="desktop"]) #selected-image-actions .saved-image-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+:where(html[data-presentation="desktop"]) #selected-image-actions button {
+  min-width: 0;
+}
+:where(html[data-presentation="desktop"]) #selected-image-actions .image-heart[aria-pressed="true"] {
+  color: var(--accent);
+}
+:where(html[data-presentation="desktop"]) #selected-image-actions p:empty {
+  display: none;
+}
+:where(html[data-presentation="desktop"]) #job-images > button[aria-current="true"] {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}

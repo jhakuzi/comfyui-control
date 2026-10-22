@@ -1,8 +1,8 @@
 "use strict";
-/* Staged transport only. The future adapter must provide main's existing
-   pending-submission journal; this component creates no persistence or UI. */
+/* Shared transport using the application's existing pending-submission journal;
+   this component creates no persistence or UI. */
 window.ComfyImageFeatureAPI = class ImageFeatureAPI {
-  constructor({ api, readPending, writePending, accepted = () => {}, requestId }) {
+  constructor({ api, readPending, writePending, accepted = () => {}, requestId, submit }) {
     if ([api, readPending, writePending, requestId].some((value) => typeof value !== "function"))
       throw new TypeError("Supply the existing API, pending journal and request-ID callbacks.");
     this.api = api;
@@ -10,6 +10,7 @@ window.ComfyImageFeatureAPI = class ImageFeatureAPI {
     this.writePending = writePending;
     this.accepted = accepted;
     this.requestId = requestId;
+    this.submit = submit;
   }
 
   async workflow(item, action, parameters = {}) {
@@ -18,7 +19,7 @@ window.ComfyImageFeatureAPI = class ImageFeatureAPI {
     const pending = { request_id: this.requestId(), action: { action, image_id: item.id, modified: item.modified,
       ...(action === "edit" ? { prompt: parameters.prompt } : { multiplier: parameters.multiplier }) } };
     this.writePending(pending);
-    return this.retry();
+    return this.submit ? this.submit(pending) : this.retry();
   }
 
   async retry() {

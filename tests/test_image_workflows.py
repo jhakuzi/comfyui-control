@@ -77,6 +77,19 @@ def picture(path, color=0xff446688):
     assert image.save(str(path))
 
 
+def test_fresh_result_actions_resolve_version_without_opening_gallery(tmp_path):
+    async def scenario():
+        picture(tmp_path / 'out/fresh.png')
+        service = MobileService(tmp_path / 'data', MobileSettings(), tmp_path / 'out')
+        item = service.image_ref(dict(filename='fresh.png', subfolder='', type='output'))
+        assert not item.get('modified')
+        result = await service.describe_image_actions(item['id'], ALICE)
+        assert result['modified'] == str((tmp_path / 'out/fresh.png').stat().st_mtime_ns)
+        assert result['actions']['keep']['available']
+        assert (tmp_path / 'out/fresh.png').exists()
+    asyncio.run(scenario())
+
+
 @pytest.mark.parametrize('network', [False, True])
 def test_actions_preserve_graphs_pixels_drafts_and_existing_session_recovery(tmp_path, network):
     async def scenario():

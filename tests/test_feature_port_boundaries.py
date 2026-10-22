@@ -1,8 +1,9 @@
-"""Only Generate is activated; every other main presentation contract is frozen."""
+"""Desktop image additions must preserve main's shared skins and Phone UI."""
 import asyncio
 from copy import deepcopy
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from aiohttp.test_utils import TestClient, TestServer
@@ -16,7 +17,8 @@ from test_mobile_integration import until
 
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE = json.loads((Path(__file__).parent / 'fixtures/main_presentation_baseline.json').read_text())
-GENERATE_ASSETS = {'feature_generate.js', 'feature_generate.css'}
+ACTIVE_ASSETS = {'feature_generate.js', 'feature_generate.css', 'feature_image_actions.js',
+                 'feature_image_api.js', 'feature_image_workflows.js', 'presentation_desktop.js', 'presentation_desktop.css'}
 GENERATE_INTEGRATION = {'comfyui_control/mobile/web/' + name for name in ('index.html', 'app.js', 'sw.js')}
 
 
@@ -27,23 +29,32 @@ def test_existing_main_assets_ui_settings_and_versions_are_unchanged():
         assert hashlib.sha256((ROOT / relative).read_bytes()).hexdigest() == expected, relative
     web = ROOT / 'comfyui_control/mobile/web'
     for file in web.glob('feature_*'):
-        enabled = file.name in GENERATE_ASSETS
+        enabled = file.name in ACTIVE_ASSETS
         assert ('/' + file.name in PUBLIC) is enabled
         assert (file.name in (web / 'index.html').read_text()) is enabled
         assert (file.name in (web / 'sw.js').read_text()) is enabled
-    # Only the Generate label and its two assets may change the shared HTML.
-    original = (web / 'index.html').read_text().replace(
-        '    <link rel="stylesheet" href="/feature_generate.css" />\n', '').replace(
-        '    <script src="/feature_generate.js" defer></script>\n', '').replace(
+    # Strip only the authorized additions; retain the original Phone markup.
+    original = (web / 'index.html').read_text()
+    for asset in ACTIVE_ASSETS:
+        tag = f'<link rel="stylesheet" href="/{asset}" />' if asset.endswith('.css') else f'<script src="/{asset}" defer></script>'
+        original = original.replace('    ' + tag + '\n', '')
+    original = re.sub(r'    <dialog id="(?:edit|upscale)-image-dialog".*?</dialog>\n', '', original, flags=re.S)
+    original = original.replace('              <div id="selected-image-actions" data-desktop-slot hidden></div>\n', '').replace(
+        '<div class="actions" id="preview-reuse-actions">', '<div class="actions">').replace(
         '<span id="generate-label" data-generate-label>✦ Generate</span>', '<span aria-hidden="true">✦</span> Generate')
     assert hashlib.sha256(original.encode()).hexdigest() == BASELINE['files']['comfyui_control/mobile/web/index.html']
-    original_sw = (web / 'sw.js').read_text().replace('comfy-control-mobile-generate-1', 'comfy-control-mobile-1.0.1').replace(
-        '  "/feature_generate.js",\n', '').replace('  "/feature_generate.css",\n', '')
+    original_sw = (web / 'sw.js').read_text().replace('comfy-control-mobile-desktop-actions-1', 'comfy-control-mobile-1.0.1')
+    for asset in ACTIVE_ASSETS:
+        original_sw = original_sw.replace(f'  "/{asset}",\n', '')
     assert hashlib.sha256(original_sw.encode()).hexdigest() == BASELINE['files']['comfyui_control/mobile/web/sw.js']
-    assert not list(web.glob('presentation*')) and not (web / 'theme.css').exists()
+    assert {file.name for file in web.glob('presentation*')} == {'presentation_desktop.js', 'presentation_desktop.css'}
+    assert not (web / 'theme.css').exists()
+    css = re.sub(r'/\*.*?\*/', '', (web / 'presentation_desktop.css').read_text(), flags=re.S)
+    assert all(selector.strip().startswith(':where(html[data-presentation="desktop"])')
+               for selector in re.findall(r'([^{}]+)\{', css))
 
 
-def test_only_generate_helpers_are_public_and_other_ui_stays_frozen(tmp_path):
+def test_feature_assets_are_public_and_existing_component_skins_stay_frozen(tmp_path):
     async def scenario():
         service = MobileService(tmp_path / 'data', MobileSettings(), tmp_path / 'out')
         client = TestClient(TestServer(MobileHTTP(service).app()))
@@ -51,7 +62,7 @@ def test_only_generate_helpers_are_public_and_other_ui_stays_frozen(tmp_path):
         try:
             await client.get('/api/session')
             for file in (ROOT / 'comfyui_control/mobile/web').glob('feature_*'):
-                assert (await client.get('/' + file.name)).status == (200 if file.name in GENERATE_ASSETS else 404)
+                assert (await client.get('/' + file.name)).status == (200 if file.name in ACTIVE_ASSETS else 404)
             for name in ('style.css', 'prompt_history.js', 'comparison.js', 'image_details.js', 'manifest.webmanifest'):
                 response = await client.get('/' if name == 'index.html' else '/' + name)
                 assert response.status == 200

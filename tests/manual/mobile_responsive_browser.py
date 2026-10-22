@@ -21,7 +21,7 @@ from PySide6.QtGui import QColor, QImage
 from comfyui_control.mobile.server import MobileHTTP
 from comfyui_control.mobile.service import MobileService
 from comfyui_control.mobile.settings import MobileSettings
-from test_mobile_integration import ComfyStub
+from test_mobile_integration import ComfyStub, until
 
 
 async def main(browser_name, root):
@@ -126,6 +126,7 @@ async def main(browser_name, root):
             await expect(page.locator('#header-generation #progress')).to_be_visible()
             assert await page.locator('#progress').count() == 1
             assert len(stub.submissions) == 1
+            await until(lambda:not service.refresh_task or service.refresh_task.done())
             stub.running, stub.pending = stub.pending, []
             job = list(service.jobs.values())[-1]
             await stub.emit('execution_start', dict(prompt_id=job['prompt_id']))
@@ -146,7 +147,7 @@ async def main(browser_name, root):
                     bounds = await page.locator('#' + identifier).bounding_box()
                     assert bounds and bounds['y'] >= 0 and bounds['y'] + bounds['height'] <= page.viewport_size['height'] + 1, (identifier, bounds)
                     assert await page.evaluate('({x,y,id}) => !!document.elementFromPoint(x,y)?.closest("#"+id)',
-                        dict(id=identifier, x=bounds['x'] + bounds['width']/2, y=bounds['y'] + bounds['height']/2))
+                        dict(id=identifier, x=bounds['x'] + bounds['width']/2, y=bounds['y'] + bounds['height']/2)), (identifier, bounds)
 
             for width, height in [(1024, 1366), (1366, 1024), (1440, 900), (1000, 600), (390, 844)]:
                 await page.set_viewport_size(dict(width=width, height=height))

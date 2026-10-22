@@ -41,7 +41,7 @@ class SavedImageActions {
         button.title = this.capabilities.actions[key]?.reason || "";
     });
     const trash = this.capabilities.actions.trash;
-    if (!trash.available && !this.pending) this.status.textContent = trash.reason;
+    if (!trash.available && !this.pending && !this.status.textContent) this.status.textContent = trash.reason;
     this.present({ buttons: this.buttons, capabilities: this.capabilities,
       status: this.status, pending: !!this.pending });
   }
@@ -54,7 +54,7 @@ class SavedImageActions {
     button.title = kept ? "Remove image from Favourites" : "Add image to Favourites";
   }
 
-  async select(item) {
+  async select(item, { connected = true } = {}) {
     const epoch = ++this.epoch;
     this.item = item ? { ...item } : null;
     this.capabilities = null;
@@ -64,6 +64,10 @@ class SavedImageActions {
     this.buttons.forEach((button) => { button.disabled = true; });
     if (!item) return;
     this.renderHeart(item.kept);
+    if (!connected) {
+      this.status.textContent = "Reconnect to use image actions.";
+      return;
+    }
     try {
       const result = await this.api(`/api/images/${encodeURIComponent(item.id)}/actions`);
       if (epoch !== this.epoch) return;
