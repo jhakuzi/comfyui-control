@@ -198,12 +198,20 @@ function syncJobMetrics(active) {
   }
   header.hidden = !atTop;
 }
+// Derive the desktop result from the existing jobs, keeping Phone selection intact.
+function previewImages() {
+  const job = currentJob();
+  if (wideLayout.matches && (submitting || !job?.images?.length || activeStatuses.has(job.status)))
+    return state.jobs.slice().reverse().find((entry) => entry.status === "complete" && entry.images?.length)?.images || [];
+  return job?.images || [];
+}
 function syncGenerationDock() {
   const job = currentJob(),
     active = !!job && activeStatuses.has(job.status),
     dock = $("generation-dock"),
     card = $("job-card"),
-    destination = active ? dock : $("job-output");
+    destination = active && (!wideLayout.matches || !$("gallery-page").hidden) ? dock : $("job-output");
+  $("generation-panel").dataset.completed = String(job?.status === "complete");
   renderGenerationStats(job);
   syncJobMetrics(active);
   $("job-output").hidden = !$("gallery-page").hidden;
@@ -255,6 +263,7 @@ function updateGenerate() {
     generateFeedbackTimer = setTimeout(updateGenerate,
       Math.max(1, generateFeedback.feedback.expires - Date.now() + 1));
   }
+  renderImages($("job-images"), previewImages());
   syncGenerationDock();
   syncSelectedImageActions();
 }
@@ -913,7 +922,7 @@ function applyState(value) {
     $("job-card").classList.toggle("has-preview", !!preview);
     if (preview && !$("preview").src.endsWith(preview))
       $("preview").src = preview;
-    renderImages($("job-images"), job.images || []);
+    renderImages($("job-images"), previewImages());
   }
   $("reuse-last").hidden =
     !preset || !state.jobs.some((job) => job.preset === preset.id);
@@ -1069,7 +1078,7 @@ async function reuseSavedImage(item, variation, current) {
 
 function actionImage() {
   if ($("image-dialog").open) return viewerItems[viewerIndex];
-  const items = currentJob()?.images || [];
+  const items = previewImages();
   return items.find((item) => item.id === $("job-images").dataset.selectedImage) || items[0];
 }
 function syncSelectedImageActions(force = false) {
@@ -1103,7 +1112,7 @@ async function imageActionChanged(item, result) {
     if (result.trash) items.splice(index, 1);
     else items[index].kept = result.kept;
   }
-  renderImages($("job-images"), currentJob()?.images || []);
+  renderImages($("job-images"), previewImages());
   renderImages($("gallery-grid"), gallery);
   comparison.gallery(gallery);
   if ($("image-dialog").open && result.trash) {
@@ -1347,7 +1356,14 @@ new ResizeObserver(() => {
   const height = $("generation-dock").getBoundingClientRect().height;
   document.documentElement.style.setProperty("--generation-dock-height", `${height}px`);
 }).observe($("generation-dock"));
-wideLayout.addEventListener("change", () => { syncGenerationDock(); syncSelectedImageActions(); });
+wideLayout.addEventListener("change", () => {
+  renderImages($("job-images"), previewImages());
+  // Restore Phone's original terminal-only visibility after a desktop round trip.
+  const terminal = ["complete", "failed", "cancelled"].includes(currentJob()?.status);
+  $("same-seed").hidden = $("variation").hidden = !terminal;
+  syncGenerationDock();
+  syncSelectedImageActions();
+});
 new ResizeObserver(([entry]) => {
   document.documentElement.style.setProperty("--masthead-height", `${entry.target.getBoundingClientRect().height}px`);
 }).observe(document.querySelector(".masthead"));

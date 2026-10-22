@@ -1,5 +1,5 @@
 /* Only public shell assets are cached. Authenticated responses never enter CacheStorage. */
-const CACHE = "comfy-control-mobile-desktop-actions-1";
+const CACHE = "comfy-control-mobile-desktop-layout-4";
 const SHELL = [
   "/",
   "/app.js",
