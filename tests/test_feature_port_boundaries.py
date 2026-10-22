@@ -26,7 +26,12 @@ def test_existing_main_assets_ui_settings_and_versions_are_unchanged():
     for relative, expected in BASELINE['files'].items():
         if relative in GENERATE_INTEGRATION:
             continue
-        assert hashlib.sha256((ROOT / relative).read_bytes()).hexdigest() == expected, relative
+        content = (ROOT / relative).read_bytes()
+        if relative == 'pyproject.toml':
+            # RPM %prep substitutes Fedora's distribution name for the PyPI wheel.
+            # Reverse only that exact substitution; all other bytes stay protected.
+            content = content.replace(b'"PySide6>=6.7,<7"', b'"PySide6-Essentials>=6.7,<7"')
+        assert hashlib.sha256(content).hexdigest() == expected, relative
     web = ROOT / 'comfyui_control/mobile/web'
     for file in web.glob('feature_*'):
         enabled = file.name in ACTIVE_ASSETS

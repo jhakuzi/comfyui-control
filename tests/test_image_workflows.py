@@ -404,13 +404,15 @@ def test_old_action_preset_and_jobs_are_retained_when_multiplier_mapping_is_adde
             old['image_workflow'] = dict(action='upscale', source=name)
             save_json(service.presets.path(old['id']), old)
             service.jobs['old-job'] = dict(id='old-job', owner=ALICE, preset=old['id'], created=1,
-                scope=service.output_scope, status='complete', images=[])
+                scope=service.output_scope, status='complete', images=[], seconds_per_iteration=None)
             previous_job = deepcopy(service.jobs['old-job'])
             item = (await service.gallery(ALICE))[0]
             result = await service.image_action(item['id'], ALICE, dict(action='upscale', multiplier=1.5,
                 request_id=str(uuid.uuid4()), modified=item['modified']))
             assert result['job']['preset'] != old['id']
             assert result['job']['values']['action-scale'] == 1.5
+            # Exercise reconciliation rather than racing its background task.
+            await service.refresh()
             assert service.presets.get(old['id']) == old and service.jobs['old-job'] == previous_job
         finally:
             await service.stop()

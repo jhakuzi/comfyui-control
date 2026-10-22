@@ -1,5 +1,5 @@
 Name:           comfyui-control
-Version:        1.0.2
+Version:        1.0.3
 Release:        1%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
@@ -62,6 +62,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Thu Oct 22 2026 ComfyUI Control contributors - 1.0.3-1
+- Correct RPM dependency-normalization and reconciled-job fixture checks.
+
 * Thu Oct 22 2026 ComfyUI Control contributors - 1.0.2-1
 - Refine Desktop columns, previews, prompt overlays and selector refresh controls.
 - Add shared image actions and Generate progress while preserving Phone presentation.
