@@ -240,7 +240,41 @@ class MobileHTTP:
         await object_body(request)
         return json_response(await self.service.prepare_image_reuse(request.match_info['id'], request[OWNER]))
 
+    async def image_actions(self, request):
+        if request.method == 'GET':
+            return json_response(await self.service.describe_image_actions(request.match_info['id'], request[OWNER]))
+        return json_response(await self.service.image_action(request.match_info['id'], request[OWNER], await object_body(request)))
+
+    async def cleanup_vram(self, request):
+        await object_body(request)
+        return json_response(await self.service.cleanup_vram())
+
+    async def trash(self, request):
+        return json_response(await self.service.image_trash(request[OWNER]))
+
+    async def restore_image(self, request):
+        body = await object_body(request)
+        if body.get('confirm') is not True:
+            raise ValueError('Confirm restoring this image.')
+        return json_response(await self.service.image_trash(request[OWNER], request.match_info['token']))
+
+    async def delete_permanently(self, request):
+        return json_response(await self.service.delete_permanently(
+            request[OWNER], await object_body(request), request.match_info.get('token')))
+
+    async def wastebin_thumbnail(self, request):
+        try:
+            contents = await self.service.wastebin_thumbnail(request[OWNER], request.match_info['token'])
+        except (OSError, ValueError) as exc:
+            raise web.HTTPNotFound(text=str(exc)) from None
+        # No disk/path or private metadata is exposed; use the shared thumbnail
+        # encoder but not the image cache, which may outlive a restore/delete.
+        return web.Response(body=await self.encode_image(contents, thumbnail=True, size=384), content_type='image/jpeg')
+
     async def image(self, request):
+        if request.match_info['id'] in self.service.unavailable_images or self.service.image_library.deleted_image(
+                self.service.output_scope, self.service.images.get(request.match_info['id'], {'id': request.match_info['id']})):
+            raise web.HTTPNotFound(text='This image is no longer available. Refresh the gallery.')
         thumb_size = int(request.query.get('size', '384')) if request.query.get('thumbnail') == '1' else 384
         if thumb_size not in {384, 768, 1280}:
             raise ValueError('Choose a supported thumbnail size: 384, 768 or 1280.')
@@ -335,34 +369,8 @@ class MobileHTTP:
         return web.Response(body=self.thumbnails[key], content_type="image/jpeg")
 
     async def encode_image(self, source, thumbnail, size=384):
-        def encode():
-            from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QSize, Qt
-            from PySide6.QtGui import QImageReader
-            buffer = None
-            if isinstance(source, Path):
-                reader = QImageReader(str(source))
-            else:
-                buffer = QBuffer()
-                buffer.setData(source)
-                buffer.open(QIODevice.OpenModeFlag.ReadOnly)
-                reader = QImageReader(buffer)
-            reader.setAutoTransform(True)
-            if thumbnail and max(reader.size().width(), reader.size().height()) > size:
-                reader.setScaledSize(reader.size().scaled(QSize(size, size), Qt.AspectRatioMode.KeepAspectRatio))
-            image = reader.read()
-            if image.isNull():
-                return None
-            # Shared pixels must not bypass ownership via embedded PNG prompts.
-            # Encode only the HTTP response; the original file stays untouched.
-            for key in image.textKeys():
-                image.setText(key, '')
-            data = QByteArray()
-            output = QBuffer(data)
-            output.open(QIODevice.OpenModeFlag.WriteOnly)
-            if not image.save(output, 'JPEG' if thumbnail else 'PNG', (88 if size > 384 else 80) if thumbnail else -1):
-                return None
-            return bytes(data)
-        data = await asyncio.to_thread(encode)
+        from .image_pixels import encode_image
+        data = await encode_image(source, thumbnail, size)
         if data is None:
             raise web.HTTPNotFound(text='Image could not be read. Refresh the gallery.')
         return data
@@ -405,6 +413,11 @@ class MobileHTTP:
             web.post('/api/presets/{id}/models', self.refresh_models),
             web.post('/api/generate', self.generate), web.post('/api/jobs/{id}/cancel', self.cancel),
             web.post('/api/images/{id}/reuse', self.image_reuse),
+            web.get('/api/images/{id}/actions', self.image_actions), web.post('/api/images/{id}/actions', self.image_actions),
+            web.post('/api/vram/cleanup', self.cleanup_vram),
+            web.get('/api/trash', self.trash), web.post('/api/trash/{token}/restore', self.restore_image),
+            web.get('/api/trash/{token}/thumbnail', self.wastebin_thumbnail),
+            web.post('/api/trash/{token}/delete', self.delete_permanently), web.post('/api/trash/empty', self.delete_permanently),
             web.get('/api/prompts', self.prompts), web.delete('/api/prompts', self.prompts),
             web.put('/api/prompts/{id}', self.prompt), web.delete('/api/prompts/{id}', self.prompt),
             web.get('/api/gallery', self.gallery), web.get('/api/images/{id}', self.image), web.get('/api/preview', self.preview),

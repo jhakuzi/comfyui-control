@@ -9,6 +9,7 @@ import secrets
 import uuid
 
 from .settings import save_json
+from .input_metadata import expanded_inputs
 
 ROLES = {"positive", "negative", "model", "lora_model", "lora_strength", "lora_enabled",
          "diffusion_model", "vae", "text_encoder", "sampler", "scheduler",
@@ -55,6 +56,7 @@ def graph_from(value):
 def input_schema(graph, node_id, name, info):
     node = graph[node_id]
     inputs = info.get(node["class_type"], {}).get("input", {})
+    inputs = expanded_inputs(inputs, node['inputs'])
     definition = inputs.get("required", {}).get(name, inputs.get("optional", {}).get(name, []))
     return definition if isinstance(definition, (list, tuple)) else []
 
@@ -70,8 +72,13 @@ def candidates(graph, info):
             schema = input_schema(graph, node_id, name, info)
             limits = schema[1] if len(schema) > 1 and isinstance(schema[1], dict) else {}
             options = schema[0] if schema and isinstance(schema[0], list) else limits.get("options")
+            # JSON exports often serialize a FLOAT default such as 2.0 as 2.
+            # Respect declared FLOAT inputs so fractional edits remain possible.
+            kind = "bool" if type(value) is bool else "int" if type(value) is int else "float" if type(value) is float else "text"
+            if kind == "int" and schema and schema[0] == "FLOAT":
+                kind = "float"
             result.append({"node": node_id, "input": name, "label": f"{title} · {name}",
-                           "default": value, "kind": "bool" if type(value) is bool else "int" if type(value) is int else "float" if type(value) is float else "text",
+                           "default": value, "kind": kind,
                            "options": options, "min": limits.get("min"), "max": limits.get("max"), "step": limits.get("step")})
     return result
 
@@ -93,9 +100,11 @@ def validate_mappings(graph, mappings):
         role = item["role"]
         if role in {"positive", "negative", "model", "lora_model", "diffusion_model", "vae", "text_encoder", "sampler", "scheduler", "aspect_ratio", "custom_aspect_ratio"} and base["kind"] != "text":
             raise ValueError(f"{role} must map to a text or model-name input.")
-        if role in {"width", "height", "steps", "seed", "batch", "alignment"} and base["kind"] != "int":
+        integer_combo = role == "alignment" and base["kind"] == "text" and re.fullmatch(r"[0-9]{1,20}", base["default"])
+        if role in {"width", "height", "steps", "seed", "batch", "alignment"} and base["kind"] != "int" and not integer_combo:
             raise ValueError(f"{role} must map to an integer input.")
-        if role in {"cfg", "lora_strength", "resolution_mp"} and base["kind"] not in {"int", "float"}:
+        numeric_combo = role == "resolution_mp" and base["kind"] == "text" and re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", base["default"])
+        if role in {"cfg", "lora_strength", "resolution_mp"} and base["kind"] not in {"int", "float"} and not numeric_combo:
             raise ValueError(f"{role} must map to a numeric input.")
         if role == "lora_enabled" and base["kind"] != "bool":
             raise ValueError("LoRA enabled must map to a boolean input.")
@@ -272,11 +281,13 @@ class Presets:
             raise ValueError("Invalid preset ID.")
         return self.directory / (identifier + ".json")
 
-    def list(self):
+    def list(self, *, include_internal=False):
         result = []
         for path in sorted(self.directory.glob("*.json")):
             try:
                 item = self.get(path.stem)
+                if item.get("image_workflow") and not include_internal:
+                    continue
                 result.append({"id": item["id"], "name": item["name"], "mapped": bool(item["mappings"])})
             except (ValueError, OSError, KeyError):
                 continue
@@ -294,7 +305,7 @@ class Presets:
     def create(self, name, graph):
         if not isinstance(name, str) or not name.strip() or len(name) > 100:
             raise ValueError("Choose a preset name (up to 100 characters).")
-        if len(self.list()) >= 100:
+        if len(self.list(include_internal=True)) >= 100:
             raise ValueError("Maximum 100 presets. Remove an unused preset first.")
         item = {"id": uuid.uuid4().hex, "name": name.strip(), "graph": graph_from(graph), "mappings": []}
         save_json(self.path(item["id"]), item)

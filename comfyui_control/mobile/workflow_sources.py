@@ -7,6 +7,8 @@ from pathlib import Path, PurePosixPath
 from urllib.parse import quote
 
 from .workflows import graph_from
+from .input_metadata import expanded_inputs
+from .editor_subgraphs import expand_subgraphs, link_table
 
 
 def local_workflow_files(root):
@@ -126,22 +128,14 @@ def _resolve_saved_connections(nodes, connections, info):
 def editor_to_api(editor, info):
     """Convert only metadata-described widgets. Ambiguous custom serialization fails closed."""
     graph = {}
+    editor, literal_inputs = expand_subgraphs(editor)
     nodes = editor.get("nodes", [])
     definitions = editor.get("definitions") or {}
     if not isinstance(nodes, list) or not 0 < len(nodes) <= 3000 or not isinstance(definitions, dict) or definitions.get("subgraphs"):
         raise ValueError("This workflow needs ComfyUI's API export (subgraphs or unsupported editor data).")
     if any(not isinstance(n, dict) or type(n.get("id")) not in (str, int) for n in nodes) or len({str(n['id']) for n in nodes}) != len(nodes):
         raise ValueError("Saved workflow nodes need unique IDs.")
-    links = {}
-    for link in editor.get("links", []):
-        if isinstance(link, dict):
-            keys = ("id", "origin_id", "origin_slot", "target_id", "target_slot", "type")
-            if not all(key in link for key in keys):
-                raise ValueError("Saved workflow contains an incomplete link.")
-            link = [link[key] for key in keys]
-        if not isinstance(link, list) or len(link) < 6:
-            raise ValueError("Saved workflow contains an unsupported link.")
-        links[str(link[0])] = link
+    links = link_table(editor.get('links', []))
     connections_by_node = {}
     for node in nodes:
         node_id, connections = str(node["id"]), {}
@@ -170,9 +164,23 @@ def editor_to_api(editor, info):
         name, node_id = node.get("type"), str(node.get("id"))
         if node.get("mode", 0) in (2, 4):
             continue
+        if name not in info and name in {'Note', 'MarkdownNote'} and not node.get('inputs') and not node.get('outputs'):
+            continue  # Native canvas notes are absent from ComfyUI API exports.
         if name not in info:
             raise ValueError(f"Node {node_id} ({name}): ComfyUI did not provide input metadata. Install/enable this node in ComfyUI, or use an API export or an exact queued snapshot.")
         schema = info[name].get("input", {})
+        hints = node.get('widgets_values_named', {})
+        if not isinstance(hints, dict):
+            raise ValueError(f'Node {node_id}: invalid named widget data; export in API format.')
+        if isinstance(node.get('widgets_values'), dict):
+            hints = {**hints, **node['widgets_values']}
+        elif not hints:
+            declared = [entry['widget']['name'] for entry in node.get('inputs', []) if isinstance(entry.get('widget'), dict) and 'name' in entry['widget']]
+            raw = node.get('widgets_values', [])
+            if isinstance(raw, list) and len(raw) == len(declared):
+                hints = dict(zip(declared, raw))
+        overrides = literal_inputs.get(node_id, {})
+        schema = expanded_inputs(schema, {**hints, **overrides})
         fields = {**schema.get("required", {}), **schema.get("optional", {})}
         values = deepcopy(node.get("widgets_values", []))
         if not isinstance(values, (list, dict)):
@@ -184,6 +192,12 @@ def editor_to_api(editor, info):
                 raise ValueError(f"Node {node_id}: incomplete input metadata for {key}; export in API format.")
             kind = definition[0]
             options = definition[1] if len(definition) > 1 and isinstance(definition[1], dict) else {}
+            if kind == 'IMAGECOMPARE' and options.get('socketless'):
+                # Native empty comparison widgets have no saved values. Their
+                # API representation is a UI-value wrapper, not a connection.
+                if (isinstance(values, list) and index == len(values)) or (isinstance(values, dict) and key not in values):
+                    inputs[key] = {'__value__': ['', '']}
+                    continue
             widget = (isinstance(kind, list) or kind in {"INT", "FLOAT", "STRING", "BOOLEAN", "COMBO"}) and not options.get("forceInput")
             if widget:
                 if isinstance(values, dict):
@@ -200,6 +214,7 @@ def editor_to_api(editor, info):
                     index += 1
                     if options.get("control_after_generate") and index < len(values) and values[index] in ("fixed", "randomize", "increment", "decrement"):
                         index += 1
+                value = overrides.get(key, value)
                 choices = kind if isinstance(kind, list) else options.get("options")
                 valid = value in choices if choices is not None else (
                     type(value) is int if kind == "INT" else type(value) in (int, float) if kind == "FLOAT" else
@@ -207,10 +222,26 @@ def editor_to_api(editor, info):
                 if not valid:
                     raise ValueError(f"Node {node_id}: {key} does not match its metadata; export in API format.")
                 inputs[key] = value
+            elif key in overrides:
+                value = overrides[key]
+                valid = (type(value) is int if kind == 'INT' else type(value) in (int, float) if kind == 'FLOAT'
+                         else type(value) is bool if kind == 'BOOLEAN' else isinstance(value, str) if kind == 'STRING' else False)
+                if not valid:
+                    raise ValueError(f'Node {node_id}: promoted input {key} does not match its metadata.')
+                inputs[key] = value
             if key in connections:
                 inputs[key] = connections[key]
             elif node_id in required_nodes and key in schema.get("required", {}) and key not in inputs:
                 raise ValueError(f"Node {node_id} ({name}): required input '{key}' is not connected in this saved workflow. Connect it in ComfyUI and save again, or use an API-format export.")
+        upload = [entry for entry in node.get('inputs', []) if entry.get('type') == 'IMAGEUPLOAD'
+                  and entry.get('name') not in fields and entry.get('link') is None]
+        can_upload = any(isinstance(d, (list, tuple)) and len(d) > 1 and isinstance(d[1], dict)
+                         and d[1].get('image_upload') for d in fields.values())
+        if len(upload) == 1 and can_upload:
+            if isinstance(values, list) and values[index:] == ['image']:
+                index += 1
+            elif isinstance(values, dict) and values.get(upload[0]['name']) == 'image':
+                values.pop(upload[0]['name'])
         if (isinstance(values, list) and index != len(values)) or (isinstance(values, dict) and values) or set(connections) - set(fields):
             raise ValueError(f"Node {node_id}: custom widgets need ComfyUI's API export or an exact queued snapshot.")
         graph[node_id] = {"class_type": name, "inputs": inputs, "_meta": {"title": node.get("title", name)}}

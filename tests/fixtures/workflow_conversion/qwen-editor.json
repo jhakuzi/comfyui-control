@@ -1,0 +1,728 @@
+{
+  "nodes": [
+    {
+      "id": 86,
+      "type": "CLIPLoader",
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "clip_name",
+          "name": "clip_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "clip_name"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "type",
+          "name": "type",
+          "type": "COMBO",
+          "widget": {
+            "name": "type"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "device",
+          "name": "device",
+          "shape": 7,
+          "type": "COMBO",
+          "widget": {
+            "name": "device"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "CLIP",
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            95
+          ]
+        }
+      ],
+      "widgets_values": [
+        "fixture-encoder.safetensors",
+        "qwen_image",
+        "default"
+      ],
+      "widgets_values_named": {
+        "clip_name": "fixture-encoder.safetensors",
+        "type": "qwen_image",
+        "device": "default"
+      }
+    },
+    {
+      "id": 87,
+      "type": "VAELoader",
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "vae_name",
+          "name": "vae_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "vae_name"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "VAE",
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            97,
+            107
+          ]
+        }
+      ],
+      "widgets_values": [
+        "fixture-qwen-vae.safetensors"
+      ],
+      "widgets_values_named": {
+        "vae_name": "fixture-qwen-vae.safetensors"
+      }
+    },
+    {
+      "id": 88,
+      "type": "LoadImage",
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "image",
+          "name": "image",
+          "type": "COMBO",
+          "widget": {
+            "name": "image"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "choose file to upload",
+          "name": "upload",
+          "type": "IMAGEUPLOAD",
+          "widget": {
+            "name": "upload"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "IMAGE",
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            96
+          ]
+        },
+        {
+          "localized_name": "MASK",
+          "name": "MASK",
+          "type": "MASK",
+          "links": []
+        }
+      ],
+      "widgets_values": [
+        "editor-edit-source.png",
+        "image"
+      ],
+      "widgets_values_named": {
+        "image": "editor-edit-source.png",
+        "upload": "image"
+      }
+    },
+    {
+      "id": 89,
+      "type": "TextEncodeQwenImage21",
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "clip",
+          "name": "clip",
+          "type": "CLIP",
+          "link": 95
+        },
+        {
+          "localized_name": "image_1",
+          "name": "images.image_1",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 96
+        },
+        {
+          "localized_name": "image_2",
+          "name": "images.image_2",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "localized_name": "image_3",
+          "name": "images.image_3",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "localized_name": "vae",
+          "name": "vae",
+          "shape": 7,
+          "type": "VAE",
+          "link": 97
+        },
+        {
+          "localized_name": "prompt",
+          "name": "prompt",
+          "type": "STRING",
+          "widget": {
+            "name": "prompt"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "negative_prompt",
+          "name": "negative_prompt",
+          "type": "STRING",
+          "widget": {
+            "name": "negative_prompt"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "resolution",
+          "name": "resolution",
+          "type": "INT",
+          "widget": {
+            "name": "resolution"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "positive",
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            99
+          ]
+        },
+        {
+          "localized_name": "negative",
+          "name": "negative",
+          "type": "CONDITIONING",
+          "links": [
+            100
+          ]
+        },
+        {
+          "localized_name": "latent",
+          "name": "latent",
+          "type": "LATENT",
+          "links": [
+            105
+          ]
+        }
+      ],
+      "widgets_values": [
+        "Current edit instruction",
+        "",
+        1024
+      ],
+      "widgets_values_named": {
+        "prompt": "Current edit instruction",
+        "negative_prompt": "",
+        "resolution": 1024
+      }
+    },
+    {
+      "id": 90,
+      "type": "QwenImage21Cache",
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "model",
+          "name": "model",
+          "type": "MODEL",
+          "link": 114
+        },
+        {
+          "localized_name": "device",
+          "name": "device",
+          "type": "COMBO",
+          "widget": {
+            "name": "device"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "dtype",
+          "name": "dtype",
+          "type": "COMBO",
+          "widget": {
+            "name": "dtype"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "MODEL",
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            98
+          ]
+        }
+      ],
+      "widgets_values": [
+        "auto",
+        "default"
+      ],
+      "widgets_values_named": {
+        "device": "auto",
+        "dtype": "default"
+      }
+    },
+    {
+      "id": 91,
+      "type": "RandomNoise",
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "noise_seed",
+          "name": "noise_seed",
+          "type": "INT",
+          "widget": {
+            "name": "noise_seed"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "NOISE",
+          "name": "NOISE",
+          "type": "NOISE",
+          "links": [
+            101
+          ]
+        }
+      ],
+      "widgets_values": [
+        740861902239610,
+        "randomize"
+      ],
+      "widgets_values_named": {
+        "noise_seed": 740861902239610,
+        "control_after_generate": "randomize"
+      }
+    },
+    {
+      "id": 92,
+      "type": "CFGGuider",
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "model",
+          "name": "model",
+          "type": "MODEL",
+          "link": 98
+        },
+        {
+          "localized_name": "positive",
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 99
+        },
+        {
+          "localized_name": "negative",
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 100
+        },
+        {
+          "localized_name": "cfg",
+          "name": "cfg",
+          "type": "FLOAT",
+          "widget": {
+            "name": "cfg"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "GUIDER",
+          "name": "GUIDER",
+          "type": "GUIDER",
+          "links": [
+            102
+          ]
+        }
+      ],
+      "widgets_values": [
+        1
+      ],
+      "widgets_values_named": {
+        "cfg": 1
+      }
+    },
+    {
+      "id": 93,
+      "type": "KSamplerSelect",
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "sampler_name",
+          "name": "sampler_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "sampler_name"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "SAMPLER",
+          "name": "SAMPLER",
+          "type": "SAMPLER",
+          "links": [
+            103
+          ]
+        }
+      ],
+      "widgets_values": [
+        "euler"
+      ],
+      "widgets_values_named": {
+        "sampler_name": "euler"
+      }
+    },
+    {
+      "id": 94,
+      "type": "ManualSigmas",
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "sigmas",
+          "name": "sigmas",
+          "type": "STRING",
+          "widget": {
+            "name": "sigmas"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "SIGMAS",
+          "name": "SIGMAS",
+          "type": "SIGMAS",
+          "links": [
+            104
+          ]
+        }
+      ],
+      "widgets_values": [
+        "1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0"
+      ],
+      "widgets_values_named": {
+        "sigmas": "1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0"
+      }
+    },
+    {
+      "id": 95,
+      "type": "SamplerCustomAdvanced",
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "noise",
+          "name": "noise",
+          "type": "NOISE",
+          "link": 101
+        },
+        {
+          "localized_name": "guider",
+          "name": "guider",
+          "type": "GUIDER",
+          "link": 102
+        },
+        {
+          "localized_name": "sampler",
+          "name": "sampler",
+          "type": "SAMPLER",
+          "link": 103
+        },
+        {
+          "localized_name": "sigmas",
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "link": 104
+        },
+        {
+          "localized_name": "latent_image",
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 105
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "output",
+          "name": "output",
+          "type": "LATENT",
+          "links": [
+            106
+          ]
+        },
+        {
+          "localized_name": "denoised_output",
+          "name": "denoised_output",
+          "type": "LATENT",
+          "links": []
+        }
+      ]
+    },
+    {
+      "id": 96,
+      "type": "VAEDecode",
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "samples",
+          "name": "samples",
+          "type": "LATENT",
+          "link": 106
+        },
+        {
+          "localized_name": "vae",
+          "name": "vae",
+          "type": "VAE",
+          "link": 107
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "IMAGE",
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            108
+          ]
+        }
+      ]
+    },
+    {
+      "id": 97,
+      "type": "SaveImage",
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "images",
+          "name": "images",
+          "type": "IMAGE",
+          "link": 108
+        },
+        {
+          "localized_name": "filename_prefix",
+          "name": "filename_prefix",
+          "type": "STRING",
+          "widget": {
+            "name": "filename_prefix"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "images",
+          "name": "images",
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "widgets_values": [
+        "fixture/edited"
+      ],
+      "widgets_values_named": {
+        "filename_prefix": "fixture/edited"
+      }
+    },
+    {
+      "id": 98,
+      "type": "Note",
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "widgets_values": [
+        "Fixture canvas note"
+      ],
+      "widgets_values_named": {
+        "text": "Fixture canvas note"
+      }
+    },
+    {
+      "id": 99,
+      "type": "LoaderGGUF",
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "gguf_name",
+          "name": "gguf_name",
+          "type": "COMBO",
+          "widget": {
+            "name": "gguf_name"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "MODEL",
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            114
+          ]
+        }
+      ],
+      "widgets_values": [
+        "fixture-qwen.gguf"
+      ],
+      "widgets_values_named": {
+        "gguf_name": "fixture-qwen.gguf"
+      }
+    }
+  ],
+  "links": [
+    [
+      98,
+      90,
+      0,
+      92,
+      0,
+      "MODEL"
+    ],
+    [
+      99,
+      89,
+      0,
+      92,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      100,
+      89,
+      1,
+      92,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      101,
+      91,
+      0,
+      95,
+      0,
+      "NOISE"
+    ],
+    [
+      102,
+      92,
+      0,
+      95,
+      1,
+      "GUIDER"
+    ],
+    [
+      103,
+      93,
+      0,
+      95,
+      2,
+      "SAMPLER"
+    ],
+    [
+      104,
+      94,
+      0,
+      95,
+      3,
+      "SIGMAS"
+    ],
+    [
+      105,
+      89,
+      2,
+      95,
+      4,
+      "LATENT"
+    ],
+    [
+      106,
+      95,
+      0,
+      96,
+      0,
+      "LATENT"
+    ],
+    [
+      107,
+      87,
+      0,
+      96,
+      1,
+      "VAE"
+    ],
+    [
+      108,
+      96,
+      0,
+      97,
+      0,
+      "IMAGE"
+    ],
+    [
+      114,
+      99,
+      0,
+      90,
+      0,
+      "MODEL"
+    ],
+    [
+      95,
+      86,
+      0,
+      89,
+      0,
+      "CLIP"
+    ],
+    [
+      96,
+      88,
+      0,
+      89,
+      1,
+      "IMAGE"
+    ],
+    [
+      97,
+      87,
+      0,
+      89,
+      4,
+      "VAE"
+    ]
+  ],
+  "id": "744c423c-9947-40a3-b011-0374c98556fe"
+}
