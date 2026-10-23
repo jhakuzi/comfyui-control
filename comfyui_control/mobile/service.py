@@ -15,7 +15,7 @@ import aiohttp
 
 from .client import ComfyClient, ComfyError
 from .settings import lan_address, save_json
-from .workflows import Presets, candidates, fields_for, render, suggested_mappings, with_model_controls, MODEL_CONTROLS_VERSION
+from .workflows import Presets, candidates, fields_for, render, default_disabled_loras, suggested_mappings, with_model_controls, MODEL_CONTROLS_VERSION
 from .workflow_sources import saved_workflows, saved_workflow_graph
 from ..performance import GenerationPerformance
 from .prompt_history import PromptHistory
@@ -260,9 +260,10 @@ class MobileService:
                 preset["model_upgrade_revision"] = revision(previous)
             save_json(self.presets.path(preset["id"]), preset)
         lora_models = await self.lora_choices(preset, info)
-        return {"id": preset["id"], "name": preset["name"], "revision": revision(preset),
+        return {"id": preset["id"], "name": preset["name"], "comfy_source": preset.get("comfy_source"), "revision": revision(preset),
                 "graph_revision": hashlib.sha256(json.dumps(preset["graph"], sort_keys=True).encode()).hexdigest(),
                 "model_upgrade_revision": preset.get("model_upgrade_revision"),
+                "default_disabled_loras": default_disabled_loras(preset),
                 "fields": fields_for(preset, info, lora_models), "candidates": [{k: v for k, v in item.items() if k != "default"} for item in candidates(preset["graph"], info)],
                 "missing_nodes": missing}
 
@@ -280,7 +281,7 @@ class MobileService:
         return await saved_workflows(self.client)
 
     async def import_saved_workflow(self, name):
-        graph = await saved_workflow_graph(self.client, name)
+        graph = await saved_workflow_graph(self.client, name, retain_loras=True)
         for item in self.presets.list():
             existing = self.presets.get(item["id"])
             if existing.get("comfy_source") == name and existing["graph"] == graph:
@@ -317,10 +318,11 @@ class MobileService:
             lora_models = await self.lora_choices(preset, info)
             if expected_scope is not None and expected_scope != self.output_scope:
                 raise ValueError('The output folder changed. No generation was queued; refresh the gallery.')
-            graph, actual = render(preset, body.get("values", {}), body.get("random_seed", False), body.get("disabled_loras", []), info, lora_models)
+            disabled_loras = body.get("disabled_loras", default_disabled_loras(preset))
+            graph, actual = render(preset, body.get("values", {}), body.get("random_seed", False), disabled_loras, info, lora_models)
             # Journal before the network request. A lost response never retries a prompt blindly.
             job = {"id": request_id, "owner": owner, "scope": self.output_scope, "preset": preset["id"], "preset_name": preset["name"], "revision": revision(preset),
-                   "values": actual, "disabled_loras": body.get("disabled_loras", []), "created": time.time(),
+                   "values": actual, "disabled_loras": disabled_loras, "created": time.time(),
                    "status": "submitting", "phase": "preparing", "progress": None, "images": [], "prompt_id": None,
                    "prompt_history_recorded": False}
             controls = fields_for(preset, info, lora_models)

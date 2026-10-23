@@ -11,7 +11,7 @@ from playwright.async_api import async_playwright, expect
 
 from comfyui_control.mobile.server import MobileHTTP
 from comfyui_control.mobile.service import MobileService
-from comfyui_control.mobile.settings import MobileSettings
+from comfyui_control.mobile.settings import MobileSettings, save_json
 from test_mobile_integration import ComfyStub, until
 
 
@@ -196,11 +196,14 @@ async def main(engine,output):
     output.mkdir(parents=True)
     graph={'text':dict(class_type='Prompt',inputs={'text':'Protocol test'})}
     stub=ComfyStub(graph)
+    stub.saved['Generate fixture.json']=graph
     upstream=TestServer(stub.app())
     await upstream.start_server()
     service=MobileService(output/'data',MobileSettings(comfy_url=str(upstream.make_url('/'))),output/'images')
     preset=service.presets.create('Generate fixture',graph)
-    service.presets.map(preset['id'],[dict(key='prompt',node='text',input='text',role='positive',label='Prompt')])
+    preset=service.presets.map(preset['id'],[dict(key='prompt',node='text',input='text',role='positive',label='Prompt')])
+    preset['comfy_source']='Generate fixture.json'
+    save_json(service.presets.path(preset['id']),preset)
     await service.start()
     await until(lambda:service.online)
     runner=web.AppRunner(MobileHTTP(service).app(),access_log=None,shutdown_timeout=1)

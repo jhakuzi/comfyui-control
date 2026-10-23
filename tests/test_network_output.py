@@ -393,7 +393,11 @@ def test_desktop_and_live_mobile_recover_fallback_warning_and_gallery(app, tmp_p
     with socket.socket() as port_socket:
         port_socket.bind(('127.0.0.1', 0))
         port = port_socket.getsockname()[1]
-    settings = MobileSettings(enabled=True, bind='127.0.0.1', port=port)
+    upstream_socket = socket.socket()
+    upstream_socket.bind(('127.0.0.1', 0))  # Bound, non-listening: keep this fixture's ComfyUI offline.
+    upstream_port = upstream_socket.getsockname()[1]
+    settings = MobileSettings(enabled=True, bind='127.0.0.1', port=port,
+                              comfy_url=f'http://127.0.0.1:{upstream_port}')
     settings.save()
     window = MainWindow(network_config(tmp_path, monitoring_enabled=False))
     opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
@@ -446,3 +450,4 @@ def test_desktop_and_live_mobile_recover_fallback_warning_and_gallery(app, tmp_p
         window._closing = True
         window.close()
         wait(lambda: not window.mobile.running)
+        upstream_socket.close()

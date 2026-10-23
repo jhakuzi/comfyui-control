@@ -1,4 +1,11 @@
-# Main-based feature port (Generate and desktop image actions integrated)
+# Main-based feature port history
+
+The sections below record the initial integration baseline. The reviewed changes
+now released as 1.0.4 additionally update the shared workflow picker, option refresh
+and safely configured LoRA bypasses, plus the isolated Desktop presentation. The
+old statements that those features were excluded or unchanged apply to the initial
+port only. Current contracts and verification are in [AGENTS.md](../AGENTS.md),
+[HANDOFF.md](../HANDOFF.md) and [WEBUI_PRESENTATION.md](WEBUI_PRESENTATION.md).
 
 Branch: `integration/main-feature-ports`. Base: main `7e500d9`. Feature source:
 `testing/webui-desktop-forge` at `292f216`. No merge or wholesale commit cherry-pick

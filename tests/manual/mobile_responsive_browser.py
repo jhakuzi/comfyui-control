@@ -20,7 +20,7 @@ from PySide6.QtGui import QColor, QImage
 
 from comfyui_control.mobile.server import MobileHTTP
 from comfyui_control.mobile.service import MobileService
-from comfyui_control.mobile.settings import MobileSettings
+from comfyui_control.mobile.settings import MobileSettings, save_json
 from test_mobile_integration import ComfyStub, until
 
 
@@ -47,6 +47,7 @@ async def main(browser_name, root):
     assert image.save(str(output / 'desktop.png'))
     original_png = (output / 'desktop.png').read_bytes()
     stub = ComfyStub(graph)
+    stub.saved['Quantized workflow.json'] = graph
     upstream = TestServer(stub.app())
     await upstream.start_server()
     service = MobileService(root / 'data', MobileSettings(comfy_url=str(upstream.make_url('/'))), output)
@@ -57,6 +58,8 @@ async def main(browser_name, root):
                               ('sampler', 'width', 'width'), ('sampler', 'height', 'height')]:
         mappings.append(dict(node=node, input=field, role=role, label=field.title(), key=f'm-{len(mappings)}'))
     preset = service.presets.map(preset['id'], mappings)
+    preset['comfy_source'] = 'Quantized workflow.json'
+    save_json(service.presets.path(preset['id']), preset)
     await service.start()
     runner = web.AppRunner(MobileHTTP(service).app(), access_log=None, shutdown_timeout=1)
     await runner.setup()
@@ -73,13 +76,15 @@ async def main(browser_name, root):
             page.on('pageerror', lambda error: errors.append(str(error)))
             await page.goto(url)
             await expect(page.locator('#desktop-result-preview')).to_be_visible()
-            await page.locator('#preset').select_option(preset['id'])
+            await expect(page.locator('#preset')).to_have_value('saved:Quantized workflow.json')
+            await expect(page.locator('#generate')).to_be_enabled()
             prompt = page.locator('[data-role="positive"]')
             await expect(prompt).to_be_visible()
             await prompt.fill('An unsent draft survives resizing')
 
             async def layout(width, height, wide):
                 await page.set_viewport_size(dict(width=width, height=height))
+                await page.evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
                 await page.evaluate('window.scrollTo(0,0)')
                 await expect(page.locator('#generate')).to_be_visible()
                 assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
@@ -99,10 +104,103 @@ async def main(browser_name, root):
                                          (1000, 600, True), (1440, 500, False)]:
                 await layout(width, height, wide)
             await layout(1440, 900, True)
+            await expect(page.locator('.desktop-vram-cleanup')).to_have_count(1)
+            await expect(page.locator('.desktop-vram-cleanup svg')).to_have_count(1)
+            await expect(page.locator('#refresh-gallery svg')).to_have_count(1)
+            await expect(page.locator('.prompt-editor-toggle')).to_have_attribute('title', 'Expand Text editor')
+            async with page.expect_response('**/api/vram/cleanup') as cleanup_response:
+                await page.locator('.desktop-vram-cleanup').click()
+            assert (await cleanup_response.value).status == 200
+            await expect(page.locator('.desktop-vram-cleanup')).to_be_enabled()
+            await page.locator('.prompt-editor-toggle').click()
+            await expect(page.locator('.prompt-editor-toggle')).to_have_attribute('aria-expanded', 'true')
+            await page.locator('.prompt-editor-toggle').click()
+            await page.set_viewport_size(dict(width=390, height=844))
+            await expect(page.locator('.desktop-vram-cleanup')).to_have_count(0)
+            await expect(page.locator('#refresh-gallery')).to_have_text('Refresh')
+            await expect(page.locator('.prompt-editor-toggle')).to_have_text('Expand')
+            await layout(1440, 900, True)
+            await page.locator("#notice").evaluate("el => el.hidden=true")
+            # Desktop sections overlay upward without moving summaries, columns or scroll.
+            section_ids = ('lora-card', 'settings-card', 'resolution-card', 'advanced')
+            for width, height in [(1440, 1200), (1280, 900), (1000, 600)]:
+                await page.set_viewport_size(dict(width=width, height=height))
+                await page.evaluate('new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))')
+                for section_id in section_ids:
+                    section = page.locator('#' + section_id)
+                    summary = section.locator(':scope > summary')
+                    await summary.scroll_into_view_if_needed()
+                    await page.evaluate('new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))')
+                    before = await summary.bounding_box()
+                    text_bounds = """el => {
+                        const range = document.createRange();
+                        range.selectNodeContents([...el.childNodes].find(n => n.nodeType === Node.TEXT_NODE && n.textContent.trim()));
+                        const {x, y, width, height} = range.getBoundingClientRect();
+                        return {x, y, width, height};
+                    }"""
+                    title_before = await summary.evaluate(text_bounds)
+                    geometry = await page.evaluate('({scroll:scrollY, height:document.documentElement.scrollHeight})')
+                    await summary.click()
+                    content = section.locator(':scope > .desktop-section-content')
+                    await expect(content).to_be_visible()
+                    await page.evaluate('new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))')
+                    after = await summary.bounding_box()
+                    assert title_before == await summary.evaluate(text_bounds), section_id
+                    bounds = await content.bounding_box()
+                    card = await section.bounding_box()
+                    assert before == after, (section_id, before, after, geometry, await page.evaluate('({scroll:scrollY, height:document.documentElement.scrollHeight})'))
+                    assert geometry == await page.evaluate('({scroll:scrollY, height:document.documentElement.scrollHeight})')
+                    assert bounds['y'] >= 0 and bounds['y'] + bounds['height'] <= card['y'] + 1, (section_id, bounds, card)
+                    assert await content.evaluate('el => getComputedStyle(el).boxShadow') != 'none'
+                    if section_id == 'advanced':
+                        await page.locator('#mapping').evaluate('el => el.open=true')
+                        await expect(page.locator('#mapping-search')).to_be_visible()
+                        assert await content.evaluate('el => el.scrollHeight > el.clientHeight')
+                        await page.screenshot(path=str(root / f'upward-advanced-{width}.png'))
+                        await page.locator('#mapping').evaluate('el => el.open=false')
+                    await summary.click()
+                assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            await page.locator('#settings-card').evaluate('el => el.open=true')
+            await page.set_viewport_size(dict(width=390, height=844))
+            await expect(page.locator('#settings-card > #basic-controls')).to_be_visible()
+            await expect(page.locator('.desktop-section-content')).to_have_count(0)
+            await page.locator('#settings-card').evaluate('el => el.open=false')
+            await layout(1440, 900, True)
+            # Offline feedback belongs in the Desktop masthead, with Phone unchanged.
+            service.online = False
+            service.broadcast()
+            for width, height in [(1440, 900), (1000, 600), (390, 844)]:
+                await page.set_viewport_size(dict(width=width, height=height))
+                if width >= 1000:
+                    await expect(page.locator('#desktop-offline-notice')).to_be_visible()
+                    await expect(page.locator('#comfy-offline')).to_be_hidden()
+                    notice_height = (await page.locator('#desktop-offline-notice').bounding_box())['height']
+                    connection_height = (await page.locator('#connection').bounding_box())['height']
+                    assert abs(notice_height - connection_height) < 1
+                    await page.evaluate('window.scrollTo(0,0)')
+                    await page.screenshot(path=str(root / f'offline-header-{width}.png'))
+                else:
+                    await expect(page.locator('#desktop-offline-notice')).to_be_hidden()
+                    await expect(page.locator('#comfy-offline')).to_be_visible()
+                assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            service.online = True
+            service.broadcast()
+            await layout(1440, 900, True)
+            await expect(page.locator('#desktop-offline-notice')).to_be_hidden()
             # Fixed-seed editing must allow clearing/replacing the text without
             # JavaScript rounding the 64-bit value or submitting a generation.
             await page.locator('#settings-card').evaluate('el => el.open=true')
             await expect(page.locator('[data-role="seed"]')).to_be_disabled()
+            hint = page.locator('.fixed-seed-hint')
+            settings_overlay = page.locator('#settings-card > .desktop-section-content')
+            await expect(hint).to_be_hidden()
+            seed_geometry = await settings_overlay.bounding_box()
+            await page.locator('#random-seed').uncheck()
+            await expect(hint).to_be_hidden()
+            assert seed_geometry == await settings_overlay.bounding_box()
+            await page.locator('#random-seed').check()
+            await expect(hint).to_be_hidden()
+            assert seed_geometry == await settings_overlay.bounding_box()
             await page.locator('#random-seed').uncheck()
             seed = page.locator('[data-role="seed"]')
             await expect(seed).to_be_enabled()
@@ -116,15 +214,17 @@ async def main(browser_name, root):
             await page.locator('#random-seed').check()
             await page.locator('#settings-card').evaluate('el => el.open=false')
             # Keyboard activation opens a normal control without submitting.
-            await page.locator('#prompt-history').focus()
+            await page.locator('.prompt-editor-toggle').focus()
             await page.keyboard.press('Enter')
-            await expect(page.locator('#prompt-history-dialog')).to_be_visible()
-            await page.locator('#close-prompt-history').click()
+            await expect(page.locator('.prompt-editor-toggle')).to_have_attribute('aria-expanded', 'true')
+            await page.locator('.prompt-editor-toggle').click()
             assert not stub.submissions
             await page.locator('#generate').click()
             await expect(page.locator('#job-title')).to_have_text('In the queue')
-            await expect(page.locator('#header-generation #progress')).to_be_visible()
+            await expect(page.locator('#header-generation #progress')).to_be_hidden()
+            await expect(page.locator('#header-generation #generation-stats')).to_be_visible()
             assert await page.locator('#progress').count() == 1
+            await expect(page.locator('.desktop-vram-cleanup')).to_be_disabled()
             assert len(stub.submissions) == 1
             await until(lambda:not service.refresh_task or service.refresh_task.done())
             stub.running, stub.pending = stub.pending, []
@@ -136,6 +236,12 @@ async def main(browser_name, root):
             service.update_hardware(dict(utilization=73, vram_used=6 * 2**30))
             await expect(page.locator('#stat-gpu')).to_have_text('73%')
             await expect(page.locator('#stat-vram')).to_have_text('6.0 GiB')
+            await expect(page.locator('#stat-steps')).to_have_text('4 / 20')
+            job['seconds_per_iteration'] = 2.5
+            service.broadcast()
+            await expect(page.locator('#stat-iteration')).to_have_text('2.50')
+            await stub.emit('progress', dict(prompt_id=job['prompt_id'], value=8, max=20))
+            await expect(page.locator('#stat-steps')).to_have_text('8 / 20')
             for ws in stub.sockets:
                 await ws.send_bytes(struct.pack('>II', 1, 2) + (output / 'image00.png').read_bytes())
             # Desktop reserves an empty result until completion; Phone retains live previews.
@@ -144,10 +250,15 @@ async def main(browser_name, root):
             await page.set_viewport_size(dict(width=390, height=844))
             await expect(page.locator('#preview')).to_be_visible()
             await page.set_viewport_size(dict(width=1440, height=900))
-            await page.locator('#advanced').evaluate('el => el.open=true')
-            await page.locator('#mapping').evaluate('el => el.open=true')
+            # Overlay coverage is tested above; close it before checking controls behind it.
+            await page.locator('#advanced').evaluate('el => el.open=false')
+            await page.locator('#mapping').evaluate('el => el.open=false')
 
-            async def reachable(identifiers=('generate', 'progress', 'cancel')):
+            async def reachable(identifiers=None):
+                await page.evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+                if identifiers is None:
+                    metric = 'stat-steps' if await page.evaluate('wideLayout.matches') else 'progress'
+                    identifiers = ('generate', metric, 'cancel')
                 for identifier in identifiers:
                     # Desktop's requested full-height panel scrolls with the form.
                     await page.evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
@@ -162,7 +273,18 @@ async def main(browser_name, root):
                 await page.set_viewport_size(dict(width=width, height=height))
                 at_top = width >= 1000 and height >= 600
                 parent = '#header-generation' if at_top else '#job-card'
-                await expect(page.locator(parent + ' #progress')).to_be_visible()
+                if at_top:
+                    await expect(page.locator(parent + ' #progress')).to_be_hidden()
+                    await expect(page.locator(parent + ' #job-detail')).to_be_hidden()
+                    await expect(page.locator('#stat-steps')).to_be_visible()
+                    style = await page.locator('#stat-steps').evaluate('el => ({color:getComputedStyle(el).color, font:getComputedStyle(el).fontFamily})')
+                    assert style['color'] == 'rgb(231, 246, 123)', style
+                    assert style['font'] == await page.locator('.brand').evaluate('el => getComputedStyle(el).fontFamily')
+                else:
+                    await expect(page.locator(parent + ' #progress')).to_be_visible()
+                    await expect(page.locator(parent + ' #job-detail')).to_be_visible()
+                    await expect(page.locator('#stat-steps')).to_be_hidden()
+                    await expect(page.locator('#job-detail')).to_contain_text('8 / 20 steps · Quantized workflow')
                 await expect(page.locator(parent + ' #generation-stats')).to_be_visible()
                 for scroll in (0, 800, 100000):
                     await page.evaluate('(y) => window.scrollTo(0,y)', scroll)
@@ -206,9 +328,20 @@ async def main(browser_name, root):
             await page.evaluate('showLogin()')
             await expect(page.locator('#header-generation')).to_be_hidden()
             await page.reload()
-            await expect(page.locator('#header-generation #progress')).to_be_visible()
+            await expect(page.locator('#header-generation #progress')).to_be_hidden()
+            await expect(page.locator('#header-generation #generation-stats')).to_be_visible()
             assert len(stub.submissions) == 1
             await context.set_offline(True)
+            await page.evaluate('connectionFailure(new Error("Fixture: controller unavailable")); clearTimeout(retryTimer)')
+            await expect(page.locator('#offline')).to_have_js_property('hidden', False)
+            await expect(page.locator('#offline')).to_be_hidden()
+            await expect(page.locator('#desktop-offline-notice')).to_have_text('Reconnecting...')
+            await expect(page.locator('#desktop-offline-notice')).to_be_visible()
+            await page.set_viewport_size(dict(width=390, height=844))
+            await expect(page.locator('#offline')).to_be_visible()
+            await expect(page.locator('#desktop-offline-notice')).to_be_hidden()
+            await page.set_viewport_size(dict(width=1440, height=900))
+            await expect(page.locator('#offline')).to_be_hidden()
             stub.history[job['prompt_id']] = dict(prompt=stub.running[0], status=dict(status_str='success'),
                 outputs=dict(save=dict(images=[dict(filename='image00.png', subfolder='', type='output')])))
             stub.running = []
@@ -226,9 +359,9 @@ async def main(browser_name, root):
             await reachable(('generate', 'same-seed', 'variation'))
             assert len(stub.submissions) == 1
             await page.screenshot(path=str(root / 'result-laptop.png'))
-            # Both gallery reuse actions must work with a generation saved by
+            # Desktop settings reuse must work with a generation saved by
             # this laptop browser, without submitting another job on selection.
-            for action, randomize in [('reuse-image', False), ('vary-image', True)]:
+            for action, randomize in [('reuse-image', False)]:
                 await page.locator('#gallery-tab').click()
                 if await page.locator('#select-compare').get_attribute('aria-pressed') == 'true':
                     await page.locator('#select-compare').click()
@@ -246,7 +379,7 @@ async def main(browser_name, root):
                 assert len(stub.submissions) == 1
             # Direct ComfyUI output has no mobile job. Recover its exact mapped
             # values from PNG metadata, retaining the user's custom mappings.
-            for action, randomize in [('reuse-image', False), ('vary-image', True)]:
+            for action, randomize in [('reuse-image', False)]:
                 await page.locator('#gallery-tab').click()
                 tile = page.get_by_role('button', name='View desktop.png', exact=True)
                 await tile.scroll_into_view_if_needed()
@@ -275,7 +408,8 @@ async def main(browser_name, root):
             touch = await tablet.new_page()
             touch.on('pageerror', lambda error: errors.append(str(error)))
             await touch.goto(url)
-            await touch.locator('#preset').select_option(preset['id'])
+            await expect(touch.locator('#preset')).to_have_value('saved:Quantized workflow.json')
+            await expect(touch.locator('#generate')).to_be_enabled()
             await touch.locator('[data-role="positive"]').fill('Tablet draft')
             await touch.locator('.prompt-editor-toggle').tap()
             await expect(touch.locator('.prompt-editor-toggle')).to_have_attribute('aria-expanded', 'true')

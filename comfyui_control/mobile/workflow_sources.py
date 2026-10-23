@@ -125,7 +125,7 @@ def _resolve_saved_connections(nodes, connections, info):
     return resolved
 
 
-def editor_to_api(editor, info):
+def editor_to_api(editor, info, *, retain_loras=False, base_graph=None):
     """Convert only metadata-described widgets. Ambiguous custom serialization fails closed."""
     graph = {}
     editor, literal_inputs = expand_subgraphs(editor)
@@ -135,6 +135,31 @@ def editor_to_api(editor, info):
         raise ValueError("This workflow needs ComfyUI's API export (subgraphs or unsupported editor data).")
     if any(not isinstance(n, dict) or type(n.get("id")) not in (str, int) for n in nodes) or len({str(n['id']) for n in nodes}) != len(nodes):
         raise ValueError("Saved workflow nodes need unique IDs.")
+    retained = {}
+    if retain_loras:
+        # Only known, metadata-described LoRA loaders with unambiguous passthrough
+        # sockets can be exposed as optional nodes. Unknown bypasses stay omitted.
+        for node in nodes:
+            metadata = info.get(node.get('type'), {})
+            schema = metadata.get('input', {})
+            fields = {**schema.get('required', {}), **schema.get('optional', {})}
+            outputs = metadata.get('output', [])
+            if (node.get('mode', 0) not in (0, 4) or 'lora_name' not in fields
+                    or not {'strength_model', 'strength_clip'} & fields.keys()
+                    or not outputs or any(kind not in ('MODEL', 'CLIP') for kind in outputs)):
+                continue
+            routes = {}
+            for slot, kind in enumerate(outputs):
+                matches = [entry['name'] for entry in node.get('inputs', [])
+                           if entry.get('link') is not None and fields.get(entry['name'], [None])[0] == kind]
+                if len(matches) != 1:
+                    break
+                routes[str(slot)] = matches[0]
+            else:
+                retained[str(node['id'])] = dict(bypassed=node.get('mode', 0) == 4, routes=routes)
+                node['mode'] = 0
+    if retain_loras and not retained and base_graph is not None:
+        return graph_from(base_graph)
     links = link_table(editor.get('links', []))
     connections_by_node = {}
     for node in nodes:
@@ -166,6 +191,14 @@ def editor_to_api(editor, info):
             continue
         if name not in info and name in {'Note', 'MarkdownNote'} and not node.get('inputs') and not node.get('outputs'):
             continue  # Native canvas notes are absent from ComfyUI API exports.
+        if base_graph is not None and node_id in base_graph:
+            # The exact snapshot owns opaque custom widget serialization. Only
+            # restore its saved connections through the retained LoRA chain.
+            graph[node_id] = deepcopy(base_graph[node_id])
+            graph[node_id]['inputs'].update(connections_by_node[node_id])
+            if node_id in retained:
+                graph[node_id].setdefault('_meta', {})['control_lora'] = retained[node_id]
+            continue
         if name not in info:
             raise ValueError(f"Node {node_id} ({name}): ComfyUI did not provide input metadata. Install/enable this node in ComfyUI, or use an API export or an exact queued snapshot.")
         schema = info[name].get("input", {})
@@ -245,6 +278,9 @@ def editor_to_api(editor, info):
         if (isinstance(values, list) and index != len(values)) or (isinstance(values, dict) and values) or set(connections) - set(fields):
             raise ValueError(f"Node {node_id}: custom widgets need ComfyUI's API export or an exact queued snapshot.")
         graph[node_id] = {"class_type": name, "inputs": inputs, "_meta": {"title": node.get("title", name)}}
+    for node_id, settings in retained.items():
+        if node_id in graph:
+            graph[node_id].setdefault('_meta', {})['control_lora'] = settings
     for node in graph.values():
         for value in node["inputs"].values():
             if isinstance(value, list) and len(value) == 2 and str(value[0]) not in graph:
@@ -267,8 +303,15 @@ async def saved_workflows(client):
                    and not PurePosixPath(name).is_absolute() and ".." not in PurePosixPath(name).parts and "\\" not in name})[:500]
 
 
-async def saved_workflow_graph(client, name):
+async def saved_workflow_graph(client, name, *, retain_loras=False):
     if name not in await saved_workflows(client):
         raise ValueError("Choose a workflow from ComfyUI's saved workflow list.")
     value = await client.request("GET", "/userdata/" + quote("workflows/" + name, safe=""))
+    if retain_loras and isinstance(value, dict) and isinstance(value.get('nodes'), list):
+        info = await client.request('GET', '/object_info')
+        try:
+            exact = await queued_workflow(client, value)
+        except ValueError:
+            exact = None
+        return editor_to_api(value, info, retain_loras=True, base_graph=exact)
     return await import_graph(client, value)

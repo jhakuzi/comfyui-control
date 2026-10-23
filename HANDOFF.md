@@ -1,72 +1,150 @@
-# Session handoff — 2026-10-22
+# Session handoff — 2026-10-23
 
-## Current baseline
+## Release baseline and next session
 
-- Active development/testing branch: `integration/main-feature-ports`.
-- Latest application commit: `3063489` — desktop image-action integration, pushed
-  to the same branch on `https://github.com/jhakuzi/comfyui-control.git`.
-- Base: main `7e500d9` (version 1.0.1). Selected features came from
-  `testing/webui-desktop-forge` at `292f216`; that branch is a reference, not the
-  working branch. Its charcoal/blue theme and desktop redesign were not merged.
-- This handoff update changes documentation only. No application work remains
-  uncommitted from the completed desktop integration.
+This session's reviewed changes are prepared as **1.0.4**, from testing branch
+`testing/ui-flicker-fixes` based on main `e5b226b` (1.0.3). The user explicitly
+approved pushing this branch, merging to main, updating these handoff/agent guides,
+and initiating COPR. The matching `v1.0.4` tag triggers `.github/workflows/copr.yml`:
+source RPM/app ZIP, Fedora RPM build/tests, then COPR submission and build result.
+Use Git history, remote refs and the tagged Actions run to determine the current
+merge/build state; do not infer pending release work from this preparation record.
 
-## Completed
+Repository: https://github.com/jhakuzi/comfyui-control
+Local development checkout used here:
+`/home/jhaku/Downloads/Testing/comfyui-control-integration-testing`.
+This is distinct from the chat's projectless Documents directory and the older
+blue-themed `comfyui-control-presentation-testing` checkout. Use the actual Git
+checkout, read `AGENTS.md`, and inspect branch/status before editing. Normal work
+continues on main or a user-requested testing branch, one requested feature at a
+time. Do not treat past approval as authorization for future releases.
 
-- `26395f7`: shared backend/API support for Qwen Edit, SeedVR Upscale, Favourites,
-  virtual Wastebin, idle-only VRAM cleanup and workflow compatibility. Main's
-  existing opt-in cross-device metadata sharing is retained.
-- `3bbea58`: Generate animation uses main's yellow theme and actual sampling
-  progress, with an indeterminate highlight elsewhere and reduced-motion support.
-  Existing completion, cancellation, failure and reconnect handling is retained.
-- `3063489`: Desktop Preview & Results has Heart / Edit / Upscale / Delete above
-  Reuse settings / New variation. One action component follows image navigation
-  and moves into the existing image viewer; controls are not cloned.
-- Reuse settings restores the selected image's complete available settings and
-  exact seed without generating. Edit/Upscale use the existing named workflows
-  and shared pending UUID journal. Cancel preserves the generation form/draft.
-- Favourites persist in the existing sidecar. Delete confirms a virtual marker;
-  original files stay in place. A fresh result's file version is resolved through
-  the existing bounded gallery scan before actions become available.
+## Changes completed in this session
 
-## Desktop / Phone separation
+### Shared application/backend
 
-Desktop and Phone are independently developed presentations of the same app,
-state and backend. Desktop placement is isolated in `presentation_desktop.js/css`;
-shared behavior stays in `app.js` and `feature_*.js`. Main's yellow theme and
-1000×600 wide-layout boundary remain unchanged. No Forge presentation files load.
+- Model refresh now reconciles option lists in place when graph/control signatures
+  are unchanged. Controls, icon refresh buttons, handlers, live drafts, mapping
+  edits, focus, text selection, scroll and 64-bit seed strings survive. Missing
+  current choices remain available as saved unavailable values. Structural changes
+  rebuild atomically from the response, without a second fetch; stale responses
+  cannot resurrect old workflows. Saved-workflow refresh preserves its optgroup
+  while awaiting a response and after failures. Preview height writes are deduped.
+- Workflow picker now shows only saved files from ComfyUI's workflows directory,
+  including nested names, plus one top `Reused image` entry after settings reuse.
+  New reuse replaces that entry; choosing a saved workflow clears it. Reload keeps
+  the appropriate selection/draft. Old/internal preset snapshots are retained for
+  jobs/actions but are hidden from the menu. Removing a selected saved file clears
+  its form safely. Backend descriptions expose `comfy_source`.
+- Saved-editor import retains metadata-recognized active/bypassed LoRA loaders
+  with unambiguous MODEL/CLIP passthrough links. All configured nodes remain in
+  controls; unchecked means true bypass and checked means active. Saved model and
+  strength values remain unchanged. `_meta.control_lora` marks routes/defaults;
+  submitted graphs recursively bypass disabled nodes and strip this private marker.
+  Legacy unmarked presets keep their earlier zero-strength disabling semantics.
+  Exact queued snapshots preserve opaque custom widgets. Unknown/muted nodes are
+  not guessed. Descriptions expose `default_disabled_loras`, used by new drafts.
+- Existing shared queue, security/privacy, API, image-action journal and backend
+  remain authoritative. No new app/frontend framework or ComfyUI extension.
 
-Phone keeps its original controls, Same seed label, layout and interactions.
-Desktop image-action components mount lazily; Phone sends no capability requests.
-Resizing restores original nodes/labels and closes desktop action forms. Shared
-changes still require Phone regression checks. See `docs/WEBUI_PRESENTATION.md`.
+### Desktop presentation
 
-## Pending scope and known limitations
+- Baseline retained from 1.0.3: equal-width columns share the tab bar's outer edges,
+  centered 28px gap; main preview height tracks the first workflow card; Resolution
+  and Advanced sit below Preview; last completed image remains during generation.
+- Header live metrics are a compact themed row (existing s/it speed, VRAM, GPU,
+  current/total steps). Blue native bar/workflow name were removed from the header.
+  A matching `Reconnecting...` badge is shown during disconnection; existing right
+  connection badge stays. Duplicate form/offline card and Preview missing-workflow
+  prose are hidden on Desktop. Tooltips, action availability and errors remain.
+- Gallery refresh uses the same icon as model refresh. Main prompt has a centered
+  chevron and a broom for the existing idle-only VRAM action, with labels/tooltips.
+  Cleanup refuses busy queues. The user declined changing any ComfyUI installation;
+  `/free` timing remains server-controlled. No external patch was applied.
+- LoRA rows are compact; redundant visual selector/strength labels are hidden but
+  accessible names remain. Slider bounds are -2..2 on Desktop, restored on Phone;
+  numeric input limits and saved values are unchanged.
+- LoRAs, Generation settings, Resolution and Advanced open upward with shadows,
+  bounded internal scrolling and no summary/column movement. Arrows point upward
+  when open and rotate within fixed-width slots to prevent text movement.
+- Desktop prompt history is hidden. Negative prompt opens by default and now has
+  the same icon-only expansion behavior as the main editor, with the native summary
+  arrow hidden. Both expand downward as shadowed overlays ending at the main left
+  workflow card's bottom border. Flow rows and column positions stay fixed; shared
+  expansion state/callbacks are reused, and Phone DOM/open state is restored.
+- Fixed-seed explanation was first stabilized, then removed entirely on Desktop
+  at the user's request, including reserved space. Phone retains its original hint.
+- Removed the transient Phone submission card on Desktop Create: it exposed a blue
+  native progress bar and squeezed the preview before acknowledgement. Normal
+  queued/preparing/sampling/processing feedback no longer reserves 88px above the
+  image. Preview dimensions stay fixed; Cancel sits beside Preview & Results.
+  Failure/unknown-job diagnostics still have space. Phone status/dock is unchanged.
+- Compare replaces New variation in both Desktop Preview and enlarged viewer.
+  A modal, panel-sized gallery excludes the first selected image, accepts one
+  additional image and opens the existing comparison window without changing drafts
+  or generating. Empty/error/cancel/stale-response cases are handled. In the enlarged
+  view it centers over Compare and its bottom meets Upscale/Delete, clamped to the
+  viewport. Normal Preview picker placement is unchanged. Viewer filename and
+  iPhone/swipe guidance are hidden only on Desktop.
+- Picker rows use max-content heights to prevent thumbnail overlap. Thumbnail images
+  retain alt labels but stay hidden until decoded, with small yellow loading rings;
+  original-image fallback and reduced motion are supported. No artificial waits.
+- Dependent ResizeObserver writes are frame-batched to avoid WebKit feedback loops.
+  Desktop additions are reversible on breakpoint transitions; Phone keeps history,
+  native negative details, New variation, filename/instructions and original sliders.
 
-- The user is reviewing the desktop integration and will request visual changes.
-  Work proceeds one feature/request at a time; wait for the next instruction.
-- Wastebin management/restore/permanent-delete UI and VRAM cleanup controls have
-  not been integrated on this branch. Their APIs exist. Phone image-action UI is
-  also deferred. These are not authorization to start further integration.
-- Existing backend behavior reports interruption of running work as `failed`;
-  queued cancellation reports `cancelled`. This was preserved, not fixed here.
-- Edit requires saved workflow `VeryComfy_Qwen21_Turbo_EDIT_ONLY`; Upscale requires
-  `OfficialComfy-SeedVR_Upscaler`. Missing workflows disable actions with reasons.
-- Actual Qwen/SeedVR inference, installation-specific nodes, NAS hardware, VPN and
-  physical Phone behavior were not established by the latest fixture tests.
+## Verification and limitations
 
-## Verification and next session
+Release preparation passed **431 pytest tests** without temporary plugins. The
+local-fallback fixture now uses a reserved non-listening loopback endpoint, so it
+cannot read images from the user's independently running ComfyUI. Historical counts
+are not a substitute for fresh checks after future changes.
 
-Latest application validation: **428 pytest tests passed**. Chromium and WebKit
-passed desktop action flows, favourite persistence/navigation races, full reuse,
-dialog cancellation, missing workflows/errors, real API submissions against a
-protocol stub, same-UUID retries, virtual Delete, responsive/privacy/reconnect and
-Generate checks. Phone pixels matched pre-integration `3bbea58` at 390×844,
-430×932, 768×1024 and 844×390 after desktop transitions. Chromium also preserved
-empty/gallery/running layout outside the authorized button feedback.
+Final release checks passed all **14 browser runs** (seven scripts in Chromium
+and WebKit) for in-place refresh, bypassed LoRAs,
+saved-only workflow menu, image actions, Compare picker/selection/retry/cancel,
+multiple thumbnail rows, delayed loading/decoding/reduced motion, exact heading and
+picker alignment, Desktop/Phone transitions, stable generation frames, and expanded
+positive/negative editor borders at 1000/1440/1920px widths. Numeric seeds remain
+exact. Browser fixtures exercise actual shared HTTP APIs/protocol stubs, not GPU
+inference, physical Phone hardware, NAS/VPN or actual Qwen/SeedVR model execution.
 
-For a fresh local session, confirm this branch and working tree, read `AGENTS.md`
-and the two integration/presentation docs, then use a local `.venv`. Commands and
-baseline export instructions are documented there; previous `/workspace` and
-`/tmp` artifacts are not required or assumed to exist locally. Review the user's
-next request before changing code. No main merge or release is authorized.
+Use this checkout's `.venv-test` if present, or create `.venv` as in AGENTS.md.
+Optional pytest/Playwright/browser dependencies for this session were kept under
+`/home/jhaku/Documents/Codex/2026-10-22/i-m-continuing-development-of-comfyui-3/work`;
+those caches/screenshots are not repo dependencies. New sessions should install
+normal test dependencies rather than assume those absolute paths exist.
+
+Focused scripts in `tests/manual/`:
+- `refresh_stability_browser.py`: DOM/drafts/focus/scroll/catalogue/structural/stale
+  refresh checks plus prompt overlay alignment and Phone restoration.
+- `bypassed_loras_browser.py`: five optional nodes, saved defaults, true bypass,
+  activation/submission, compact Desktop controls and slider/Phone restoration.
+- `saved_workflow_picker_browser.py`: no duplicates, reuse entry replacement,
+  reload/draft stability, failures and selected-file removal.
+- `generate_transition_browser.py`: held first/repeated submissions, no native
+  Desktop progress, stable preview through all normal phases, last completed image,
+  Cancel/Phone status and retained failure diagnostics.
+- `desktop_image_actions_browser.py`, `mobile_responsive_browser.py`: shared actions,
+  comparison picker, responsive layout, privacy, reconnect and exact settings reuse.
+
+## Known scope limits and release operations
+
+- Existing imported snapshots cannot recreate bypassed nodes absent from their API
+  graph. Reselect the saved VeryComfy workflow once to reimport its editor graph.
+- API-only graphs/ambiguous custom serialization remain fail-closed. Named Edit and
+  Upscale workflows still require saved `VeryComfy_Qwen21_Turbo_EDIT_ONLY` and
+  `OfficialComfy-SeedVR_Upscaler` files. No graph pipeline was invented.
+- Backend interruption still reports failed; queued cancellation reports cancelled.
+  No queue redesign, Phone action UI, or Wastebin management UI was added.
+- Do not touch ComfyUI installations, restart servers or install cleanup extensions.
+  A proposed external queue patch was declined and is not part of this repository.
+- Version must agree in pyproject, __init__, spec and tag. Versioned distribution
+  artifacts are ignored; stable `downloads/comfyui-control.zip` and `.src.rpm` are
+  rebuilt for release. The frozen presentation fixture's version-file hashes must
+  track authorized version bumps; do not reset unrelated protected assets.
+- Previous 1.0.3 Actions run `39844702309` and COPR `11194472` succeeded. Local COPR
+  credentials were expired; release-tag Actions secrets handled publishing. Never
+  print credentials. SSH Git transport worked; the origin URL remains HTTPS.
+- Public Actions APIs/connector tools can inspect release checks. On a failure,
+  inspect diagnostics, fix the cause and use a new version rather than moving tags.

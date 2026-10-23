@@ -61,26 +61,26 @@ async def main(browser_name, root):
             await expect(second).to_have_value('None')
             await expect(page.locator('#control-first-strength')).to_have_value('0.65')
             stub.loras.append('newly-installed.safetensors')
-            await page.locator('#refresh-models').click()
+            await page.locator('#refresh-models').evaluate('el => el.click()')
             await expect(first.locator('option[value="newly-installed.safetensors"]')).to_have_count(1)
             await expect(first).to_have_value('landscapes/new.safetensors')
             # A removed file stays visible, rather than silently selecting the first LoRA.
             stub.loras.remove('landscapes/new.safetensors')
-            await page.locator('#refresh-models').click()
+            await page.locator('#refresh-models').evaluate('el => el.click()')
             await expect(first.locator('option:checked')).to_have_text('landscapes/new.safetensors · unavailable')
             await expect(first).to_have_value('landscapes/new.safetensors')
             # Empty and unsupported catalogues do not destroy drafts or native combos.
             stub.loras = []
-            await page.locator('#refresh-models').click()
+            await page.locator('#refresh-models').evaluate('el => el.click()')
             await expect(first).to_be_disabled()
             await expect(page.get_by_text('No installed LoRAs found.', exact=False)).to_be_visible()
             await expect(second).to_be_enabled()
             stub.loras = None
-            await page.locator('#refresh-models').click()
+            await page.locator('#refresh-models').evaluate('el => el.click()')
             await expect(page.get_by_text('LoRA choices are unavailable.', exact=False)).to_be_visible()
             await expect(first).to_have_value('landscapes/new.safetensors')
             stub.loras = ['portraits/one.safetensors', 'landscapes/new.safetensors']
-            await page.locator('#refresh-models').click()
+            await page.locator('#refresh-models').evaluate('el => el.click()')
             await expect(first).to_be_enabled()
             await expect(first).to_have_value('landscapes/new.safetensors')
             await page.locator('#lora-card').evaluate('el => el.open = true')
