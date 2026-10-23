@@ -26,6 +26,7 @@ async def main(engine, output):
     stub = ImageWorkflowStub()
     graph = {'text':dict(class_type='Prompt',inputs={'text':'Saved prompt'}),
              'sampler':dict(class_type='Sampler',inputs={'seed':18446744073709551600,'steps':20,'cfg':5.5})}
+    stub.saved['Main workflow.json'] = graph
     stub.object_info.update({node['class_type']:{'input':{}} for node in graph.values()})
     upstream = TestServer(stub.app())
     await upstream.start_server()
@@ -48,6 +49,7 @@ async def main(engine, output):
             page.on('pageerror',lambda error:errors.append(str(error)))
             page.on('request',lambda request:calls.append((request.method,request.url,request.post_data)))
             await page.goto(f'http://127.0.0.1:{site._server.sockets[0].getsockname()[1]}/')
+            await page.locator('#preset').select_option('saved:Main workflow.json')
             prompt = page.locator('[data-role="positive"]')
             await expect(prompt).to_have_value('Saved prompt')
             await page.locator('#settings-card').evaluate('el=>el.open=true')
@@ -55,6 +57,7 @@ async def main(engine, output):
             await page.locator('#generate').click()
             await until(lambda:len(stub.submissions)==1)
             job = list(service.jobs.values())[-1]
+            preset = service.presets.get(job['preset'])
             stub.history[job['prompt_id']] = dict(prompt=stub.pending[0],outputs={'save':{'images':[
                 dict(filename=name,subfolder='',type='output') for name in originals]}},status=dict(status_str='success',messages=[]))
             stub.pending=[]
@@ -79,6 +82,158 @@ async def main(engine, output):
                 assert abs(reuse['width']-vary['width'])<1
                 await page.screenshot(path=str(output/f'preview-{width}.png'))
             await page.set_viewport_size({'width':1440,'height':1000})
+            # Preview Compare picks only one additional gallery image, using the existing viewer.
+            await expect(page.locator('#variation')).to_have_text('Compare')
+            picker = page.locator('#desktop-compare-picker')
+            loading_round = 0
+            async def fresh_thumbnails(route):
+                nonlocal loading_round
+                loading_round += 1
+                response = await route.fetch(url=route.request.url.split('?')[0] + '?since=fixture-loading&refresh=1')
+                body = await response.json()
+                for item in body.get('images') or []:
+                    if item.get('thumbnail'): item['thumbnail'] += f'&fixture_load={loading_round}'
+                body['revision'] = f'fixture-loading-{loading_round}'
+                await route.fulfill(response=response,json=body)
+            await page.route('**/api/gallery?*', fresh_thumbnails)
+            for reduced in (False, True):
+                await page.emulate_media(reduced_motion='reduce' if reduced else 'no-preference')
+                thumb_started, thumb_release = asyncio.Event(), asyncio.Event()
+                async def slow_thumbnail(route):
+                    thumb_started.set()
+                    await thumb_release.wait()
+                    await route.continue_()
+                await page.route('**/api/images/*?*thumbnail=1*', slow_thumbnail)
+                await page.locator('#variation').click()
+                await asyncio.wait_for(thumb_started.wait(),5)
+                tile = picker.locator('.image-grid > button').first
+                await expect(tile).to_have_attribute('aria-busy','true')
+                await expect(tile.locator('.desktop-thumbnail-spinner')).to_be_visible()
+                assert await tile.locator('picture').evaluate('el => getComputedStyle(el).opacity') == '0'
+                assert await tile.locator('img').get_attribute('alt')
+                animations = await tile.evaluate('el => el.getAnimations({subtree:true}).length')
+                assert animations == (0 if reduced else 1), animations
+                thumb_release.set()
+                await expect(tile.locator('.desktop-thumbnail-spinner')).to_have_count(0)
+                assert await tile.locator('picture').evaluate('el => getComputedStyle(el).opacity') == '1'
+                assert await tile.locator('img').evaluate('el => el.complete && el.naturalWidth > 0')
+                await page.keyboard.press('Escape')
+                await page.unroute('**/api/images/*?*thumbnail=1*', slow_thumbnail)
+            await page.emulate_media(reduced_motion='no-preference')
+            async def missing_thumbnail(route):
+                await route.fulfill(status=404)
+            await page.route('**/api/images/*?*thumbnail=1*', missing_thumbnail)
+            await page.locator('#variation').click()
+            fallback = picker.locator('.image-grid img').first
+            await expect(fallback).to_have_attribute('data-fallback','1')
+            await expect(picker.locator('.desktop-thumbnail-spinner')).to_have_count(0)
+            assert await fallback.evaluate('el => el.naturalWidth > 0')
+            await page.keyboard.press('Escape')
+            await page.unroute('**/api/images/*?*thumbnail=1*', missing_thumbnail)
+            await page.unroute('**/api/gallery?*', fresh_thumbnails)
+            for width in (1000, 1440, 1920):
+                await page.set_viewport_size({'width':width,'height':1000})
+                await page.locator('#variation').click()
+                await expect(picker).to_be_visible()
+                await expect(picker.locator('.image-grid > button')).to_have_count(1)
+                panel_box = await page.locator('#generation-panel').bounding_box()
+                picker_box = await picker.bounding_box()
+                assert abs(panel_box['width'] - picker_box['width']) < 1, (panel_box, picker_box)
+                assert abs(panel_box['height'] - picker_box['height']) < 1, (panel_box, picker_box)
+                preview_title = page.locator('#generation-panel > h2')
+                picker_title = page.locator('#desktop-compare-title')
+                a, b = await preview_title.bounding_box(), await picker_title.bounding_box()
+                assert abs(a['x'] - b['x']) < 1 and abs(a['y'] - b['y']) < 1, (a,b)
+                typography = "el => ['fontFamily','fontSize','fontWeight','lineHeight','color'].map(k => getComputedStyle(el)[k])"
+                assert await preview_title.evaluate(typography) == await picker_title.evaluate(typography)
+                await expect(picker.locator('[role="status"]')).to_be_hidden()
+                assert await picker.locator('.image-grid > button').get_attribute('data-image-id') != job['images'][0]['id']
+                await page.screenshot(path=str(output / f'compare-picker-{width}.png'))
+                await page.keyboard.press('Escape')
+                await expect(picker).to_be_hidden()
+            # Multiple rows must retain square tile heights and scroll, never overlap.
+            extras = []
+            for index in range(12):
+                path = images / f'extra-{index:02}.png'
+                image = QImage(160 if index % 2 else 96, 96 if index % 2 else 160, QImage.Format.Format_RGB32)
+                image.fill(0xff335566 + index * 0x080500)
+                assert image.save(str(path))
+                extras.append(path)
+            for width, height in [(1000,600), (1440,900), (1920,1080)]:
+                await page.set_viewport_size({'width':width,'height':height})
+                await page.locator('#variation').click()
+                grid = picker.locator('.image-grid')
+                tiles = grid.locator(':scope > button')
+                await expect(tiles).to_have_count(13)
+                geometry = await grid.evaluate("""el => ({height:el.clientHeight, scroll:el.scrollHeight,
+                    tiles:[...el.children].map(tile => {
+                        const r=tile.getBoundingClientRect();
+                        return {top:r.top, bottom:r.bottom, width:r.width, height:r.height};
+                    })})""")
+                assert geometry['scroll'] > geometry['height'], geometry
+                for index, tile in enumerate(geometry['tiles']):
+                    assert abs(tile['height'] - tile['width']) < 1, tile
+                    if index >= 2:
+                        assert tile['top'] >= geometry['tiles'][index-2]['bottom'] + 9, geometry
+                await page.screenshot(path=str(output / f'compare-many-{width}.png'))
+                await tiles.last.scroll_into_view_if_needed()
+                last = await tiles.last.bounding_box()
+                viewport = await grid.bounding_box()
+                assert last['y'] + last['height'] <= viewport['y'] + viewport['height'] + 1
+                await tiles.last.click()
+                await expect(page.locator('#compare-viewport')).to_be_visible()
+                await page.locator('#close-compare').click()
+            for path in extras: path.unlink()
+            await page.set_viewport_size({'width':1440,'height':1000})
+            await page.locator('#variation').click()
+            await picker.locator('.image-grid > button').click()
+            await expect(page.locator('#compare-dialog')).to_be_visible()
+            await expect(page.locator('#compare-viewport')).to_be_visible()
+            assert await page.evaluate('comparison.selected') == [item['id'] for item in job['images']]
+            await page.locator('#compare-slider').fill('35')
+            await page.locator('#swap-compare').click()
+            await page.locator('#close-compare').click()
+            assert await page.evaluate('JSON.stringify({draft,preset:preset.id,randomSeed,selectedJob})') == saved_form
+            assert len(stub.submissions) == 1
+            async def one_image(route):
+                response = await route.fetch()
+                body = await response.json()
+                body['images'] = [job['images'][0]]
+                body['revision'] = 'fixture-single-image'
+                await route.fulfill(response=response,json=body)
+            await page.route('**/api/gallery?*', one_image)
+            await page.locator('#variation').click()
+            await expect(picker.locator('[role="status"]')).to_have_text('No other images in the gallery yet.')
+            await expect(picker.locator('.image-grid > button')).to_have_count(0)
+            await page.keyboard.press('Escape')
+            await page.unroute('**/api/gallery?*', one_image)
+            fetch_started, fetch_release = asyncio.Event(), asyncio.Event()
+            async def late_gallery(route):
+                fetch_started.set()
+                await fetch_release.wait()
+                await route.continue_()
+            await page.route('**/api/gallery?*', late_gallery)
+            await page.locator('#variation').click()
+            await asyncio.wait_for(fetch_started.wait(),5)
+            await page.keyboard.press('Escape')
+            async with page.expect_response('**/api/gallery?*'):
+                fetch_release.set()
+            await expect(picker).to_be_hidden()
+            await page.unroute('**/api/gallery?*', late_gallery)
+            async def fail_gallery(route):
+                await route.fulfill(status=503,content_type='application/json',body='{"error":"Gallery unavailable"}')
+            await page.route('**/api/gallery?*', fail_gallery)
+            await page.locator('#variation').click()
+            await expect(picker.locator('[role="status"]')).to_contain_text('Gallery unavailable')
+            await picker.get_by_role('button',name='Close comparison gallery').click()
+            await page.unroute('**/api/gallery?*', fail_gallery)
+            await page.locator('#variation').click()
+            await expect(picker.locator('.image-grid > button')).to_have_count(1)
+            await page.set_viewport_size({'width':390,'height':844})
+            await expect(picker).to_be_hidden()
+            await expect(page.locator('#variation')).to_have_text('New variation')
+            await expect(page.locator('#vary-image')).to_have_text('New variation')
+            await page.set_viewport_size({'width':1440,'height':1000})
             native_styles = '''el=>Object.fromEntries(['backgroundColor','fontFamily','fontSize','borderRadius','padding','minHeight'].map(key=>[key,getComputedStyle(el)[key]]))'''
             assert await edit.evaluate(native_styles)==await page.locator('#variation').evaluate(native_styles)
             await heart.click()
@@ -89,6 +244,58 @@ async def main(engine, output):
             first,second = [item['id'] for item in job['images']]
             await page.locator('#job-images > button').nth(1).click()
             await expect(page.locator('#image-caption')).to_have_text('second.png')
+            await expect(page.locator('#image-caption')).to_be_hidden()
+            viewer_hint = page.locator('#image-dialog .viewer > .actions:has(#download-image) + p.hint')
+            await expect(viewer_hint).to_be_hidden()
+            await expect(page.locator('#vary-image')).to_have_text('Compare')
+            await expect(page.locator('#vary-image')).to_be_enabled()
+            for width, height in [(1000,700), (1440,1000), (1920,1080)]:
+                await page.set_viewport_size({'width':width,'height':height})
+                await page.locator('#vary-image').click()
+                await expect(picker.locator('.image-grid > button')).to_have_count(1)
+                overlay_box = await picker.bounding_box()
+                compare_box = await page.locator('#vary-image').bounding_box()
+                delete_box = await delete.bounding_box()
+                assert abs(overlay_box['x'] + overlay_box['width']/2 - compare_box['x'] - compare_box['width']/2) < 1, (overlay_box, compare_box)
+                assert abs(overlay_box['y'] + overlay_box['height'] - delete_box['y'] - delete_box['height']) < 1, (overlay_box, delete_box)
+                assert overlay_box['y'] >= 11 and overlay_box['x'] >= 11
+                assert overlay_box['x'] + overlay_box['width'] <= width - 11
+                await page.screenshot(path=str(output / f'viewer-picker-anchor-{width}.png'))
+                await page.keyboard.press('Escape')
+            await page.set_viewport_size({'width':1440,'height':1000})
+            await page.locator('#vary-image').click()
+            await expect(picker).to_be_visible()
+            await expect(picker.locator('.image-grid > button')).to_have_count(1)
+            assert await picker.locator('.image-grid > button').get_attribute('data-image-id') == first
+            await page.keyboard.press('Escape')
+            await expect(page.locator('#image-dialog')).to_be_visible()
+            await page.locator('#vary-image').click()
+            await picker.locator('.image-grid > button').click()
+            await expect(page.locator('#compare-viewport')).to_be_visible()
+            assert await page.evaluate('comparison.selected') == [second,first]
+            await page.locator('#close-compare').click()
+            await expect(page.locator('#image-dialog')).to_be_visible()
+            await expect(page.locator('#image-caption')).to_have_text('second.png')
+            assert len(stub.submissions) == 1
+            await expect(prompt).to_have_value('An unsent draft')
+            await page.locator('#close-image').click()
+            await page.locator('#gallery-tab').click()
+            await page.get_by_role('button',name='View second.png',exact=True).click()
+            await page.locator('#vary-image').click()
+            await expect(picker.locator('.image-grid > button')).to_have_count(1)
+            assert (await picker.bounding_box())['height'] > 100
+            await picker.locator('.image-grid > button').click()
+            await expect(page.locator('#compare-viewport')).to_be_visible()
+            assert await page.evaluate('comparison.selected') == [second,first]
+            await page.locator('#close-compare').click()
+            await page.set_viewport_size({'width':390,'height':844})
+            await expect(page.locator('#vary-image')).to_have_text('New variation')
+            await expect(page.locator('#image-caption')).to_be_visible()
+            await expect(viewer_hint).to_be_visible()
+            await page.set_viewport_size({'width':1440,'height':1000})
+            await page.locator('#close-image').click()
+            await page.locator('#create-tab').click()
+            await page.locator('#job-images > button').nth(1).click()
             await expect(heart).to_have_attribute('aria-pressed','false')
             await heart.click()
             await expect(heart).to_have_attribute('aria-pressed','true')
@@ -175,6 +382,10 @@ async def main(engine, output):
             await page.evaluate('syncSelectedImageActions(true)')
             await expect(upscale).to_be_disabled()
             await expect(actions.locator('.image-workflow-status')).to_contain_text('not configured')
+            await expect(actions.locator('.image-workflow-status')).to_be_visible()
+            await page.locator('#close-image').click()
+            await expect(actions.locator('.image-workflow-status')).to_be_hidden()
+            await original()
             assert len(stub.submissions)==3
             stub.saved[name]=saved_workflow
             service.workflow_names_time=0

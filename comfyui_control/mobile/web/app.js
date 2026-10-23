@@ -115,6 +115,7 @@ function showLogin() {
   if ($("image-dialog").open) $("image-dialog").close();
   if ($("prompt-history-dialog").open) $("prompt-history-dialog").close();
   if ($("compare-dialog").open) $("compare-dialog").close();
+  if (desktopImages.comparing) desktopImages.comparePicker.close();
   $("offline").hidden = true;
   if (events) events.close();
   events = null;
@@ -212,6 +213,7 @@ function syncGenerationDock() {
     card = $("job-card"),
     destination = active && (!wideLayout.matches || !$("gallery-page").hidden) ? dock : $("job-output");
   $("generation-panel").dataset.completed = String(job?.status === "complete");
+  $("generation-panel").dataset.status = job?.status || "empty";
   renderGenerationStats(job);
   syncJobMetrics(active);
   $("job-output").hidden = !$("gallery-page").hidden;
@@ -236,6 +238,7 @@ function syncGenerationDock() {
   dock.hidden = !active && !submitting && !$("gallery-page").hidden;
 }
 function renderGenerationStats(job) {
+  desktopImages.renderMetrics(job?.status === "running" ? job.progress : null);
   $("generation-stats").hidden = !job || !activeStatuses.has(job.status);
   const numeric = (value) => typeof value === "number" && Number.isFinite(value);
   const timing = connected && state.online && job?.status === "running" ? job.seconds_per_iteration : null;
@@ -267,45 +270,79 @@ function updateGenerate() {
   syncGenerationDock();
   syncSelectedImageActions();
 }
+function setReusedWorkflow(item) {
+  const picker = $("preset");
+  picker.querySelector('[data-reused-workflow]')?.remove();
+  if (item) {
+    const option = new Option(`Reused image · ${item.name}`, item.id);
+    option.dataset.reusedWorkflow = "";
+    picker.insertBefore(option, picker.firstChild);
+  }
+  writeStore("reused-workflow", item?.id || null);
+}
 async function loadPresets(selectId, reuse, description, current = () => true) {
   const items = await api("/api/presets");
   if (!current()) return;
-  if (description && !items.some((item) => item.id === description.id))
-    items.push({ id: description.id, name: description.name });
-  $("preset").replaceChildren(new Option("Choose a workflow…", ""));
-  for (const item of items) $("preset").add(new Option(item.name, item.id));
-  $("empty-presets").hidden = items.length > 0;
-  const stored = [
-    selectId,
-    readStore("preset", ""),
-    items.find((item) => item.default)?.id,
-    items.length === 1 ? items[0].id : "",
-  ].find((id) => items.some((item) => item.id === id));
-  if (stored) {
-    $("preset").value = stored;
-    await choosePreset(stored, reuse, description?.id === stored ? description : null);
+  // Presets remain private snapshots for drafts/jobs; only saved files enter the picker.
+  const stored = selectId || readStore("preset", "") || items.find((item) => item.default)?.id;
+  let loaded = description;
+  if (!loaded && stored && items.some((item) => item.id === stored))
+    loaded = await api("/api/presets/" + encodeURIComponent(stored));
+  if (!current()) return;
+  const names = await loadSavedWorkflows();
+  if (!current()) return;
+  const reused = !!reuse || !selectId && readStore("reused-workflow", null) === loaded?.id;
+  if (loaded && reused) {
+    setReusedWorkflow(loaded);
+    $("preset").value = loaded.id;
+    await choosePreset(loaded.id, reuse, loaded);
+  } else if (loaded?.comfy_source && (names || []).includes(loaded.comfy_source)) {
+    setReusedWorkflow(null);
+    $("preset").value = "saved:" + loaded.comfy_source;
+    await choosePreset(loaded.id, reuse, loaded);
+  } else if (names?.length === 1) {
+    await selectWorkflow("saved:" + names[0]);
+  } else {
+    setReusedWorkflow(null);
+    $("preset").value = "";
+    await choosePreset("");
   }
-  await loadSavedWorkflows();
 }
 async function loadSavedWorkflows() {
-  $("preset").querySelector("optgroup")?.remove();
   $("refresh-workflows").disabled = true;
   try {
     const names = await api("/api/workflows/saved");
-    if (names.length) {
+    const picker = $("preset"), selected = picker.value;
+    // Remove legacy snapshot entries without deleting their stored presets.
+    for (const option of [...picker.children])
+      if (option.tagName === "OPTION" && option.value && !option.hasAttribute("data-reused-workflow")) option.remove();
+    const previous = picker.querySelector("optgroup");
+    const values = names.map((name) => [name.replace(/\.json$/i, ""), "saved:" + name]);
+    const existing = [...(previous?.children || [])].map((option) => [option.text, option.value]);
+    if (JSON.stringify(values) !== JSON.stringify(existing)) {
       const group = node("optgroup");
       group.label = "Saved in ComfyUI";
       for (const name of names)
         group.append(new Option(name.replace(/\.json$/i, ""), "saved:" + name));
-      $("preset").append(group);
+      if (previous) previous.replaceWith(group);
+      else picker.append(group);
+      if (!names.length) group.remove();
+      if ([...picker.options].some((option) => option.value === selected)) picker.value = selected;
+      else if (selected.startsWith("saved:")) {
+        picker.value = "";
+        await choosePreset("");
+      }
     }
+    $("empty-presets").hidden = !!names.length || !!picker.querySelector('[data-reused-workflow]');
     $("workflow-source-note").hidden = !!names.length;
     $("workflow-source-note").textContent =
-      "Save a workflow in ComfyUI to select it here, or choose one from the desktop app.";
+      "Save a workflow in ComfyUI’s workflows directory to select it here.";
+    return names;
   } catch {
     $("workflow-source-note").hidden = false;
     $("workflow-source-note").textContent =
-      "Saved ComfyUI workflows are unavailable. Start ComfyUI, then refresh this list. Your mobile presets remain available.";
+      "Saved ComfyUI workflows are unavailable. Start ComfyUI, then refresh this list.";
+    return null;
   } finally {
     $("refresh-workflows").disabled = false;
   }
@@ -320,9 +357,11 @@ async function selectWorkflow(id) {
       method: "POST",
       body: JSON.stringify({ name: id.slice(6) }),
     });
-    await loadPresets(item.id);
+    setReusedWorkflow(null);
+    $("preset").value = id;
+    await choosePreset(item.id, null, item);
   } catch (error) {
-    $("preset").value = previous?.id || "";
+    $("preset").value = previous?.comfy_source ? "saved:" + previous.comfy_source : previous?.id || "";
     throw error;
   } finally {
     busy = false;
@@ -378,7 +417,7 @@ async function choosePreset(id, reuse, description) {
   // Keep new checkbox choices and explicit Same seed reuse across refreshes.
   randomSeed = compatible && (reuse || stored.seedPreferenceVersion === 2) && typeof stored.randomSeed === "boolean"
     ? stored.randomSeed : true;
-  disabledLoras = new Set(compatible ? stored.disabledLoras || [] : []);
+  disabledLoras = new Set(compatible ? stored.disabledLoras || [] : preset.default_disabled_loras || []);
   mappingDraft = new Map(
     (same && Array.isArray(stored.mappings)
       ? stored.mappings
@@ -415,6 +454,85 @@ async function choosePreset(id, reuse, description) {
   writeStore("preset", id);
   saveDraft();
   updateGenerate();
+}
+function updateControlOptions(input, field) {
+  const value = String(draft[field.key] ?? "");
+  const options = (field.options || []).map((option) => [String(option), String(option), false]);
+  if (!options.some((option) => option[1] === value)) {
+    const saved = field.allow_saved_value && value === String(field.default);
+    options.unshift([value ? `${value} · ${saved ? "saved value" : "unavailable"}` : "Choose a model", value, !saved]);
+  }
+  const existing = [...input.options].map((option) => [option.text, option.value, option.disabled]);
+  if (JSON.stringify(existing) !== JSON.stringify(options)) {
+    input.replaceChildren(...options.map(([text, value, disabled]) => {
+      const option = new Option(text, value);
+      option.disabled = disabled;
+      return option;
+    }));
+    input.value = value;
+  }
+  if (field.role === "lora_model") {
+    input.disabled = !field.options?.length;
+    const wrap = input.closest(".control");
+    let hint = wrap.querySelector("p.muted");
+    if (!field.options?.length) {
+      if (!hint) wrap.append(hint = node("p", undefined, "muted"));
+      hint.textContent = field.options
+        ? "No installed LoRAs found. Add a LoRA in ComfyUI, then refresh model choices."
+        : "LoRA choices are unavailable. Start ComfyUI, then refresh model choices.";
+    } else hint?.remove();
+  }
+}
+function controlStructure(fields) {
+  return JSON.stringify(fields.map(({ options, default: initial, allow_saved_value, ...field }) => ({
+    ...field, select: !!options || field.role === "lora_model",
+  })));
+}
+async function refreshPresetControls(loaded) {
+  if (loaded.graph_revision === preset.graph_revision &&
+      controlStructure(loaded.fields) === controlStructure(preset.fields) &&
+      controlStructure(loaded.candidates) === controlStructure(preset.candidates)) {
+    // Only catalogue/default metadata changed. Keep live drafts and mapping edits.
+    preset = loaded;
+    for (const field of preset.fields) {
+      const input = $("control-" + field.key);
+      if (input?.tagName === "SELECT") updateControlOptions(input, field);
+    }
+    saveDraft();
+  } else {
+    // A real mapping/type/graph change needs the existing renderer. Supply the
+    // fetched description so teardown and rendering complete in one JS turn.
+    const focused = document.activeElement, x = scrollX, y = scrollY;
+    const selection = focused?.tagName === "TEXTAREA" || focused?.type === "text"
+      ? [focused.selectionStart, focused.selectionEnd] : null;
+    saveDraft();
+    await choosePreset(loaded.id, null, loaded);
+    const replacement = focused?.id && $(focused.id);
+    if (replacement) {
+      replacement.focus({ preventScroll: true });
+      if (selection) replacement.setSelectionRange(...selection);
+    }
+    window.scrollTo(x, y);
+  }
+}
+function configurePromptToggle(input, wrap, toggle, editorKey, label) {
+  const resize = (expanded) => {
+    input.style.removeProperty("height");
+    wrap.classList.toggle("expanded", expanded);
+    toggle.textContent = expanded ? "Collapse" : "Expand";
+    toggle.setAttribute("aria-expanded", String(expanded));
+    toggle.setAttribute("aria-label", `${expanded ? "Collapse" : "Expand"} ${label} editor`);
+    toggle.title = toggle.getAttribute("aria-label");
+  };
+  resize(uiState.expandedPrompts?.[editorKey] === true);
+  const click = () => {
+    const expanded = !wrap.classList.contains("expanded");
+    uiState.expandedPrompts = { ...uiState.expandedPrompts, [editorKey]: expanded };
+    resize(expanded);
+    saveUI();
+  };
+  toggle.addEventListener("click", click);
+  return () => toggle.removeEventListener("click", click);
 }
 function control(field, container, hideLabel = false) {
   const wrap = node("div", undefined, "control");
@@ -480,21 +598,7 @@ function control(field, container, hideLabel = false) {
     const toggle = node("button", undefined, "small prompt-editor-toggle");
     toggle.type = "button";
     toggle.setAttribute("aria-controls", inputId);
-    const editorKey = preset.id + ":" + field.key;
-    const resize = (expanded) => {
-      input.style.removeProperty("height");
-      wrap.classList.toggle("expanded", expanded);
-      toggle.textContent = expanded ? "Collapse" : "Expand";
-      toggle.setAttribute("aria-expanded", String(expanded));
-      toggle.setAttribute("aria-label", `${expanded ? "Collapse" : "Expand"} ${field.label} editor`);
-    };
-    resize(uiState.expandedPrompts?.[editorKey] === true);
-    toggle.addEventListener("click", () => {
-      const expanded = !wrap.classList.contains("expanded");
-      uiState.expandedPrompts = { ...uiState.expandedPrompts, [editorKey]: expanded };
-      resize(expanded);
-      saveUI();
-    });
+    configurePromptToggle(input, wrap, toggle, preset.id + ":" + field.key, field.label);
     label.replaceWith(heading);
     heading.append(label, toggle);
   }
@@ -612,7 +716,7 @@ function renderFields() {
         "check-label wide",
       ),
       toggle = node("input");
-    const hint = node("p", "With a fixed seed, unchanged settings may reuse the previous image.", "hint wide");
+    const hint = node("p", "With a fixed seed, unchanged settings may reuse the previous image.", "hint wide fixed-seed-hint");
     hint.hidden = randomSeed;
     toggle.type = "checkbox";
     toggle.id = "random-seed";
@@ -928,8 +1032,9 @@ function applyState(value) {
     !preset || !state.jobs.some((job) => job.preset === preset.id);
   updateGenerate();
 }
-function renderImages(container, items) {
+function renderImages(container, items, choose = null) {
   container.imageItems = items;
+  container.chooseImage = choose;
   const signature = JSON.stringify(items.map((item) => [item.id, item.url, item.thumbnail]));
   if (container.dataset.signature === signature) return;
   container.dataset.signature = signature;
@@ -971,12 +1076,14 @@ function renderImages(container, items) {
       button.replaceChildren(node("span", "Image unavailable", "missing"));
       container.dataset.signature = "";
     });
+    if (container === desktopImages.compareGrid) desktopImages.prepareThumbnail(button, image);
     picture.append(image);
     button.append(picture);
     button.addEventListener("click", () => {
       const currentItems = container.imageItems;
       const currentIndex = currentItems.findIndex((entry) => entry.id === item.id);
       if (currentIndex < 0) return;
+      if (container.chooseImage) { container.chooseImage(currentItems[currentIndex]); return; }
       if (container.id === "gallery-grid" && comparison.choose(currentItems[currentIndex])) return;
       openImage(currentItems, currentIndex);
     });
@@ -990,7 +1097,7 @@ function stopGallerySync() {
   galleryPromise = null;
 }
 function loadGallery(force = false) {
-  if (document.hidden || $("gallery-page").hidden || $("workspace").hidden) return;
+  if (document.hidden || ($("gallery-page").hidden && !desktopImages.comparing) || $("workspace").hidden) return;
   if (galleryPromise) return galleryPromise;
   clearTimeout(galleryTimer);
   const epoch = galleryEpoch;
@@ -1020,10 +1127,12 @@ function loadGallery(force = false) {
       }
       renderImages($("gallery-grid"), gallery);
       comparison.gallery(gallery);
+      renderPreviewComparisonGallery();
       $("gallery-empty").hidden = !!gallery.length;
       syncSelectedImageActions();
     } catch (error) {
-      if (force && epoch === galleryEpoch) notice(error.message);
+      if (epoch === galleryEpoch && desktopImages.comparing) desktopImages.compareStatus.textContent = error.message;
+      else if (force && epoch === galleryEpoch) notice(error.message);
     } finally {
       if (epoch === galleryEpoch) {
         galleryPromise = null;
@@ -1034,6 +1143,30 @@ function loadGallery(force = false) {
     }
   })();
   return galleryPromise;
+}
+async function comparePreviewImage() {
+  const item = actionImage();
+  if (!desktopImages.active || !item) return;
+  desktopImages.openComparePicker(item.id);
+  await loadGallery(true);
+}
+function renderPreviewComparisonGallery() {
+  if (!desktopImages.comparing) return;
+  const sourceId = desktopImages.comparePicker.dataset.imageId;
+  const candidates = gallery.filter((item) => item.id !== sourceId);
+  desktopImages.compareStatus.textContent = candidates.length ? "" : "No other images in the gallery yet.";
+  renderImages(desktopImages.compareGrid, candidates, (item) => {
+    if (!desktopImages.active || !desktopImages.comparing || actionImage()?.id !== sourceId) return;
+    if (!gallery.some((entry) => entry.id === sourceId) || !gallery.some((entry) => entry.id === item.id)) {
+      desktopImages.compareStatus.textContent = "An image is no longer available. Close this gallery and try again.";
+      return;
+    }
+    comparison.gallery(gallery);
+    comparison.selected = [sourceId, item.id];
+    comparison.update();
+    desktopImages.comparePicker.close();
+    void comparison.open();
+  });
 }
 function openImage(items, index) {
   imageReuseEpoch++;
@@ -1095,7 +1228,10 @@ function syncSelectedImageActions(force = false) {
   const previewing = $("gallery-page").hidden;
   const item = active && (previewing || $("image-dialog").open) ? actionImage() : null;
   desktopImages.render({ viewing: $("image-dialog").open, selected: !!item,
-    previewing, pending: !!selectedImageActions?.pending, imageId: item?.id });
+    previewing, pending: !!selectedImageActions?.pending, imageId: item?.id,
+    reconnecting: (!connected || !state.online) && $("login").hidden && !$("workspace").hidden,
+    canCleanup: connected && state.online && !recovering && !busy && !submitting && !cleaningVRAM &&
+      !state.jobs.some((job) => activeStatuses.has(job.status)) });
   const canRequest = connected && !recovering && !document.hidden;
   const signature = JSON.stringify([item?.id, item?.modified, item?.kept, state.online, canRequest]);
   if (!force && signature === imageActionSignature) return;
@@ -1328,19 +1464,25 @@ $("refresh-models").addEventListener(
   "click",
   guarded(async () => {
     if (!preset || busy) return;
-    const id = preset.id;
+    const id = preset.id, epoch = presetEpoch, focused = document.activeElement;
     saveDraft();
     busy = true;
     $("refresh-models").disabled = true;
     updateGenerate();
     try {
-      await api("/api/presets/" + id + "/models", { method: "POST", body: "{}" });
-      if (preset?.id === id) await choosePreset(id);
-      notice("Model choices refreshed.");
+      const loaded = await api("/api/presets/" + id + "/models", { method: "POST", body: "{}" });
+      if (preset?.id === id && presetEpoch === epoch) {
+        await refreshPresetControls(loaded);
+        notice("Model choices refreshed.");
+      }
     } finally {
       busy = false;
       $("refresh-models").disabled = false;
       updateGenerate();
+      // Disabling the clicked refresh button can blur it in native browsers.
+      // Restore it only if the user has not focused another control meanwhile.
+      if (document.activeElement === document.body && focused?.isConnected && !focused.disabled)
+        focused.focus({ preventScroll: true });
     }
   }),
 );
@@ -1458,7 +1600,7 @@ $("same-seed").addEventListener(
 $("variation").addEventListener(
   "click",
   guarded(() =>
-    desktopImages.active ? reusePreviewImage(true) : reuseJob(
+    desktopImages.active ? comparePreviewImage() : reuseJob(
       state.jobs.find((job) => job.id === selectedJob),
       true,
     ),
@@ -1492,7 +1634,7 @@ $("reuse-image").addEventListener(
 );
 $("vary-image").addEventListener(
   "click",
-  () => reuseImage(true),
+  guarded(() => desktopImages.active ? comparePreviewImage() : reuseImage(true)),
 );
 let touchStart = null;
 $("full-image").addEventListener(
@@ -1585,10 +1727,23 @@ function connectionFailure(error) {
 }
 const comparison = new ImageComparison({ api, notice, read: readStore, write: writeStore, unauthorized: showLogin });
 const imageDetails = new ImageDetails({ api });
+let cleaningVRAM = false;
 let selectedImageActions = null, imageWorkflowDialogs = null, imageActionSignature = "";
 const desktopImages = new ComfyDesktopImagePresentation({ media: wideLayout,
   actions: $("selected-image-actions"), preview: $("preview-reuse-actions"),
-  viewer: $("reuse-image").parentElement, reuse: $("same-seed"), variation: $("variation"), images: $("job-images") });
+  viewer: $("reuse-image").parentElement, reuse: $("same-seed"), variation: $("variation"), images: $("job-images"),
+  promptToggle: (input, wrap, button) => configurePromptToggle(input, wrap, button,
+    preset.id + ":" + input.id.slice("control-".length), "Negative prompt"),
+  cleanup: async () => {
+    if (cleaningVRAM) return;
+    cleaningVRAM = true;
+    syncSelectedImageActions();
+    try {
+      const result = await imageFeatureAPI.cleanupVRAM();
+      notice(result.message);
+    } catch (error) { notice(error.message); }
+    finally { cleaningVRAM = false; syncSelectedImageActions(); }
+  } });
 const imageFeatureAPI = new ComfyImageFeatureAPI({ api, requestId, submit: submitGeneration,
   readPending: () => pendingSubmission, writePending: (value) => {
     pendingSubmission = value;

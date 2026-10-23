@@ -229,6 +229,35 @@ def fields_for(preset, info, lora_models=None):
     return fields
 
 
+def default_disabled_loras(preset):
+    return sorted({field['group'] for field in fields_for(preset, {})
+                   if field['role'] == 'lora_strength'
+                   and preset['graph'][field['node']].get('_meta', {}).get('control_lora', {}).get('bypassed') is True})
+
+
+def bypass_loras(graph, disabled_nodes):
+    def source(value, seen):
+        if not (isinstance(value, list) and len(value) == 2 and isinstance(value[0], str)
+                and value[0] in disabled_nodes):
+            return value
+        node_id, slot = value
+        if node_id in seen:
+            raise ValueError('Circular LoRA bypass connection.')
+        node = graph[node_id]
+        route = node.get('_meta', {}).get('control_lora', {}).get('routes', {}).get(str(slot))
+        target = node['inputs'].get(route)
+        if not isinstance(target, list) or len(target) != 2:
+            raise ValueError('LoRA bypass needs an unambiguous connected input.')
+        return source(target, seen | {node_id})
+    for node_id, node in graph.items():
+        if node_id not in disabled_nodes:
+            node['inputs'] = {key: source(value, set()) for key, value in node['inputs'].items()}
+            node.get('_meta', {}).pop('control_lora', None)
+    for node_id in disabled_nodes:
+        del graph[node_id]
+    return graph
+
+
 def render(preset, values, random_seed=False, disabled_loras=None, info=None, lora_models=None):
     if not isinstance(values, dict) or type(random_seed) is not bool:
         raise ValueError("Invalid generation settings.")
@@ -236,10 +265,13 @@ def render(preset, values, random_seed=False, disabled_loras=None, info=None, lo
     if set(values) - {f["key"] for f in fields}:
         raise ValueError("Generation includes an unmapped input.")
     groups = {f["group"] for f in fields if f["role"] == "lora_strength"}
-    disabled_loras = disabled_loras or []
+    disabled_loras = default_disabled_loras(preset) if disabled_loras is None else disabled_loras
     if not isinstance(disabled_loras, list) or any(g not in groups for g in disabled_loras):
         raise ValueError("Only LoRAs with mapped strength controls can be disabled.")
     graph, actual = deepcopy(preset["graph"]), {}
+    disabled_nodes = {f['node'] for f in fields if f['role'] == 'lora_strength'
+                      and f['group'] in disabled_loras
+                      and graph[f['node']].get('_meta', {}).get('control_lora')}
     for field in fields:
         value = values.get(field["key"], field["default"])
         if field["role"] == "seed" and random_seed:
@@ -248,7 +280,7 @@ def render(preset, values, random_seed=False, disabled_loras=None, info=None, lo
             if maximum < minimum:
                 raise ValueError("This seed input cannot use mobile randomization. Use a fixed seed.")
             value = minimum + secrets.randbelow(maximum - minimum + 1)
-        if field["role"] == "lora_strength" and field["group"] in disabled_loras:
+        if field["role"] == "lora_strength" and field["group"] in disabled_loras and field["node"] not in disabled_nodes:
             value = 0 if field["kind"] == "int" else 0.0
         kind = field["kind"]
         if kind == "int" and isinstance(value, str) and re.fullmatch(r"-?[0-9]{1,20}", value):
@@ -269,7 +301,7 @@ def render(preset, values, random_seed=False, disabled_loras=None, info=None, lo
             raise ValueError(f"{field['label']} is not available in this ComfyUI installation.")
         graph[field["node"]]["inputs"][field["input"]] = value
         actual[field["key"]] = value
-    return graph, actual
+    return bypass_loras(graph, disabled_nodes), actual
 
 
 class Presets:

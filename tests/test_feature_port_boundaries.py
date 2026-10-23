@@ -48,7 +48,7 @@ def test_existing_main_assets_ui_settings_and_versions_are_unchanged():
         '<div class="actions" id="preview-reuse-actions">', '<div class="actions">').replace(
         '<span id="generate-label" data-generate-label>✦ Generate</span>', '<span aria-hidden="true">✦</span> Generate')
     assert hashlib.sha256(original.encode()).hexdigest() == BASELINE['files']['comfyui_control/mobile/web/index.html']
-    original_sw = (web / 'sw.js').read_text().replace('comfy-control-mobile-desktop-layout-4', 'comfy-control-mobile-1.0.1')
+    original_sw = (web / 'sw.js').read_text().replace('comfy-control-mobile-prompt-overlays-1', 'comfy-control-mobile-1.0.1')
     for asset in ACTIVE_ASSETS:
         original_sw = original_sw.replace(f'  "/{asset}",\n', '')
     assert hashlib.sha256(original_sw.encode()).hexdigest() == BASELINE['files']['comfyui_control/mobile/web/sw.js']

@@ -284,3 +284,72 @@ def test_local_scan_ignores_non_json_and_symlink_escapes(tmp_path):
     (root/'escape').symlink_to(external,target_is_directory=True)
     assert local_workflow_files(root)==['A.json','nested/B.JSON']
     assert local_workflow_files(tmp_path/'missing')==[]
+
+
+@pytest.fixture
+def configurable_loras(flux_saved):
+    editor, info = flux_saved
+    info['AdapterLoader'] = {'input': {'required': {'model': ['MODEL'], 'clip': ['CLIP'],
+        'lora_name': [[f'adapter-{i}.safetensors' for i in range(5)]],
+        'strength_model': ['FLOAT'], 'strength_clip': ['FLOAT']}}, 'output': ['MODEL', 'CLIP']}
+    model, clip = ['diff', 0], ['encoder', 0]
+    for i in range(5):
+        node_id = f'lora-{i}'
+        link = 100 + i * 2
+        editor['nodes'].append(dict(id=node_id, type='AdapterLoader', mode=4,
+            inputs=[dict(name='model', link=link), dict(name='clip', link=link+1)],
+            widgets_values=[f'adapter-{i}.safetensors', .7, .6]))
+        editor['links'].extend([[link, *model, node_id, 0, 'MODEL'], [link+1, *clip, node_id, 1, 'CLIP']])
+        model, clip = [node_id, 0], [node_id, 1]
+    editor['links'][0][1:3] = clip
+    editor['links'][1][1:3] = model
+    return editor, info
+
+
+def test_configured_bypassed_loras_stay_mapped_and_can_be_activated(configurable_loras):
+    from comfyui_control.mobile.workflows import default_disabled_loras
+    editor, info = configurable_loras
+    original = deepcopy(editor)
+    graph = editor_to_api(editor, info, retain_loras=True)
+    preset = dict(graph=graph, mappings=validate_mappings(graph, suggested_mappings(graph, info)))
+    assert len([f for f in preset['mappings'] if f['role'] == 'lora_model']) == 5
+    disabled = default_disabled_loras(preset)
+    assert set(disabled) == {f'lora-{i}' for i in range(5)}
+    bypassed, actual = render(preset, {}, info=info)
+    assert not any(key.startswith('lora-') for key in bypassed)
+    assert bypassed['sampler']['inputs']['model'] == ['diff', 0]
+    assert bypassed['text']['inputs']['clip'] == ['encoder', 0]
+    for field in preset['mappings']:
+        if field['role'] == 'lora_strength':
+            assert actual[field['key']] in (.7, .6)
+    enabled, _ = render(preset, {}, disabled_loras=[group for group in disabled if group != 'lora-2'], info=info)
+    assert enabled['sampler']['inputs']['model'] == ['lora-2', 0]
+    assert enabled['text']['inputs']['clip'] == ['lora-2', 1]
+    assert enabled['lora-2']['inputs']['model'] == ['diff', 0]
+    assert enabled['lora-2']['inputs']['clip'] == ['encoder', 0]
+    assert enabled['lora-2']['inputs']['strength_model'] == .7
+    all_enabled, _ = render(preset, {}, disabled_loras=[], info=info)
+    assert all_enabled['lora-4']['inputs']['model'] == ['lora-3', 0]
+    assert all_enabled['lora-4']['inputs']['clip'] == ['lora-3', 1]
+    assert graph == preset['graph'] and editor == original
+
+
+def test_retained_loras_work_with_exact_snapshot_and_saved_active_defaults(configurable_loras):
+    from comfyui_control.mobile.workflows import default_disabled_loras
+    editor, info = configurable_loras
+    editor['nodes'][-1]['mode'] = 0
+    exact = editor_to_api(editor, info)
+    graph = editor_to_api(editor, info, retain_loras=True, base_graph=exact)
+    preset = dict(graph=graph, mappings=validate_mappings(graph, suggested_mappings(graph, info)))
+    assert 'lora-4' not in default_disabled_loras(preset)
+    assert len(default_disabled_loras(preset)) == 4
+    rendered, _ = render(preset, {}, info=info)
+    assert rendered == exact
+
+
+
+def test_retention_does_not_reinterpret_exact_non_lora_custom_widgets(flux_saved):
+    editor, info = flux_saved
+    exact = editor_to_api(editor, info)
+    editor['nodes'][0]['widgets_values'] = ['opaque', {'custom': True}]
+    assert editor_to_api(editor, info, retain_loras=True, base_graph=exact) == exact

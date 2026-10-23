@@ -1,4 +1,4 @@
-# Main UI: desktop image actions
+# Shared WebUI and Desktop presentation (1.0.4)
 
 The integration branch keeps main's yellow theme and original responsive layout.
 It does not load Forge's presentation coordinator, adapters, theme or layout.
@@ -6,12 +6,21 @@ The existing `(min-width: 1000px) and (min-height: 600px)` media query remains t
 desktop boundary. Phone, tablet portrait and short-window behavior stay on main's
 existing presentation.
 
+## Current presentation
+
+Desktop uses equal-width columns, fixed last-result previews, a themed live header,
+upward section overlays and panel-aligned prompt/negative-prompt overlays. Compare
+in Preview and the enlarged viewer opens the shared second-image picker and existing
+comparison dialog. VRAM cleanup uses the existing idle-only API; ComfyUI itself is
+unchanged. Phone keeps its original presentation and controls. See [HANDOFF.md](../HANDOFF.md)
+for the complete current behavior, shared refresh/picker/LoRA changes and limitations.
+
 ## Responsibilities
 
 | File | Responsibility |
 | --- | --- |
 | `mobile/web/style.css` | Unchanged main theme, component skins and responsive layout. |
-| `mobile/web/presentation_desktop.css` | Only desktop image-action arrangement and selected-image indication; every selector is scoped to `:where(html[data-presentation="desktop"])`. |
+| `mobile/web/presentation_desktop.css` | Desktop arrangement, overlays, controls and selected-image indication; every selector is scoped to `:where(html[data-presentation="desktop"])`. |
 | `mobile/web/presentation_desktop.js` | Placement and desktop label changes only. Restores original nodes/labels on leaving desktop. No requests, workflow logic or application store. |
 | `mobile/web/app.js` | Shared selection, requests, generation state, pending journal, settings reuse and reconnect. |
 | `mobile/web/feature_image_actions.js` | Existing selected-image actions, confirmed heart state, capabilities, version/permission checks, pending/error rendering and stale-response guards. |
@@ -19,11 +28,11 @@ existing presentation.
 | `mobile/web/feature_image_workflows.js` | Shared Edit/Upscale dialog behavior, adapted from the existing forms without Forge styling. |
 
 One action row contains Heart, Edit, Upscale and Delete. It sits above the existing
-Reuse settings / New variation row beneath the desktop result. The two rows stay
+Reuse settings / Compare row beneath the desktop result. The two rows stay
 outside the scrolling image area so actions and Generate remain reachable. The
 adapter records return anchors for the original nodes. Switching to Phone closes
 action forms, hides desktop additions, restores the reuse row's original parent
-and restores its Same seed label and existing interaction.
+and restores its Same seed / New variation labels and existing interactions.
 
 The existing `same-seed`, `variation`, `reuse-image`, `vary-image` IDs and listeners
 are retained. Desktop Preview reuse resolves the selected image and uses the same

@@ -1,7 +1,7 @@
 # Guide for Codex sessions
 
 Read `HANDOFF.md`, `docs/WEBUI_PRESENTATION.md` and
-`docs/FEATURE_PORT_INTEGRATION.md` before changing code. Inspect the current
+`docs/FEATURE_PORT_INTEGRATION.md` before changing code. `AGENTS.md` is the canonical agent guide (not `agent.md`). Inspect the current
 branch, recent commits and working tree. Treat the implementation as the baseline;
 do not assume earlier requests or deferred integrations are unfinished assignments.
 
@@ -51,6 +51,50 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   bump the shell cache when shipping changed assets. Never cache private APIs or
   images. Preserve reduced-motion support.
 
+## Current implementation contracts (1.0.4)
+
+- Workflow/model refresh reconciles option catalogues in place when graph/control
+  structure is unchanged. Preserve select/button DOM identity, handlers, drafts,
+  exact seeds, mappings, focus, text selection and scroll. Structural changes use
+  the already-loaded description; never clear controls before a network await.
+  Failed/stale refreshes must not clear or replace the selected form/workflow list.
+- The shared workflow picker lists only ComfyUI's saved workflows (`/userdata`
+  workflows directory), plus at most one top `Reused image` entry after settings
+  reuse. Stored/internal preset snapshots remain available to jobs but stay out
+  of the menu. A saved filename is a UI alias; backend preset IDs remain canonical.
+- Saved-editor imports can retain safely recognized active/bypassed MODEL/CLIP
+  LoRA loaders. Checked means active; unchecked means genuine connection bypass.
+  Preserve model/strength values. Recover old omitted nodes by reselecting the
+  saved workflow. Never guess unknown node/widget serialization or API-only nodes.
+- Desktop header contains live speed, VRAM, GPU and steps; reconnect feedback is
+  `Reconnecting...`. The original connection badge remains. Native submission
+  progress and duplicate offline/configuration prose stay out of Desktop Create.
+  Active generation keeps the last completed image and its preview dimensions;
+  Cancel is beside the preview heading. Preserve failure/unknown-job diagnostics.
+- Desktop prompts use fixed flow rows and expanded editors overlay downward with
+  shadows, ending at the main workflow card's bottom border. Negative prompt is
+  open by default with its own icon toggle, no native collapse arrow. Restore
+  Phone's original negative-prompt DOM/open state and inline sizing on resize.
+- LoRAs, Generation settings, Resolution and Advanced open upward as bounded,
+  internally scrolling overlays. Their summaries and columns do not move; arrows
+  rotate in fixed-width slots. Keep dependent ResizeObserver writes frame-batched.
+- Desktop LoRA rows hide redundant visual field labels (retain accessible names),
+  pair strength sliders with numeric inputs, and use slider range -2..2. Restore
+  original Phone slider bounds; numeric metadata limits/values stay authoritative.
+- Desktop Gallery uses an icon refresh. Prompt controls use chevrons and an
+  idle-only broom action calling the existing VRAM API. Desktop hides prompt
+  history and the fixed-seed explanatory hint; Phone retains both.
+- Both Desktop Preview and enlarged viewer use Compare instead of New variation.
+  One second-image picker reuses the shared gallery renderer/loader and existing
+  comparison dialog. Keep drafts/selection on cancel, ignore late responses, exclude
+  the source image, preserve square scrolling rows, wait for thumbnail decoding,
+  and honor reduced motion. Enlarged-view picker centers over Compare, bottom at
+  the Upscale/Delete row, clamped to the viewport; regular picker matches Preview.
+  Desktop hides the viewer filename/iPhone instructions; Phone restores them.
+- Do not modify any ComfyUI installation. User explicitly declined an external
+  immediate-VRAM-cleanup patch. The existing idle-only `/free` request remains;
+  server-side processing timing is outside this app's guarantee.
+
 ## Data and safety contracts
 
 - Act on the explicitly selected image and version. Ignore stale async responses
@@ -94,6 +138,15 @@ For WebUI changes, install optional Playwright and its browsers:
 .venv/bin/python tests/manual/mobile_responsive_browser.py --browser chromium --output /tmp/control-responsive-check
 .venv/bin/python tests/manual/mobile_generate_button_browser.py --browser chromium --output /tmp/control-generate-check
 git diff --check
+```
+
+Also run the focused protocol/browser checks relevant to a change:
+
+```bash
+.venv/bin/python tests/manual/refresh_stability_browser.py --browser chromium --output /tmp/control-refresh-check
+.venv/bin/python tests/manual/bypassed_loras_browser.py --browser chromium --output /tmp/control-bypassed-loras-check
+.venv/bin/python tests/manual/saved_workflow_picker_browser.py --browser chromium --output /tmp/control-workflow-picker-check
+.venv/bin/python tests/manual/generate_transition_browser.py --browser chromium --output /tmp/control-submit-transition-check
 ```
 
 Repeat relevant browser checks with WebKit and fresh output directories. See

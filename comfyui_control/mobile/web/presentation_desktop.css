@@ -30,21 +30,25 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 :where(html[data-presentation="desktop"]) #workspace[data-page="create"] #generation-panel {
-  position: static;
+  position: relative;
+  top: auto;
   grid-row: 3;
   height: var(--desktop-preview-height, 800px);
   max-height: none;
 }
 :where(html[data-presentation="desktop"]) #workspace[data-page="create"] #job-output {
-  flex: 0 0 88px;
+  flex: 0 0 0;
   overflow: visible;
 }
 :where(html[data-presentation="desktop"]) #workspace[data-page="create"] #job-output > .job-card {
   margin: 0;
 }
+/* Generate already displays submission feedback; the Phone dock would flash and resize this panel. */
+:where(html[data-presentation="desktop"]) #workspace[data-page="create"] #dock-submitting,
 :where(html[data-presentation="desktop"]) #workspace[data-page="create"] #generation-empty,
 :where(html[data-presentation="desktop"]) #workspace[data-page="create"] #preview,
 :where(html[data-presentation="desktop"]) #reuse-last,
+:where(html[data-presentation="desktop"]) #prompt-history,
 :where(html[data-presentation="desktop"]) .workflow-actions {
   display: none;
 }
@@ -90,7 +94,7 @@
   z-index: 5;
 }
 :where(html[data-presentation="desktop"]) .prompt-editor.expanded textarea.positive {
-  height: clamp(432px, 70dvh, 720px);
+  height: var(--desktop-editor-height, 288px);
   box-shadow: 0 16px 36px #0009;
 }
 :where(html[data-presentation="desktop"]) .desktop-selector-tools {
@@ -135,11 +139,275 @@
 :where(html[data-presentation="desktop"]) #desktop-right-column #generation-panel {
   flex-shrink: 0;
 }
-:where(html[data-presentation="desktop"]) #workspace[data-page="create"] #generation-panel[data-completed="true"] #job-output {
-  flex-basis: 0;
-  overflow: hidden;
-}
-:where(html[data-presentation="desktop"]) #generation-panel[data-completed="true"] #job-title,
-:where(html[data-presentation="desktop"]) #generation-panel[data-completed="true"] #job-metrics {
+/* Normal generation feedback lives in the header and Generate button, not above the image. */
+:where(html[data-presentation="desktop"]) #generation-panel:not([data-status="failed"]):not([data-status="unknown"]) #job-title,
+:where(html[data-presentation="desktop"]) #generation-panel:not([data-status="failed"]):not([data-status="unknown"]) #job-metrics {
   display: none;
+}
+:where(html[data-presentation="desktop"]) #workspace[data-page="create"] #generation-panel:is([data-status="failed"], [data-status="unknown"]) #job-output {
+  flex-basis: 88px;
+  overflow: auto;
+}
+:where(html[data-presentation="desktop"]) #generation-panel #cancel {
+  position: absolute;
+  top: 12px;
+  right: 22px;
+}
+
+/* Live metrics belong to the masthead; Phone keeps its existing progress dock. */
+:where(html[data-presentation="desktop"]) #header-generation {
+  flex: 1;
+  width: auto;
+}
+:where(html[data-presentation="desktop"]) #header-generation #job-detail,
+:where(html[data-presentation="desktop"]) #header-generation #progress {
+  display: none;
+}
+:where(html[data-presentation="desktop"]) #header-generation .generation-stats {
+  justify-content: center;
+  align-items: baseline;
+  gap: 6px 20px;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+:where(html[data-presentation="desktop"]) #header-generation .generation-stats > span {
+  white-space: nowrap;
+}
+:where(html[data-presentation="desktop"]) #header-generation .generation-stats b {
+  color: var(--accent);
+}
+
+:where(html[data-presentation="desktop"]) #refresh-gallery,
+:where(html[data-presentation="desktop"]) .desktop-vram-cleanup,
+:where(html[data-presentation="desktop"]) .prompt-editor-toggle {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  padding: 10px;
+}
+:where(html[data-presentation="desktop"]) #refresh-gallery svg,
+:where(html[data-presentation="desktop"]) .desktop-vram-cleanup svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+:where(html[data-presentation="desktop"]) .prompt-editor-heading label {
+  margin-right: auto;
+}
+:where(html[data-presentation="desktop"]) .prompt-editor-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  font-size: 0;
+}
+:where(html[data-presentation="desktop"]) .prompt-editor-toggle::after {
+  content: "";
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-right: 1.6px solid currentColor;
+  border-bottom: 1.6px solid currentColor;
+  transform: translateY(-3px) rotate(45deg);
+}
+:where(html[data-presentation="desktop"]) .prompt-editor-toggle[aria-expanded="true"]::after {
+  transform: translateY(3px) rotate(225deg);
+}
+
+/* These summaries retain their flow height while their controls open above them. */
+:where(html[data-presentation="desktop"]) :is(#lora-card, #settings-card, #resolution-card, #advanced) {
+  position: relative;
+}
+:where(html[data-presentation="desktop"]) :is(#lora-card, #settings-card, #resolution-card, #advanced)[open] {
+  z-index: 6;
+}
+:where(html[data-presentation="desktop"]) :is(#lora-card, #settings-card, #resolution-card, #advanced)[open]:focus-within {
+  z-index: 7;
+}
+:where(html[data-presentation="desktop"]) :is(#lora-card, #settings-card, #resolution-card, #advanced) > summary {
+  margin-bottom: 0;
+}
+:where(html[data-presentation="desktop"]) .desktop-section-content {
+  position: absolute;
+  bottom: 100%;
+  left: -1px;
+  right: -1px;
+  max-height: calc(100dvh - 100px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 26px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 -10px 36px #0009;
+}
+
+/* Compact LoRA controls; keep their full labels available to assistive technology. */
+:where(html[data-presentation="desktop"]) #lora-controls .control:has(> [data-role="lora_model"]) > label,
+:where(html[data-presentation="desktop"]) #lora-controls .control:has(> [data-role="lora_strength"]) > label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+:where(html[data-presentation="desktop"]) #lora-controls .lora-group {
+  padding-top: 8px;
+  margin-top: 8px;
+}
+:where(html[data-presentation="desktop"]) #lora-controls .lora-group:first-child {
+  padding-top: 0;
+  margin-top: 0;
+}
+:where(html[data-presentation="desktop"]) #lora-controls .check-label {
+  min-height: 28px;
+  margin-bottom: 4px;
+}
+:where(html[data-presentation="desktop"]) #lora-controls .control-grid {
+  gap: 8px;
+}
+:where(html[data-presentation="desktop"]) #lora-controls select {
+  min-height: 40px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+:where(html[data-presentation="desktop"]) #lora-controls .control:has(> input[type="range"]) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 72px;
+  align-items: center;
+  gap: 6px;
+}
+:where(html[data-presentation="desktop"]) #lora-controls input[type="number"] {
+  min-height: 36px;
+  padding: 6px 8px;
+}
+:where(html[data-presentation="desktop"]) #lora-controls input[type="range"] {
+  min-height: 36px;
+  padding: 4px 0;
+}
+:where(html[data-presentation="desktop"]) :is(#lora-card, #settings-card, #resolution-card, #advanced) > summary {
+  display: block;
+  list-style: none;
+}
+:where(html[data-presentation="desktop"]) :is(#lora-card, #settings-card, #resolution-card, #advanced) > summary::-webkit-details-marker {
+  display: none;
+}
+:where(html[data-presentation="desktop"]) :is(#lora-card, #settings-card, #resolution-card, #advanced) > summary::before {
+  content: "▸";
+  display: inline-block;
+  width: 1em;
+  margin-right: 4px;
+  text-align: center;
+}
+:where(html[data-presentation="desktop"]) :is(#lora-card, #settings-card, #resolution-card, #advanced)[open] > summary::before {
+  transform: rotate(-90deg);
+}
+
+/* Desktop connection feedback lives in the masthead. Keep action tooltips/errors. */
+:where(html[data-presentation="desktop"]) #offline,
+:where(html[data-presentation="desktop"]) #comfy-offline,
+:where(html[data-presentation="desktop"]) #desktop-preview-footer .image-workflow-status {
+  display: none;
+}
+:where(html[data-presentation="desktop"]) #desktop-offline-notice {
+  flex-shrink: 0;
+  max-width: none;
+  background: var(--surface);
+  color: var(--accent);
+  border-color: #525a31;
+}
+
+:where(html[data-presentation="desktop"]) body:has(#workspace[hidden]) #desktop-offline-notice {
+  display: none;
+}
+
+:where(html[data-presentation="desktop"]) #desktop-compare-picker {
+  position: fixed;
+  margin: 0;
+  max-width: none;
+  max-height: none;
+  padding: 22px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 16px 36px #0009;
+}
+:where(html[data-presentation="desktop"]) #desktop-compare-picker[open] {
+  display: flex;
+  flex-direction: column;
+}
+:where(html[data-presentation="desktop"]) #desktop-compare-picker::backdrop {
+  background: transparent;
+  backdrop-filter: none;
+}
+:where(html[data-presentation="desktop"]) #desktop-compare-picker .heading {
+  flex-shrink: 0;
+  align-items: flex-start;
+}
+:where(html[data-presentation="desktop"]) #desktop-compare-picker [role="status"]:empty {
+  display: none;
+}
+:where(html[data-presentation="desktop"]) #desktop-compare-picker .image-grid {
+  grid-auto-rows: max-content;
+  overflow: auto;
+  min-height: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+}
+:where(html[data-presentation="desktop"]) #desktop-compare-picker .image-grid img {
+  object-fit: contain;
+}
+
+:where(html[data-presentation="desktop"]) #desktop-compare-picker [data-thumbnail-loading] picture {
+  opacity: 0;
+}
+:where(html[data-presentation="desktop"]) #desktop-compare-picker .desktop-thumbnail-spinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 18px;
+  margin: -9px;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+/* Desktop seed controls do not need the explanatory hint. */
+:where(html[data-presentation="desktop"]) #basic-controls .fixed-seed-hint {
+  display: none;
+}
+
+:where(html[data-presentation="desktop"]) #image-caption,
+:where(html[data-presentation="desktop"]) #image-dialog .viewer > .actions:has(#download-image) + p.hint {
+  display: none;
+}
+:where(html[data-presentation="desktop"]) #image-dialog .heading:has(#close-image) {
+  justify-content: flex-end;
+}
+
+:where(html[data-presentation="desktop"]) #negative-controls > summary {
+  display: none;
+}
+:where(html[data-presentation="desktop"]) .desktop-negative-editor {
+  grid-template-rows: auto 90px;
+}
+:where(html[data-presentation="desktop"]) .desktop-negative-editor textarea.negative {
+  grid-row: 2;
+  align-self: start;
+  height: 90px;
+  resize: none;
+}
+:where(html[data-presentation="desktop"]) .desktop-negative-editor.expanded textarea.negative {
+  height: var(--desktop-editor-height, 90px);
+  box-shadow: 0 16px 36px #0009;
 }
