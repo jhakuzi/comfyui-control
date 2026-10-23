@@ -11,9 +11,11 @@ This session's reviewed changes are **published as 1.0.4** on main.
 - COPR build: https://copr.fedorainfracloud.org/coprs/jhakuzi/comfyui-control/build/11199608/
   Package `comfyui-control-1.0.4-1`, chroot `fedora-44-x86_64`.
 
-The user approved this push/merge/release and the handoff update. The workflow
-built/tested the Fedora RPM successfully and submitted COPR build 11199608. Consult
-the linked build pages for the latest outcome; this record is not a live monitor.
+The user approved this push/merge/release and the handoff update. GitHub Actions
+run **40021478842 completed successfully**, including the Fedora RPM build/tests.
+COPR build **11199608 succeeded**, publishing **1.0.4-1** for Fedora 44 x86_64.
+All release work requested in this session is complete; linked build pages remain
+the source of truth for historical checks. No automatic monitoring was scheduled.
 A documentation-only follow-up records the release after the tagged merge. A fresh
 clone of `v1.0.4` and the exported ZIP both report `ComfyUI Control 1.0.4`.
 
