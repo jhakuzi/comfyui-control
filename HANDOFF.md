@@ -2,13 +2,25 @@
 
 ## Release baseline and next session
 
-This session's reviewed changes are prepared as **1.0.4**, from testing branch
-`testing/ui-flicker-fixes` based on main `e5b226b` (1.0.3). The user explicitly
-approved pushing this branch, merging to main, updating these handoff/agent guides,
-and initiating COPR. The matching `v1.0.4` tag triggers `.github/workflows/copr.yml`:
-source RPM/app ZIP, Fedora RPM build/tests, then COPR submission and build result.
-Use Git history, remote refs and the tagged Actions run to determine the current
-merge/build state; do not infer pending release work from this preparation record.
+This session's reviewed changes are **published as 1.0.4** on main.
+
+- Testing/source branch `testing/ui-flicker-fixes` was pushed at `6cd5439`.
+- Main merge/release commit: `493be93dc4358dd52d9c72bfc8568b1d42a2fdc5`.
+- Annotated release tag: `v1.0.4`, pointing to that merge commit.
+- GitHub build: https://github.com/jhakuzi/comfyui-control/actions/runs/40021478842
+- COPR build: https://copr.fedorainfracloud.org/coprs/jhakuzi/comfyui-control/build/11199608/
+  Package `comfyui-control-1.0.4-1`, chroot `fedora-44-x86_64`.
+
+The user approved this push/merge/release and the handoff update. The workflow
+built/tested the Fedora RPM successfully and submitted COPR build 11199608. Consult
+the linked build pages for the latest outcome; this record is not a live monitor.
+A documentation-only follow-up records the release after the tagged merge. A fresh
+clone of `v1.0.4` and the exported ZIP both report `ComfyUI Control 1.0.4`.
+
+The tag triggers `.github/workflows/copr.yml`: source RPM/app ZIP, Fedora RPM
+build/tests, then COPR submission and build result. Inspect actual Git history,
+remote refs and checks before any further release work. This approval applies to
+this release only, not future version bumps or publishes.
 
 Repository: https://github.com/jhakuzi/comfyui-control
 Local development checkout used here:
@@ -139,9 +151,8 @@ Focused scripts in `tests/manual/`:
   No queue redesign, Phone action UI, or Wastebin management UI was added.
 - Do not touch ComfyUI installations, restart servers or install cleanup extensions.
   A proposed external queue patch was declined and is not part of this repository.
-- Version must agree in pyproject, __init__, spec and tag. Versioned distribution
-  artifacts are ignored; stable `downloads/comfyui-control.zip` and `.src.rpm` are
-  rebuilt for release. The frozen presentation fixture's version-file hashes must
+- Version must agree in pyproject, __init__, spec and tag. Versioned app ZIPs are ignored; keep versioned SRPM build outputs out of commits.
+  Stable `downloads/comfyui-control.zip` and `.src.rpm` are rebuilt for release. The frozen presentation fixture's version-file hashes must
   track authorized version bumps; do not reset unrelated protected assets.
 - Previous 1.0.3 Actions run `39844702309` and COPR `11194472` succeeded. Local COPR
   credentials were expired; release-tag Actions secrets handled publishing. Never
