@@ -1,5 +1,11 @@
 # Session handoff — 2026-10-24
 
+## Phone Gallery copy follow-up
+
+Phone hides the introductory “Recent images from ComfyUI output…” paragraph
+using scoped presentation CSS. Desktop copy and the Gallery empty-state hint
+remain unchanged. Shell cache is bumped to `gallery-library-3`.
+
 ## Phone modernization testing branch
 
 Branch: `testing/phone-ui-modernization`, created from the freshly cloned latest

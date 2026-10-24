@@ -1,5 +1,8 @@
 /* Phone refinements use the existing yellow theme, single-column form, native
    details, viewer and fixed Generate dock. No Desktop overlay geometry. */
+:where(html[data-presentation="mobile"]) #gallery-page > .heading + .hint {
+  display: none;
+}
 :where(html[data-presentation="mobile"]) :is(.tabs button, summary) {
   min-height: 48px;
 }
