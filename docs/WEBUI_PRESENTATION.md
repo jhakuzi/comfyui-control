@@ -29,6 +29,7 @@ for the complete current behavior, shared refresh/picker/LoRA changes and limita
 | `mobile/web/feature_image_actions.js` | Existing selected-image actions, confirmed heart state, capabilities, version/permission checks, pending/error rendering and stale-response guards. |
 | `mobile/web/feature_image_api.js` | Existing image-workflow transport, using the same pending UUID journal and generation submission controller. |
 | `mobile/web/feature_image_workflows.js` | Shared Edit/Upscale dialog behavior, adapted from the existing forms without Forge styling. |
+| `mobile/web/feature_gallery_library.js/css` | Shared toolbar, collection dialogs and heart indicators; transport/selection remain supplied by the controller. |
 
 One action row contains Heart, Edit, Upscale and Delete. It sits above the existing
 Reuse settings / Compare row beneath the desktop result. The two rows stay
@@ -61,7 +62,10 @@ idempotent UUID, reconnect reconciliation and Generate retry path as generation.
 
 Delete uses the existing confirmation and virtual Wastebin endpoint. It marks
 metadata and removes that image from the current collections; originals stay in
-place. This task adds no new Wastebin management UI or permanent-delete path.
+place. Gallery now has Wastebin and Favourites preview dialogs beside Refresh,
+with a heart indicator on marked thumbnails. See
+[GALLERY_COLLECTIONS.md](GALLERY_COLLECTIONS.md). Wastebin browsing reads private
+thumbnails; it adds no restore or permanent-delete controls.
 
 ## Verification
 

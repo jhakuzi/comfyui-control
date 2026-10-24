@@ -18,6 +18,7 @@ let state = { jobs: [], online: false },
   busy = false;
 let submitting = false;
 let galleryRevision = "", galleryPromise = null, galleryTimer = null, galleryEpoch = 0;
+let galleryMutation = 0;
 let mappingDraft = new Map(),
   gallery = [],
   viewerItems = [],
@@ -104,6 +105,7 @@ async function api(path, options = {}) {
   return body;
 }
 function showLogin() {
+  galleryLibrary.close();
   imageWorkflowDialogs?.close();
   selectedImageActions?.select(null);
   imageActionSignature = "";
@@ -172,6 +174,7 @@ function restoreUI() {
   uiReady = true;
 }
 function selectTab(name) {
+  if (name !== "gallery") galleryLibrary.close();
   $("workspace").dataset.page = name;
   $("create-page").hidden = name !== "create";
   $("gallery-page").hidden = name !== "gallery";
@@ -1035,7 +1038,7 @@ function applyState(value) {
 function renderImages(container, items, choose = null) {
   container.imageItems = items;
   container.chooseImage = choose;
-  const signature = JSON.stringify(items.map((item) => [item.id, item.url, item.thumbnail]));
+  const signature = JSON.stringify(items.map((item) => [item.id, item.url, item.thumbnail, !!item.kept]));
   if (container.dataset.signature === signature) return;
   container.dataset.signature = signature;
   const existing = new Map([...container.children].map((button) => [button.dataset.imageId, button]));
@@ -1045,7 +1048,19 @@ function renderImages(container, items, choose = null) {
   items.forEach((item, index) => {
     const source = item.thumbnail || item.url;
     const previous = existing.get(item.id);
+    const paintHeart = (button) => {
+      const marked = (container.id === "gallery-grid" || container === galleryLibrary.grid) && !!item.kept;
+      let badge = button.querySelector(".gallery-image-heart");
+      if (marked && !badge) {
+        badge = node("span", "♥", "gallery-image-heart");
+        badge.setAttribute("aria-hidden", "true");
+        button.append(badge);
+      } else if (!marked) badge?.remove();
+      if (marked) button.setAttribute("aria-description", "Favourite");
+      else button.removeAttribute("aria-description");
+    };
     if (previous?.dataset.source === source && previous.querySelector("img")) {
+      paintHeart(previous);
       if (container.children[index] !== previous) container.insertBefore(previous, container.children[index] || null);
       return;
     }
@@ -1076,9 +1091,10 @@ function renderImages(container, items, choose = null) {
       button.replaceChildren(node("span", "Image unavailable", "missing"));
       container.dataset.signature = "";
     });
-    if (container === desktopImages.compareGrid) desktopImages.prepareThumbnail(button, image);
+    if (container === desktopImages.compareGrid || container === galleryLibrary.grid) desktopImages.prepareThumbnail(button, image);
     picture.append(image);
     button.append(picture);
+    paintHeart(button);
     button.addEventListener("click", () => {
       const currentItems = container.imageItems;
       const currentIndex = currentItems.findIndex((entry) => entry.id === item.id);
@@ -1101,11 +1117,14 @@ function loadGallery(force = false) {
   if (galleryPromise) return galleryPromise;
   clearTimeout(galleryTimer);
   const epoch = galleryEpoch;
+  const mutation = galleryMutation;
+  let refreshAgain = false;
   $("refresh-gallery").disabled = true;
   galleryPromise = (async () => {
     try {
       const result = await api(`/api/gallery?since=${encodeURIComponent(galleryRevision)}${force ? "&refresh=1" : ""}`);
       if (epoch !== galleryEpoch) return;
+      if (mutation !== galleryMutation) { refreshAgain = true; return; }
       galleryRevision = result.revision;
       if (result.images) {
         const oldGallery = gallery;
@@ -1126,7 +1145,7 @@ function loadGallery(force = false) {
         }
       }
       renderImages($("gallery-grid"), gallery);
-      comparison.gallery(gallery);
+      comparison.gallery(comparisonGallery());
       renderPreviewComparisonGallery();
       $("gallery-empty").hidden = !!gallery.length;
       syncSelectedImageActions();
@@ -1137,7 +1156,9 @@ function loadGallery(force = false) {
       if (epoch === galleryEpoch) {
         galleryPromise = null;
         $("refresh-gallery").disabled = false;
-        if (connected && !document.hidden && !$("gallery-page").hidden && !$("workspace").hidden)
+        if (refreshAgain && connected && !document.hidden && !$("gallery-page").hidden && !$("workspace").hidden)
+          void loadGallery(true);
+        else if (connected && !document.hidden && !$("gallery-page").hidden && !$("workspace").hidden)
           galleryTimer = setTimeout(() => loadGallery(), 5000);
       }
     }
@@ -1150,6 +1171,11 @@ async function comparePreviewImage() {
   desktopImages.openComparePicker(item.id);
   await loadGallery(true);
 }
+function comparisonGallery() {
+  // An older favourite can be the selected source even outside recent Gallery.
+  const favourites = galleryLibrary.dialog.open && galleryLibrary.mode === "favourites" ? galleryLibrary.items : [];
+  return [...new Map([...favourites, ...gallery].map((item) => [item.id, item])).values()];
+}
 function renderPreviewComparisonGallery() {
   if (!desktopImages.comparing) return;
   const sourceId = desktopImages.comparePicker.dataset.imageId;
@@ -1157,11 +1183,12 @@ function renderPreviewComparisonGallery() {
   desktopImages.compareStatus.textContent = candidates.length ? "" : "No other images in the gallery yet.";
   renderImages(desktopImages.compareGrid, candidates, (item) => {
     if (!desktopImages.comparing || actionImage()?.id !== sourceId) return;
-    if (!gallery.some((entry) => entry.id === sourceId) || !gallery.some((entry) => entry.id === item.id)) {
+    const images = comparisonGallery();
+    if (!images.some((entry) => entry.id === sourceId) || !images.some((entry) => entry.id === item.id)) {
       desktopImages.compareStatus.textContent = "An image is no longer available. Close this gallery and try again.";
       return;
     }
-    comparison.gallery(gallery);
+    comparison.gallery(images);
     comparison.selected = [sourceId, item.id];
     comparison.update();
     desktopImages.comparePicker.close();
@@ -1245,7 +1272,9 @@ function syncSelectedImageActions(force = false) {
   selectedImageActions?.select(item, { connected: canRequest });
 }
 async function imageActionChanged(item, result) {
-  const collections = new Set([gallery, viewerItems, ...state.jobs.map((job) => job.images || [])]);
+  galleryMutation++;
+  const favouriteViewer = galleryLibrary.dialog.open && galleryLibrary.mode === "favourites" && viewerItems === galleryLibrary.items;
+  const collections = new Set([gallery, viewerItems, galleryLibrary.items, ...state.jobs.map((job) => job.images || [])]);
   const selected = viewerItems[viewerIndex]?.id;
   for (const items of collections) {
     const index = items.findIndex((entry) => entry.id === item.id);
@@ -1253,10 +1282,11 @@ async function imageActionChanged(item, result) {
     if (result.trash) items.splice(index, 1);
     else items[index].kept = result.kept;
   }
+  galleryLibrary.changed(item, result);
   renderImages($("job-images"), previewImages());
   renderImages($("gallery-grid"), gallery);
-  comparison.gallery(gallery);
-  if ($("image-dialog").open && result.trash) {
+  comparison.gallery(comparisonGallery());
+  if ($("image-dialog").open && (result.trash || (favouriteViewer && !result.kept))) {
     if (viewerItems.length) openImage(viewerItems, selected === item.id ? Math.min(viewerIndex, viewerItems.length - 1)
       : viewerItems.findIndex((entry) => entry.id === selected));
     else $("image-dialog").close();
@@ -1429,6 +1459,7 @@ async function bootstrap() {
   }
 }
 function pauseConnection() {
+  galleryLibrary.close();
   stopGallerySync();
   saveDraft();
   saveUI();
@@ -1757,6 +1788,14 @@ const imageFeatureAPI = new ComfyImageFeatureAPI({ api, requestId, submit: submi
   readPending: () => pendingSubmission, writePending: (value) => {
     pendingSubmission = value;
     writeStore("pending", value);
+  } });
+const galleryLibrary = new ComfyGalleryLibrary({ renderImages, openImage,
+  load: async (mode) => {
+    if (!connected || recovering || document.hidden || $("workspace").hidden)
+      throw new Error("Reconnect before refreshing this collection.");
+    if (mode === "favourites") return (await api("/api/gallery?favourites=1&refresh=1")).filter((item) => item.kept);
+    const entries = await imageFeatureAPI.wastebin();
+    return entries.map((entry) => ({ ...entry, id: entry.token, url: entry.thumbnail, thumbnail: null }));
   } });
 const promptHistory = new PromptHistoryView({ api, reuse: (entry) => {
   if (!preset) throw new Error("Choose a workflow before reusing a prompt.");

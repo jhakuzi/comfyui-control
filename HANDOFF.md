@@ -7,6 +7,7 @@ main `2fb6352`. Changes are for review/testing only; no main merge, version bump
 tag, release rebuild or publish is authorized by this session. The previous
 release handoff below remains historical context.
 
+Read `docs/GALLERY_COLLECTIONS.md` for the new shared Gallery collection views.
 Read `docs/PHONE_UI.md` for the Desktop-to-Phone behavior mapping, architecture,
 verification commands and remaining device checks. The existing Phone UI now has
 shared Heart/Edit/Upscale/virtual Delete controls in completed results and the
@@ -29,7 +30,7 @@ or real user configuration was touched.
 Phone styles are isolated in `presentation_phone.css`; the shared `style.css`,
 Desktop stylesheet and 1000×600 breakpoint are unchanged. The public-asset allowlist
 and service-worker shell include the new stylesheet, with cache
-`comfy-control-mobile-phone-actions-3`. Private APIs/images remain uncached.
+`comfy-control-mobile-gallery-library-1`. Private APIs/images remain uncached.
 
 Verification completed:
 
@@ -85,6 +86,45 @@ presentation-boundary tests and `git diff --check` passed. Phone checks assert
 result order/title, hidden filename, top-right overlay bounds, visible touch controls
 and no dialog overflow at all five portrait/tablet/landscape sizes. Screenshots
 were visually inspected. Physical-device checks remain outstanding.
+
+## Desktop and Phone Gallery collections
+
+Gallery now has bin and heart icon buttons immediately after Refresh, using one
+shared `feature_gallery_library.js/css` component. Both open bounded native
+dialogs with square, scrolling thumbnail rows using the existing `renderImages`
+and decoded/reduced-motion thumbnail handling. Favourites opens the shared image
+viewer/actions. Wastebin uses the existing private list/thumbnail API and can show
+a larger thumbnail with its filename and stored error/notice; browsing performs
+no restore or permanent deletion. No new polling, queue or selection store exists.
+
+Main Gallery and Favourites tiles display small yellow hearts. Metadata changes
+update badges in place without replacing image/button DOM. Confirmed mutations
+invalidate older Gallery reads, preventing a delayed response from reversing a
+heart. Popup close/tab/lifecycle/authentication guards ignore stale reads and clear
+private grids on sign-in. Unmarking in Favourites safely advances/closes its viewer.
+
+`GET /api/gallery?favourites=1` lists the requesting browser's exact-version marks,
+including older files beyond the recent 200/ordinary retained 500. The existing
+bounded local/network scan retains marked references across restarts and scans by
+other browsers. Recent Gallery remains capped at 200; private marks, output scope,
+permissions, corruption safeguards and scan/mark bounds stay authoritative.
+Older favourites can still use full viewing/actions and Compare. Deleted entries
+remain excluded from ordinary Gallery/Favourites and original files stay intact.
+
+The new public JS/CSS are allowlisted and included in shell cache
+`comfy-control-mobile-gallery-library-1`. Shared `style.css`, Desktop/Phone
+arrangement styles, versions and release assets are unchanged. Restart a running
+app for the Python query update, then reload both WebUI pages.
+
+Verification: **434 pytest tests passed**, including new local/network cases for
+older favourites beyond both limits, restart, browser isolation, replaced versions,
+deleted exclusion and private thumbnail authorization. **12 browser runs passed**:
+collection flow plus existing Desktop/Phone actions, responsive behavior, Gallery
+synchronization and comparison, each in Chromium and WebKit. The new flow covers
+five viewport sizes, live badges/DOM identity, empty/multiple rows, decoded previews,
+private collections, stale Gallery/collection responses, error/retry, sign-in
+clearing, preserved drafts/files and older-favourite viewing/Compare. Screenshots
+were inspected. Physical Phone and actual NAS/GPU checks remain outside fixtures.
 
 ## Previous release handoff — 2026-10-23
 

@@ -625,7 +625,7 @@ class MobileService:
         self.unavailable_images.add(identifier)
         self.gallery_time = 0
 
-    async def gallery(self, owner=None, force=False):
+    async def gallery(self, owner=None, force=False, favourites=False):
         requested = time.monotonic()
         async with self.gallery_lock:
             if (force and self.gallery_time < requested) or not self.gallery_time or time.monotonic() - self.gallery_time >= 2:
@@ -636,7 +636,8 @@ class MobileService:
                      'reuse': self.image_reuse_status(item, owner), 'job': item.get('job') if owner is None or
                      self.jobs.get(item.get('job'), {}).get('owner') == owner else None}
                     for item in ordered if item['id'] not in self.unavailable_images
-                    and not self.image_library.deleted_image(self.output_scope, item)][:200]
+                    and not self.image_library.deleted_image(self.output_scope, item)
+                    and (not favourites or self.image_library.contains(self.output_scope, owner, item))][:2000 if favourites else 200]
 
     async def scan_gallery(self):
         # Shared across clients; filesystem work runs off the HTTP/Qt threads.
@@ -693,14 +694,19 @@ class MobileService:
                 self.images.pop(identifier, None)
                 self.unavailable_images.add(identifier)
         discovered = 0
+        # Keep older hearted versions discoverable across restarts and ordinary
+        # recent-gallery scans. IDs already include output scope; response marks
+        # and permissions remain browser-specific. The existing scan stays bounded.
+        kept_versions = {(identifier, modified) for entries in self.image_library.kept.values()
+                         for identifier, modified in entries.items()}
         deleted = {(record['image'].get('id'), record['image'].get('modified'))
                    for record in self.image_library.deleted.values() if record['scope'] == scope}
         for created, modified, path in sorted(found, reverse=True):
             identifier = hashlib.sha256((scope + ':output:' + str(path)).encode()).hexdigest()[:32]
             if (identifier, modified) in deleted:
                 continue
-            if discovered >= 200:
-                break
+            if discovered >= 200 and (identifier, modified) not in kept_versions:
+                continue
             discovered += 1
             ref = self.image_ref({"filename": path.name, "subfolder": str(path.parent) if path.parent != Path(".") else "", "type": "output"})
             if ref:
@@ -718,7 +724,8 @@ class MobileService:
             return item.get("created", self.jobs.get(item.get("job"), {}).get("created", 0))
         ordered = sorted(self.images.values(), key=created, reverse=True)
         self.images = {item["id"]: item for item in ordered if not self.image_library.deleted_image(scope, item)}
-        self.images = dict(list(self.images.items())[:500])
+        self.images = {identifier: item for index, (identifier, item) in enumerate(self.images.items())
+                       if index < 500 or (identifier, item.get('modified')) in kept_versions}
         known = set(self.images) | {item.get('id') for job in self.current_jobs() for item in job.get('images', [])}
         self.unavailable_images.intersection_update(known)
         self.gallery_time = time.monotonic()

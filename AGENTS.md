@@ -24,6 +24,7 @@ Paths below are under `comfyui_control/` unless stated otherwise:
 | `network_output.py`, `background_process.py` | Authorized output filesystem operations and bounded workers. |
 | `mobile/web/app.js` | One shared application controller, selection, drafts, requests, generation and pending journal. |
 | `mobile/web/feature_*.js` | Shared Generate/image-action components and transport. |
+| `mobile/web/feature_gallery_library.js/css` | Shared Gallery toolbar, Favourites/Wastebin collection previews and heart indicators. |
 | `tests/`, `tests/manual/` at repository root | pytest and automated browser/protocol fixtures. |
 
 ## Desktop and Phone boundaries
@@ -99,6 +100,14 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   results and in the saved-image viewer; a running Phone job retains its live
   preview without those controls. One component, capability signature and pending
   journal serve both presentations. Action forms close on breakpoint transitions.
+- Both presentations have Gallery Wastebin/Favourites icons next to Refresh and
+  heart indicators on marked thumbnails. Collection dialogs reuse `renderImages`,
+  thumbnail decoding/reduced motion and the existing viewer. Wastebin previews use
+  only private `/api/trash` thumbnails. Favourites includes older marked versions
+  outside the recent 200; scanning and marks remain bounded and browser/output
+  scoped. Keep thumbnails/DOM identity on mark updates, ignore stale reads after
+  close/authentication/mutations, and add no collection polling. See
+  `docs/GALLERY_COLLECTIONS.md` for details and checks.
 - Both Desktop Preview and enlarged viewer use Compare instead of New variation.
   One second-image picker reuses the shared gallery renderer/loader and existing
   comparison dialog. Keep drafts/selection on cancel, ignore late responses, exclude
@@ -156,6 +165,7 @@ For WebUI changes, install optional Playwright and its browsers:
 .venv/bin/python tests/manual/mobile_responsive_browser.py --browser chromium --output /tmp/control-responsive-check
 .venv/bin/python tests/manual/mobile_generate_button_browser.py --browser chromium --output /tmp/control-generate-check
 .venv/bin/python tests/manual/phone_image_actions_browser.py --browser chromium --output /tmp/control-phone-actions-check
+.venv/bin/python tests/manual/gallery_collections_browser.py --browser chromium --output /tmp/control-gallery-library-check
 git diff --check
 ```
 
