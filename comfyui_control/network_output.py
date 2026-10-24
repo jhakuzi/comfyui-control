@@ -417,7 +417,7 @@ def _trash_directory(root, create=False):
         os.close(parent)
 
 
-def _trash_record(directory, token, owner, scope):
+def _trash_record(directory, token, owner, scope, *, shared=False):
     if not isinstance(token, str) or not re.fullmatch('[a-f0-9]{32}', token):
         raise ValueError('Invalid trash entry.')
     entry = _open_directory(directory, token)
@@ -427,7 +427,9 @@ def _trash_record(directory, token, owner, scope):
             if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
                 raise ValueError('Invalid trash record.')
             record = json.loads(stream.read(16385))
-        if record.get('owner') != owner or record.get('scope') != scope or record.get('token') != token:
+        valid_owner = isinstance(record.get('owner'), str) and re.fullmatch('[a-f0-9]{64}', record['owner'])
+        if (not valid_owner or (not shared and record['owner'] != owner)
+                or record.get('scope') != scope or record.get('token') != token):
             raise ValueError('This trash entry belongs to another browser or output folder.')
         filename = record.get('filename', '')
         relative = Path(record.get('subfolder', '')) / filename
@@ -462,10 +464,11 @@ def image_library(root, operation, data):
         raise
     try:
         if operation == 'trash-list':
+            shared = data.get('shared') is True
             records = []
             for token in os.listdir(trash)[:2000]:
                 try:
-                    record, _ = _trash_record(trash, token, owner, scope)
+                    record, _ = _trash_record(trash, token, owner, scope, shared=shared)
                     if not record.get('restored'):
                         entry = _open_directory(trash, record['token'])
                         try:
@@ -474,7 +477,8 @@ def image_library(root, operation, data):
                                                         list(file_identity(os.fstat(entry))[:2])], file=file_identity(info))
                         finally:
                             os.close(entry)
-                        records.append({**{k: record[k] for k in ('token', 'filename', 'subfolder', 'created')},
+                        keys = ('token', 'filename', 'subfolder', 'created', 'owner') if shared else ('token', 'filename', 'subfolder', 'created')
+                        records.append({**{k: record[k] for k in keys},
                                         'identity': identity})
                 except (OSError, ValueError, KeyError, TypeError):
                     continue

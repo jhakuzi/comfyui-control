@@ -1241,6 +1241,9 @@ function actionImage() {
   const items = previewImages();
   return items.find((item) => item.id === $("job-images").dataset.selectedImage) || items[0];
 }
+function imageActionStateSignature(item, canRequest) {
+  return JSON.stringify([item?.id, item?.modified, item?.kept, state.online, canRequest]);
+}
 function syncSelectedImageActions(force = false) {
   const active = $("login").hidden && !$("workspace").hidden;
   if (active && !selectedImageActions) {
@@ -1265,7 +1268,7 @@ function syncSelectedImageActions(force = false) {
     canCleanup: connected && state.online && !recovering && !busy && !submitting && !cleaningVRAM &&
       !state.jobs.some((job) => activeStatuses.has(job.status)) });
   const canRequest = connected && !recovering && !document.hidden;
-  const signature = JSON.stringify([item?.id, item?.modified, item?.kept, state.online, canRequest]);
+  const signature = imageActionStateSignature(item, canRequest);
   if (!force && signature === imageActionSignature) return;
   imageActionSignature = signature;
   imageWorkflowDialogs?.close();
@@ -1273,6 +1276,9 @@ function syncSelectedImageActions(force = false) {
 }
 async function imageActionChanged(item, result) {
   galleryMutation++;
+  // Local metadata changed without receiving a Gallery snapshot. Another device
+  // may return to the old revision; it must still replace our optimistic data.
+  galleryRevision = "";
   const favouriteViewer = galleryLibrary.dialog.open && galleryLibrary.mode === "favourites" && viewerItems === galleryLibrary.items;
   const collections = new Set([gallery, viewerItems, galleryLibrary.items, ...state.jobs.map((job) => job.images || [])]);
   const selected = viewerItems[viewerIndex]?.id;
@@ -1291,7 +1297,12 @@ async function imageActionChanged(item, result) {
       : viewerItems.findIndex((entry) => entry.id === selected));
     else $("image-dialog").close();
   }
-  syncSelectedImageActions(true);
+  const current = actionImage();
+  if (typeof result.kept === "boolean" && selectedImageActions?.capabilities &&
+      selectedImageActions.item?.id === item.id && current?.id === item.id &&
+      selectedImageActions.item.modified === current.modified)
+    imageActionSignature = imageActionStateSignature(current, connected && !recovering && !document.hidden);
+  syncSelectedImageActions(!!result.trash);
   if (result.trash) {
     notice("Image deleted to Wastebin. The original file remains in place.");
     refreshFullState();
@@ -1790,6 +1801,7 @@ const imageFeatureAPI = new ComfyImageFeatureAPI({ api, requestId, submit: submi
     writeStore("pending", value);
   } });
 const galleryLibrary = new ComfyGalleryLibrary({ renderImages, openImage,
+  empty: (tokens) => imageFeatureAPI.deletePermanently(tokens, true),
   load: async (mode) => {
     if (!connected || recovering || document.hidden || $("workspace").hidden)
       throw new Error("Reconnect before refreshing this collection.");

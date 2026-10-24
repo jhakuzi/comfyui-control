@@ -3,8 +3,8 @@
 /* A transient collection view. Image selection, actions, gallery transport and
    generation state stay in the existing controller and shared renderer. */
 window.ComfyGalleryLibrary = class GalleryLibrary {
-  constructor({ load, renderImages, openImage }) {
-    Object.assign(this, { load, renderImages, openImage });
+  constructor({ load, renderImages, openImage, empty }) {
+    Object.assign(this, { load, renderImages, openImage, empty });
     this.epoch = 0;
     this.items = [];
     const refresh = document.getElementById("refresh-gallery");
@@ -31,7 +31,7 @@ window.ComfyGalleryLibrary = class GalleryLibrary {
     this.dialog = document.createElement("dialog");
     this.dialog.id = "gallery-library-dialog";
     this.dialog.setAttribute("aria-labelledby", "gallery-library-title");
-    this.dialog.innerHTML = '<div class="heading"><h2 id="gallery-library-title"></h2><div class="gallery-library-tools"><button id="refresh-gallery-library" type="button" class="small">Refresh</button><button id="close-gallery-library" type="button" class="small">Close</button></div></div><p class="hint gallery-library-status" role="status"></p><div class="image-grid"></div><div class="gallery-library-deleted" hidden><img alt="Deleted image preview"/><p class="hint"></p><button type="button">Back to Wastebin</button></div>';
+    this.dialog.innerHTML = '<div class="heading"><h2 id="gallery-library-title"></h2><div class="gallery-library-tools"><button id="clear-gallery-bin" type="button" class="small danger" hidden>Clear Bin</button><button id="refresh-gallery-library" type="button" class="small">Refresh</button><button id="close-gallery-library" type="button" class="small">Close</button></div></div><p class="hint gallery-library-status" role="status"></p><div class="image-grid"></div><div class="gallery-library-deleted" hidden><img alt="Deleted image preview"/><p class="hint"></p><button type="button">Back to Wastebin</button></div>';
     document.body.append(this.dialog);
     this.title = this.dialog.querySelector("h2");
     this.status = this.dialog.querySelector('[role="status"]');
@@ -40,6 +40,8 @@ window.ComfyGalleryLibrary = class GalleryLibrary {
     this.detailImage = this.detail.querySelector("img");
     this.detailText = this.detail.querySelector("p");
     this.refreshButton = this.dialog.querySelector("#refresh-gallery-library");
+    this.clearButton = this.dialog.querySelector("#clear-gallery-bin");
+    this.clearButton.addEventListener("click", () => this.clearBin());
     this.refreshButton.addEventListener("click", () => this.refresh());
     this.dialog.querySelector("#close-gallery-library").addEventListener("click", () => this.close());
     this.detail.querySelector("button").addEventListener("click", () => this.showGrid());
@@ -68,6 +70,8 @@ window.ComfyGalleryLibrary = class GalleryLibrary {
     this.mode = mode;
     this.title.textContent = mode === "favourites" ? "Favourites" : "Wastebin";
     this.items = [];
+    this.loading = true;
+    this.status.textContent = "";
     this.grid.replaceChildren();
     delete this.grid.dataset.signature;
     this.showGrid();
@@ -86,22 +90,66 @@ window.ComfyGalleryLibrary = class GalleryLibrary {
     if (!this.dialog.open || document.hidden) return;
     const epoch = ++this.epoch, mode = this.mode;
     this.loading = true;
-    this.grid.inert = true;
-    this.refreshButton.disabled = true;
-    this.status.textContent = "Loading images…";
+    this.syncControls();
+    this.status.textContent = "";
     try {
       const items = await this.load(mode);
       if (!this.dialog.open || epoch !== this.epoch) return;
       this.items.splice(0, this.items.length, ...items);
+      this.loading = false;
       this.showGrid();
+      return true;
     } catch (error) {
       if (this.dialog.open && epoch === this.epoch) this.status.textContent = `${error.message} Use Refresh to try again.`;
+      return false;
     } finally {
       if (epoch === this.epoch) {
         this.loading = false;
-        this.grid.inert = false;
-        this.refreshButton.disabled = false;
+        this.syncControls();
       }
+    }
+  }
+
+  syncControls() {
+    const busy = !!this.loading || !!this.clearing;
+    this.grid.inert = busy;
+    this.refreshButton.disabled = busy;
+    this.clearButton.hidden = this.mode !== "wastebin";
+    this.clearButton.disabled = busy || !this.items.length;
+    this.dialog.setAttribute("aria-busy", String(busy));
+    this.refreshButton.setAttribute("aria-label", this.loading ? "Refreshing images" : "Refresh images");
+  }
+
+  async clearBin() {
+    if (this.mode !== "wastebin" || this.loading || this.clearing || !this.items.length) return;
+    // Snapshot before confirmation. Newly binned images are never added to it.
+    const tokens = this.items.map((item) => item.token);
+    if (!confirm(`Permanently delete ${tokens.length} image${tokens.length === 1 ? "" : "s"} from Wastebin? This removes the original files and cannot be undone.`)) return;
+    const epoch = ++this.epoch;
+    this.clearing = true;
+    this.status.textContent = "Deleting images…";
+    this.syncControls();
+    try {
+      const result = await this.empty(tokens);
+      if (!this.dialog.open || epoch !== this.epoch) return;
+      if (!Array.isArray(result?.results)) throw new Error("Deletion could not be confirmed. Refresh Wastebin before retrying.");
+      const deleted = new Set(result.results.filter((entry) => entry.deleted === true).map((entry) => entry.token));
+      const failures = result.results.filter((entry) => entry.error);
+      this.items.splice(0, this.items.length, ...this.items.filter((item) => !deleted.has(item.token)));
+      this.clearing = false;
+      this.showGrid();
+      const nextEpoch = this.epoch + 1;
+      const refreshed = await this.refresh();
+      if (!refreshed || !this.dialog.open || this.epoch !== nextEpoch) return;
+      this.status.textContent = failures.length
+        ? `${failures.length} image${failures.length === 1 ? "" : "s"} could not be deleted. ${failures[0].error}`
+        : this.items.length ? `Deleted ${deleted.size} images. ${this.items.length} remain in Wastebin.` : "Wastebin is empty.";
+    } catch (error) {
+      if (this.dialog.open && epoch === this.epoch)
+        this.status.textContent = `${error.message} Use Refresh to check Wastebin before retrying.`;
+    } finally {
+      this.clearing = false;
+      this.syncControls();
     }
   }
 
@@ -117,9 +165,10 @@ window.ComfyGalleryLibrary = class GalleryLibrary {
   }
 
   render() {
-    this.status.textContent = this.items.length ? "" : this.mode === "favourites"
+    this.status.textContent = this.loading || this.clearing || this.items.length ? "" : this.mode === "favourites"
       ? "No favourites yet. Mark an image with a heart to find it here."
       : "Wastebin is empty.";
+    this.syncControls();
     this.renderImages(this.grid, this.items, (item) => {
       if (this.mode === "favourites") {
         const index = this.items.findIndex((entry) => entry.id === item.id);

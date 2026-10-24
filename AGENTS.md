@@ -104,10 +104,19 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   heart indicators on marked thumbnails. Collection dialogs reuse `renderImages`,
   thumbnail decoding/reduced motion and the existing viewer. Wastebin previews use
   only private `/api/trash` thumbnails. Favourites includes older marked versions
-  outside the recent 200; scanning and marks remain bounded and browser/output
-  scoped. Keep thumbnails/DOM identity on mark updates, ignore stale reads after
+  outside the recent 200; scanning and marks remain bounded and controller/output
+  scoped. All clients admitted by this WebUI's access rules share the image library.
+  Keep thumbnails/DOM identity on mark updates, ignore stale reads after
   close/authentication/mutations, and add no collection polling. See
   `docs/GALLERY_COLLECTIONS.md` for details and checks.
+- Desktop collection dialogs are viewport-clamped up to 1200×900 with four columns;
+  Phone keeps two. Keep loading geometry stable and avoid visible transient prose
+  during heart saves. Confirmed heart updates reuse current capabilities without
+  a redundant read. Invalidate the Gallery revision after local metadata edits.
+- Wastebin's Clear Bin confirms an explicit displayed token snapshot and calls the
+  existing permanent-delete API. New entries stay out of that snapshot; failures
+  stay in the bin with errors. Disable duplicate actions while clearing. An uncertain
+  response requires Refresh, never automatic resubmission.
 - Both Desktop Preview and enlarged viewer use Compare instead of New variation.
   One second-image picker reuses the shared gallery renderer/loader and existing
   comparison dialog. Keep drafts/selection on cancel, ignore late responses, exclude
@@ -132,14 +141,19 @@ Paths below are under `comfyui_control/` unless stated otherwise:
 - Preserve unknown workflow nodes, links, model choices, GGUF/LoRA wiring and
   saved editor settings. Change only validated mapped literals; never invent a
   replacement Qwen/SeedVR pipeline. Named action bindings live in `IMAGE_WORKFLOWS`.
-- Favourites use the existing private Keep sidecar (`keep`/`kept`). Virtual Delete
+- Favourites use the existing Keep sidecar (`keep`/`kept`), now shared between
+  devices of this controller/output. Valid legacy browser marks merge atomically;
+  unmarking must remove old copies so a heart cannot reappear. Virtual Delete
   changes metadata only. Restore removes that marker; only explicitly confirmed
   permanent deletion may remove originals. Retain configured-root, file/directory
   identity, symlink, ownership and output-scope guards and bounded NFS workers.
   Failed deletion stays in Wastebin with its error.
-- Preserve Host/Origin checks, authentication, CSP and browser isolation. Optional
-  metadata sharing grants no access to another browser's jobs, cancellation,
-  history or deletion permissions. Never commit credentials or private prompts.
+- Preserve Host/Origin checks, authentication and CSP. Library sharing includes
+  bin listing/thumbnails, restore and confirmed permanent deletion. Preserve each
+  bin record's original owner for source-ownership and legacy-worker checks.
+  Live jobs, cancellation, prompt history and optional settings reuse remain
+  browser-specific. Sharing does not change initial image Delete permissions.
+  Never commit credentials or private prompts.
 - Keep blocking filesystem/NFS/GPU work off Qt and HTTP event loops. Preserve
   atomic metadata writes and corruption safeguards. Do not disturb user settings
   or unrelated mounts; do not start competing app instances against one config.
@@ -166,6 +180,7 @@ For WebUI changes, install optional Playwright and its browsers:
 .venv/bin/python tests/manual/mobile_generate_button_browser.py --browser chromium --output /tmp/control-generate-check
 .venv/bin/python tests/manual/phone_image_actions_browser.py --browser chromium --output /tmp/control-phone-actions-check
 .venv/bin/python tests/manual/gallery_collections_browser.py --browser chromium --output /tmp/control-gallery-library-check
+.venv/bin/python tests/manual/gallery_library_updates_browser.py --browser chromium --output /tmp/control-shared-library-check
 git diff --check
 ```
 

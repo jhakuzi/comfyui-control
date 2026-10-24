@@ -65,12 +65,17 @@
   gap: 8px;
 }
 #gallery-library-dialog .gallery-library-status:empty {
-  display: none;
+  visibility: hidden;
 }
 #gallery-library-dialog .gallery-library-status {
   flex: none;
+  min-height: 1.6em;
+  max-height: 4.8em;
+  margin: 0 0 8px;
+  overflow: auto;
 }
 #gallery-library-dialog .image-grid {
+  flex: 1 1 0;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-auto-rows: max-content;
   align-content: start;
@@ -113,4 +118,12 @@
 .gallery-library-deleted p {
   max-height: 100px;
   overflow: auto;
+}
+:where(html[data-presentation="desktop"]) #gallery-library-dialog {
+  width: min(1200px, calc(100vw - 64px));
+  height: min(900px, calc(100dvh - 64px));
+  max-width: none;
+}
+:where(html[data-presentation="desktop"]) #gallery-library-dialog .image-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }

@@ -30,7 +30,7 @@ or real user configuration was touched.
 Phone styles are isolated in `presentation_phone.css`; the shared `style.css`,
 Desktop stylesheet and 1000×600 breakpoint are unchanged. The public-asset allowlist
 and service-worker shell include the new stylesheet, with cache
-`comfy-control-mobile-gallery-library-1`. Private APIs/images remain uncached.
+`comfy-control-mobile-gallery-library-2`. Private APIs/images remain uncached.
 
 Verification completed:
 
@@ -125,6 +125,53 @@ five viewport sizes, live badges/DOM identity, empty/multiple rows, decoded prev
 private collections, stale Gallery/collection responses, error/retry, sign-in
 clearing, preserved drafts/files and older-favourite viewing/Compare. Screenshots
 were inspected. Physical Phone and actual NAS/GPU checks remain outside fixtures.
+
+## Shared library, stable Desktop actions and Clear Bin follow-up
+
+The user explicitly requested sharing hearts/bin contents across Desktop and Phone,
+larger Desktop popups, removal of heart-click flicker and confirmed Clear Bin.
+These changes supersede the browser-private image-library contracts above. The
+controller has one WebUI access boundary/password; admitted clients now share
+library metadata in the same output scope. Jobs, cancellation, prompt history,
+optional image-settings sharing and initial per-image Delete ownership stay intact.
+
+Existing version-2 sidecars remain compatible. Scans atomically merge validated
+legacy marks into a shared output bucket, preserving other/stale records and
+corruption safeguards. Unmarking removes old copies so they cannot resurrect a
+heart. Bin records retain their original owner and identity; shared listing,
+thumbnails, restore and confirmed permanent deletion still check output scope.
+Legacy listing discovers original owners, and the worker uses those owners for
+legacy reads/writes. Permanent deletion checks source ownership against the original
+record, retaining all filesystem, symlink, replacement, root and NFS guards.
+
+Reproduction measured a 15.5px movement in viewer controls from the temporary
+“Saving…” row and a 41px popup-grid movement from loading prose. Both now measure
+zero movement. Heart saves acknowledge the same capabilities without another GET;
+read refreshes retain existing prose. Collection grid/status geometry is fixed,
+with accessible busy state and no visible transient loading/empty text. Desktop
+popups are up to 1200×900 with four columns; Phone retains two columns/bounds.
+A cross-device test also found the Gallery revision remained stale after optimistic
+metadata changes; invalidating it on confirmed edits fixes reversed device marks.
+
+Clear Bin confirms the exact displayed token snapshot before calling the existing
+permanent-delete transport. Cancel does nothing; new entries stay out; failed
+entries retain errors. Duplicate actions are disabled. Confirmed results refresh
+the list, and uncertain responses require a read refresh without automatic retry.
+Only generated fixture files were permanently removed during verification.
+
+The shell cache is `comfy-control-mobile-gallery-library-2`. Restart the app for
+backend changes, then reload both WebUI pages. See `docs/GALLERY_COLLECTIONS.md`.
+
+Verification completed: **437 pytest tests passed**, including authenticated
+cross-device access, denied unauthenticated library/deletion routes, private
+jobs/history, lossless legacy marks, original-owner changes, output/version guards,
+legacy trash, local/network deletion and partial failures. **14 browser checks
+passed**: collections, shared-library/Clear Bin updates, Desktop/Phone actions,
+responsive behavior, Gallery synchronization and comparison in Chromium and WebKit.
+The final update checks include a lost response after actual fixture deletion,
+with read reconciliation and no automatic retry. `git diff --check` passed.
+Screenshots and before/after geometry were inspected. No real user files, ComfyUI
+installation, version, release artifact or system setting was modified by tests.
 
 ## Previous release handoff — 2026-10-23
 

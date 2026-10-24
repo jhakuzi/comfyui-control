@@ -25,7 +25,7 @@ def picture(path):
     assert image.save(str(path))
 
 
-def test_keep_is_per_browser_version_and_output_and_does_not_change_jobs(tmp_path):
+def test_keep_is_shared_by_devices_but_version_and_output_scoped_and_leaves_jobs_private(tmp_path):
     async def scenario():
         output = tmp_path / 'out'
         picture(output / 'old.png')
@@ -38,7 +38,7 @@ def test_keep_is_per_browser_version_and_output_and_does_not_change_jobs(tmp_pat
         contents = (output / 'old.png').read_bytes()
         await service.image_action(old['id'], ALICE, dict(action='keep', keep=True, modified=old['modified']))
         assert next(item for item in await service.gallery(ALICE) if item['id'] == old['id'])['kept']
-        assert not any(item['kept'] for item in await service.gallery(BOB))
+        assert next(item for item in await service.gallery(BOB) if item['id'] == old['id'])['kept']
         reopened = MobileService(tmp_path / 'data', MobileSettings(), output)
         assert next(item for item in await reopened.gallery(ALICE) if item['id'] == old['id'])['kept']
         stamp = (output / 'old.png').stat().st_mtime_ns + 1000000
@@ -70,10 +70,9 @@ def test_delete_is_virtual_persistent_and_restore_never_touches_images(tmp_path,
         assert not (output / '.comfyui-control-trash').exists()
         assert [item['filename'] for item in await service.gallery(ALICE, force=True)] == ['latest.png']
         assert not service.image_ref(dict(filename='image.png', subfolder='.comfyui-control-trash/anything'))
-        assert await service.image_trash(BOB) == []
+        assert [entry['filename'] for entry in await service.image_trash(BOB)] == ['old.png']
         assert image_library(output, 'trash-list', dict(owner=ALICE, scope='different-output')) == []
-        with pytest.raises(ValueError, match='another browser'):
-            await service.image_trash(BOB, result['trash']['token'])
+        assert await service.wastebin_thumbnail(BOB, result['trash']['token'])
         restarted = MobileService(tmp_path / 'data', MobileSettings(), output, network_output=network)
         assert len(await restarted.image_trash(ALICE)) == 1
         assert [item['filename'] for item in await restarted.gallery(ALICE, force=True)] == ['latest.png']
@@ -83,7 +82,7 @@ def test_delete_is_virtual_persistent_and_restore_never_touches_images(tmp_path,
             raise OSError('NAS offline')
         original_io = restarted.network_io
         restarted.network_io = offline
-        await restarted.image_trash(ALICE, result['trash']['token'])
+        await restarted.image_trash(BOB, result['trash']['token'])
         assert (output / 'nested' / 'old.png').read_bytes() == original
         restarted.network_io = original_io
         assert await restarted.image_trash(ALICE) == []
@@ -206,10 +205,10 @@ def test_permanent_delete_requires_confirmation_and_preserves_other_files(tmp_pa
         for body in ({}, {'confirm': 'yes'}):
             with pytest.raises(ValueError, match='confirm'):
                 await service.delete_permanently(ALICE, body, token)
-        with pytest.raises(ValueError, match='another browser'):
-            await service.delete_permanently(BOB, {'confirm': True}, token)
+        with pytest.raises(ValueError, match='no longer available'):
+            await service.delete_permanently(BOB, {'confirm': True}, 'f' * 32)
         assert (output / 'nested' / 'one.png').is_file()
-        result = await service.delete_permanently(ALICE, {'confirm': True}, token)
+        result = await service.delete_permanently(BOB, {'confirm': True}, token)
         assert result == {'results': [{'token': token, 'deleted': True}]}
         assert not (output / 'nested' / 'one.png').exists()
         assert (output / 'other.png').is_file()
@@ -261,7 +260,7 @@ def test_permanent_delete_rejects_changed_files_or_locations(tmp_path, failure):
     asyncio.run(scenario())
 
 
-def test_empty_wastebin_partial_failure_snapshot_and_browser_scope(tmp_path, monkeypatch):
+def test_empty_wastebin_partial_failure_snapshot_and_shared_output_scope(tmp_path, monkeypatch):
     async def scenario():
         output = tmp_path / 'out'
         for name in ('one.png', 'two.png', 'later.png', 'bob.png', 'normal.png'):
@@ -272,8 +271,8 @@ def test_empty_wastebin_partial_failure_snapshot_and_browser_scope(tmp_path, mon
         bob = await delete_image(service, 'bob.png', BOB)
         later = await delete_image(service, 'later.png')
         # Authorize the whole bulk request before deleting even its first entry.
-        with pytest.raises(ValueError, match='another browser'):
-            await service.delete_permanently(ALICE, dict(confirm=True, tokens=[first, bob]))
+        with pytest.raises(ValueError, match='no longer available'):
+            await service.delete_permanently(ALICE, dict(confirm=True, tokens=[first, 'f' * 32]))
         assert (output / 'one.png').exists()
         original_io = service.network_io
         async def failed_io(operation, data, **kwargs):
@@ -286,12 +285,12 @@ def test_empty_wastebin_partial_failure_snapshot_and_browser_scope(tmp_path, mon
         assert 'read-only' in result['results'][1]['error']
         assert not (output / 'one.png').exists()
         assert all((output / name).exists() for name in ('two.png', 'bob.png', 'later.png', 'normal.png'))
-        assert {entry['token'] for entry in await service.image_trash(ALICE)} == {failed, later}
-        assert [entry['token'] for entry in await service.image_trash(BOB)] == [bob]
+        assert {entry['token'] for entry in await service.image_trash(ALICE)} == {failed, later, bob}
+        assert {entry['token'] for entry in await service.image_trash(BOB)} == {failed, later, bob}
         monkeypatch.setattr(service, 'network_io', original_io)
-        result = await service.delete_permanently(ALICE, dict(confirm=True, tokens=[failed, later]))
+        result = await service.delete_permanently(BOB, dict(confirm=True, tokens=[failed, later]))
         assert all(entry['deleted'] for entry in result['results'])
-        assert await service.image_trash(ALICE) == []
+        assert [entry['token'] for entry in await service.image_trash(ALICE)] == [bob]
         assert (output / 'bob.png').is_file()
     asyncio.run(scenario())
 
@@ -364,18 +363,18 @@ def test_legacy_moved_trash_can_still_restore_or_delete_permanently(tmp_path):
         service = MobileService(tmp_path / 'data', MobileSettings(), output)
         for item in await service.gallery(ALICE):
             image_library(output, 'trash', dict(image=item, owner=ALICE, scope=service.output_scope, modified=item['modified']))
-        entries = await service.image_trash(ALICE)
+        entries = await service.image_trash(BOB)
         assert len(entries) == 2
-        assert await service.wastebin_thumbnail(ALICE, entries[0]['token'])
-        await service.image_trash(ALICE, entries[0]['token'])
-        result = await service.delete_permanently(ALICE, dict(confirm=True), entries[1]['token'])
+        assert await service.wastebin_thumbnail(BOB, entries[0]['token'])
+        await service.image_trash(BOB, entries[0]['token'])
+        result = await service.delete_permanently(BOB, dict(confirm=True), entries[1]['token'])
         assert result['results'][0]['deleted']
         assert (output / entries[0]['filename']).is_file()
         assert not (output / entries[1]['filename']).exists()
     asyncio.run(scenario())
 
 
-def test_http_permanent_delete_confirmation_scope_and_thumbnail_isolation(tmp_path):
+def test_http_permanent_delete_confirmation_and_output_scope_with_shared_thumbnails(tmp_path):
     async def scenario():
         output = tmp_path / 'out'
         picture(output / 'one.png')
@@ -394,10 +393,10 @@ def test_http_permanent_delete_confirmation_scope_and_thumbnail_isolation(tmp_pa
             deleted = await (await alice.post('/api/images/' + item['id'] + '/actions', headers=origin,
                 json=dict(action='delete', confirm=True, modified=item['modified'], filename='/etc/passwd'))).json()
             token = deleted['trash']['token']
-            assert await (await bob.get(server.make_url('/api/trash'))).json() == []
-            assert (await bob.get(server.make_url(deleted['trash']['thumbnail']))).status == 404
+            assert len(await (await bob.get(server.make_url('/api/trash'))).json()) == 1
+            assert (await bob.get(server.make_url(deleted['trash']['thumbnail']))).status == 200
             assert (await bob.post(server.make_url('/api/trash/' + token + '/delete'), headers=origin,
-                                   json={'confirm': True})).status == 400
+                                   json={})).status == 400
             assert (await alice.post('/api/trash/' + token + '/delete', json={'confirm': True})).status == 403
             assert (await alice.post('/api/trash/' + token + '/delete', headers=origin, json={})).status == 400
             other = tmp_path / 'other'
@@ -407,7 +406,7 @@ def test_http_permanent_delete_confirmation_scope_and_thumbnail_isolation(tmp_pa
                                      json={'confirm': True})).status == 400
             assert (output / 'one.png').is_file() and (other / 'one.png').is_file()
             service.change_output(output)
-            result = await alice.post('/api/trash/' + token + '/delete', headers=origin, json={'confirm': True})
+            result = await bob.post(server.make_url('/api/trash/' + token + '/delete'), headers=origin, json={'confirm': True})
             assert result.status == 200 and (await result.json())['results'][0]['deleted']
             assert not (output / 'one.png').exists() and (other / 'one.png').is_file()
             assert (await alice.get(deleted['trash']['thumbnail'])).status == 404

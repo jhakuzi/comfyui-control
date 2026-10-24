@@ -65,7 +65,11 @@ metadata and removes that image from the current collections; originals stay in
 place. Gallery now has Wastebin and Favourites preview dialogs beside Refresh,
 with a heart indicator on marked thumbnails. See
 [GALLERY_COLLECTIONS.md](GALLERY_COLLECTIONS.md). Wastebin browsing reads private
-thumbnails; it adds no restore or permanent-delete controls.
+thumbnails. Clear Bin now permanently deletes a confirmed displayed snapshot,
+retaining failures and newer entries. Desktop/Phone sessions share library marks
+and bin contents within the controller/output scope; live jobs and history retain
+their browser boundaries. Desktop collection popups are larger and avoid transient
+loading/saving layout shifts. The shared collection guide records the full contract.
 
 ## Verification
 

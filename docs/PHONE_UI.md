@@ -53,7 +53,8 @@ restores the original output placement and labels.
   actions. Reconnect disables image actions. VRAM cleanup remains idle-only.
 - Delete retains confirmation, permissions and metadata-only Wastebin semantics.
   Gallery has shared Wastebin/Favourites preview dialogs and heart indicators;
-  see `GALLERY_COLLECTIONS.md`. These previews add no permanent-delete controls.
+  see `GALLERY_COLLECTIONS.md`. Devices now share this library. Clear Bin permanently
+  deletes only an explicitly confirmed displayed snapshot, retaining failed entries.
 - The new stylesheet is public and included in the bumped service-worker shell.
   Authenticated APIs, prompts and images remain outside CacheStorage.
 

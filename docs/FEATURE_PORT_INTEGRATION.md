@@ -6,6 +6,8 @@ not the current testing branch. See [PHONE_UI.md](PHONE_UI.md) for this integrat
 Shared Gallery Favourites/Wastebin previews are documented in
 [GALLERY_COLLECTIONS.md](GALLERY_COLLECTIONS.md); the old deferred-UI statements
 below remain historical.
+The later user-requested shared-library/Clear Bin integration supersedes the old
+browser-private library assertions; live-job/history isolation is preserved.
 
 The sections below record the initial integration baseline. The reviewed changes
 now released as 1.0.4 additionally update the shared workflow picker, option refresh

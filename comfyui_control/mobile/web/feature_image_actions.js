@@ -37,6 +37,7 @@ class SavedImageActions {
     if (!this.capabilities) return;
     this.buttons.forEach((button, key) => {
       button.disabled = !!this.pending || !this.capabilities.actions[key]?.available;
+      if (key === "keep") button.setAttribute("aria-busy", String(!!this.pending));
       if (key !== "keep" || !this.capabilities.actions[key]?.available)
         button.title = this.capabilities.actions[key]?.reason || "";
     });
@@ -56,14 +57,18 @@ class SavedImageActions {
 
   async select(item, { connected = true } = {}) {
     const epoch = ++this.epoch;
+    const preserve = connected && item && this.capabilities &&
+      this.item?.id === item.id && this.item?.modified === item.modified;
     this.item = item ? { ...item } : null;
-    this.capabilities = null;
+    if (!preserve) this.capabilities = null;
     this.container.hidden = !item;
-    this.status.textContent = "";
-    this.unavailable.textContent = "";
+    if (!preserve) {
+      this.status.textContent = "";
+      this.unavailable.textContent = "";
+    }
     this.buttons.forEach((button) => { button.disabled = true; });
     if (!item) return;
-    this.renderHeart(item.kept);
+    if (!preserve) this.renderHeart(item.kept);
     if (!connected) {
       this.status.textContent = "Reconnect to use image actions.";
       return;
@@ -73,6 +78,7 @@ class SavedImageActions {
       if (epoch !== this.epoch) return;
       this.capabilities = result;
       this.item.kept = result.kept;
+      this.status.textContent = "";
       this.renderHeart(result.kept);
       this.renderCapabilities();
       this.unavailable.textContent = ["edit", "upscale"].map((key) => result.actions[key]?.reason).filter(Boolean).join(" ");
@@ -93,7 +99,7 @@ class SavedImageActions {
     this.pending = true;
     this.renderCapabilities();
     this.status.textContent = action === "trash" ? "Deleting image…"
-      : action === "edit" || action === "upscale" ? "Preparing image…" : "Saving…";
+      : action === "edit" || action === "upscale" ? "Preparing image…" : "";
     try {
       if (action === "edit" || action === "upscale") {
         await this.workflow(item, action, capability.modified);
@@ -104,6 +110,10 @@ class SavedImageActions {
         method: "POST", body: JSON.stringify({ action: action === "trash" ? "delete" : action, modified: capability.modified,
           ...(action === "keep" ? { keep: !item.kept } : { confirm: true }) }),
       });
+      if (action === "keep" && epoch === this.epoch && typeof result.kept === "boolean") {
+        this.item.kept = this.capabilities.kept = result.kept;
+        this.renderHeart(result.kept);
+      }
       await this.changed(item, result);
     } catch (error) {
       if (epoch === this.epoch) this.status.textContent = error.message;

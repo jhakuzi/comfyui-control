@@ -632,12 +632,12 @@ class MobileService:
                 await self.scan_gallery()
             ordered = sorted(self.images.values(), key=lambda item: item.get('created',
                 self.jobs.get(item.get('job'), {}).get('created', 0)), reverse=True)
-            return [{**item, 'kept': self.image_library.contains(self.output_scope, owner, item),
+            return [{**item, 'kept': self.image_library.contains_shared(item),
                      'reuse': self.image_reuse_status(item, owner), 'job': item.get('job') if owner is None or
                      self.jobs.get(item.get('job'), {}).get('owner') == owner else None}
                     for item in ordered if item['id'] not in self.unavailable_images
                     and not self.image_library.deleted_image(self.output_scope, item)
-                    and (not favourites or self.image_library.contains(self.output_scope, owner, item))][:2000 if favourites else 200]
+                    and (not favourites or self.image_library.contains_shared(item))][:2000 if favourites else 200]
 
     async def scan_gallery(self):
         # Shared across clients; filesystem work runs off the HTTP/Qt threads.
@@ -720,6 +720,7 @@ class MobileService:
                        thumbnail=f'/api/images/{identifier}?v={modified}&thumbnail=1',
                        download=f'/api/images/{identifier}?v={modified}&download=1')
             self.unavailable_images.discard(identifier)
+        await asyncio.to_thread(self.image_library.merge_shared, scope, list(self.images.values()))
         def created(item):
             return item.get("created", self.jobs.get(item.get("job"), {}).get("created", 0))
         ordered = sorted(self.images.values(), key=created, reverse=True)
@@ -754,7 +755,7 @@ class MobileService:
         reason = ('Delete is available only for saved images in the configured local or network output folder.' if not saved or not local
                   else 'Only the browser that generated this image can delete it.' if not own else '')
         return {'image_id': identifier, 'modified': item.get('modified', ''),
-                'kept': self.image_library.contains(self.output_scope, owner, item),
+                'kept': self.image_library.contains_shared(item),
                 'actions': {'keep': {'available': saved, 'reason': '' if saved else 'Favourites are available for saved output images.'},
                             'trash': {'available': not reason, 'reason': reason}, **workflow_capabilities()}}
 
@@ -913,7 +914,7 @@ class MobileService:
             if body.get('modified') != item.get('modified', ''):
                 raise ValueError('This image changed. Refresh the gallery before acting on it.')
             if action == 'keep':
-                await asyncio.to_thread(self.image_library.mark, scope, owner, item, body.get('keep'))
+                await asyncio.to_thread(self.image_library.mark_shared, scope, item, body.get('keep'))
                 result = {'image_id': identifier, 'kept': body['keep']}
             elif action == 'trash':
                 if body.get('confirm') is not True:
@@ -950,10 +951,10 @@ class MobileService:
         async with self.gallery_lock:
             scope = self.output_scope
             if token in self.image_library.deleted:
-                record = self.image_library.entry(scope, owner, token)
+                record = self.image_library.entry(scope, owner, token, shared=True)
                 if record.get('legacy'):
                     try:
-                        await self.network_io('restore', dict(owner=owner, scope=scope, token=token))
+                        await self.network_io('restore', dict(owner=record['owner'], scope=scope, token=token))
                     except OSError as exc:
                         raise ValueError(f'Could not restore the image: {exc}') from None
                 await asyncio.to_thread(self.image_library.update_deleted, token)
@@ -961,17 +962,17 @@ class MobileService:
                 self.broadcast()
                 return {'filename': record['image']['filename'], 'restored': True}
             if token is not None:
-                raise ValueError('This Wastebin entry belongs to another browser or output folder, or is no longer available.')
+                raise ValueError('This Wastebin entry belongs to another output folder, or is no longer available.')
             # Import old physically moved entries into the same local metadata.
-            # Each browser/scope is checked once; listing virtual markers remains
+            # Each output scope is checked once; listing virtual markers remains
             # available even if the old output folder cannot currently be read.
-            key = (scope, owner)
+            key = (scope, 'shared')
             legacy_notice = ''
             if key not in self.legacy_trash_checked:
                 try:
-                    legacy = json.loads(await self.network_io('trash-list', dict(owner=owner, scope=scope), timeout=1))
+                    legacy = json.loads(await self.network_io('trash-list', dict(owner=owner, scope=scope, shared=True), timeout=1))
                 except OSError as exc:
-                    if not self.image_library.entries(scope, owner):
+                    if not self.image_library.entries(scope, owner, shared=True):
                         raise ValueError(f'Could not read Wastebin on the output storage: {exc}') from None
                     legacy = []
                     legacy_notice = f'Older Wastebin entries could not be checked: {exc}'
@@ -985,10 +986,10 @@ class MobileService:
                     if entry['token'] not in self.image_library.deleted:
                         item = dict(self.image_ref(dict(filename=entry['filename'], subfolder=entry['subfolder'], type='output')))
                         item['modified'] = str(entry['identity']['file'][3])
-                        await asyncio.to_thread(self.image_library.delete, scope, owner, item, entry['identity'], entry)
+                        await asyncio.to_thread(self.image_library.delete, scope, entry['owner'], item, entry['identity'], entry)
                 if legacy_notice is None:
                     self.legacy_trash_checked.add(key)
-            entries = [self.public_trash(record) for record in self.image_library.entries(scope, owner)]
+            entries = [self.public_trash(record) for record in self.image_library.entries(scope, owner, shared=True)]
             if legacy_notice:
                 for entry in entries:
                     entry['notice'] = legacy_notice
@@ -996,7 +997,7 @@ class MobileService:
 
     async def wastebin_thumbnail(self, owner, token):
         async with self.gallery_lock:
-            record = self.image_library.entry(self.output_scope, owner, token)
+            record = self.image_library.entry(self.output_scope, owner, token, shared=True)
             return await self.network_io('legacy-read' if record.get('legacy') else 'wastebin-read', record)
 
     async def delete_permanently(self, owner, body, token=None):
@@ -1013,7 +1014,7 @@ class MobileService:
         async with self.gallery_lock:
             scope = self.output_scope
             # Authorize the entire snapshot before doing any filesystem work.
-            records = [self.image_library.entry(scope, owner, value) for value in tokens]
+            records = [self.image_library.entry(scope, owner, value, shared=True) for value in tokens]
             results = []
             blocked = None
             for record in records:
@@ -1025,7 +1026,7 @@ class MobileService:
                 try:
                     if blocked:
                         raise OSError(blocked)
-                    if not self._metadata_allowed(record['image'], owner, allow_shared=False):
+                    if not self._metadata_allowed(record['image'], record['owner'], allow_shared=False):
                         raise ValueError('Image ownership changed. Permanent deletion is not permitted.')
                     await self.network_io('legacy-delete' if record.get('legacy') else 'delete', record)
                 except (OSError, ValueError) as exc:

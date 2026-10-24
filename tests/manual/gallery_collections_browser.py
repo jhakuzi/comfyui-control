@@ -142,10 +142,11 @@ async def main(engine, output):
                     geometry = await collection_grid.evaluate('''el => ({height:el.clientHeight, scroll:el.scrollHeight,
                         tiles:[...el.children].map(tile => {const r=tile.getBoundingClientRect();
                             return {top:r.top,bottom:r.bottom,width:r.width,height:r.height};})})''')
-                    assert geometry['scroll'] > geometry['height'], geometry
+                    assert geometry['scroll'] >= geometry['height'], geometry
+                    columns = 4 if width >= 1000 and height >= 600 else 2
                     for index, box in enumerate(geometry['tiles']):
                         assert abs(box['width'] - box['height']) < 1, box
-                        if index >= 2: assert box['top'] >= geometry['tiles'][index-2]['bottom'] + 9, geometry
+                        if index >= columns: assert box['top'] >= geometry['tiles'][index-columns]['bottom'] + 9, geometry
                     bounds = await library.bounding_box()
                     assert bounds['y'] >= 0 and bounds['y'] + bounds['height'] <= height, bounds
                     await expect(collection_grid.locator('button').first).not_to_have_attribute('aria-busy', 'true')
@@ -201,16 +202,17 @@ async def main(engine, output):
             await page.locator('#refresh-gallery-library').click()
             await expect(collection_grid.locator('button')).to_have_count(8)
             await page.locator('#close-gallery-library').click()
-            # Another browser sees neither heart marks nor private Wastebin entries.
+            # Desktop and Phone share the library while live jobs stay private.
             other = await browser.new_context(viewport=dict(width=390, height=844), service_workers='block')
             stranger = await other.new_page()
             await stranger.goto(url)
             await stranger.locator('#gallery-tab').click()
             await expect(stranger.locator('#gallery-grid > button')).to_have_count(8)
-            await expect(stranger.locator('.gallery-image-heart')).to_have_count(0)
-            for mode, message in [('favourites', 'No favourites yet'), ('wastebin', 'Wastebin is empty')]:
+            await expect(stranger.locator('.gallery-image-heart')).to_have_count(8)
+            assert await stranger.evaluate('state.jobs.length') == 0
+            for mode in ['favourites', 'wastebin']:
                 await stranger.locator('#gallery-' + mode).click()
-                await expect(stranger.locator('#gallery-library-dialog [role="status"]')).to_contain_text(message)
+                await expect(stranger.locator('#gallery-library-dialog .image-grid > button')).to_have_count(8)
                 await stranger.locator('#close-gallery-library').click()
             await other.close()
             # Older favourites remain viewable and comparable beyond recent 200.
@@ -243,7 +245,7 @@ async def main(engine, output):
         await mobile.close()
         await service.stop()
         await upstream.close()
-    print(f'{engine}: Desktop/Phone collections, live heart badges, private Favourites/Wastebin, scrolling rows, image previews, stale/error/auth guards, original files and drafts passed')
+    print(f'{engine}: Desktop/Phone collections, live heart badges, shared Favourites/Wastebin, scrolling rows, image previews, stale/error/auth guards, original files and drafts passed')
 
 
 if __name__ == '__main__':
