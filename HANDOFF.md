@@ -7,8 +7,21 @@ This supersedes the earlier testing-only restriction below. Version 1.0.5-1
 packages the Phone modernization and shared Gallery library. Version hashes and
 stable ZIP/source RPM downloads are refreshed for the release. The reported
 Phone Gallery load delay remains unconfirmed and unchanged. Release checks passed: 437 pytest tests and six fresh Phone/Desktop/shared-library
-browser checks across Chromium/WebKit. Build results follow after the tag workflow
-completes.
+browser checks across Chromium/WebKit.
+
+Merged via PR #1 at `122346abc2b9b997cb799de84579023747c8e3cc`; tag `v1.0.5`
+points to that merge. GitHub Actions run `40130379790` built/tested the Fedora RPM
+and submitted COPR build `11203296`, which succeeded for Fedora 44 x86_64.
+Version `1.0.5-1` is published. Downloads testing checkout was fast-forwarded to
+release source `e3552fd` on its existing testing branch.
+
+- PR: https://github.com/jhakuzi/comfyui-control/pull/1
+- Actions: https://github.com/jhakuzi/comfyui-control/actions/runs/40130379790
+- COPR: https://copr.fedorainfracloud.org/coprs/jhakuzi/comfyui-control/build/11203296/
+
+Upgrade with `sudo dnf upgrade --refresh comfyui-control`, restart the app, then
+reload Desktop/Phone. No GitHub release object was created; the tag, main download
+ZIP/source RPM and COPR package were published.
 
 ## Phone Gallery copy follow-up
 
