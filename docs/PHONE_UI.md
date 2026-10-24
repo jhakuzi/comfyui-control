@@ -18,9 +18,18 @@ The app version remains 1.0.4. This work does not merge or release it.
 Phone also retains Create/Gallery navigation, the fixed Generate dock, prompt
 history/favourites, fixed-seed explanation, image details, saving,
 previous/next buttons and swipe handlers. The viewer hides its filename and
-iPhone save/browse instructions; Details sits at the bottom after all action rows. Save image gets the
+iPhone save/browse instructions; Details sits at the bottom after all action rows.
+Close overlays the image at the top right. The viewer uses the available dynamic
+viewport height, shrinking the image to fit the controls without page scrolling.
+Short landscape screens use single-row action grids; long expanded metadata and
+action diagnostics scroll within their own bounded panels. Save image gets the
 flexible middle column between 48px navigation buttons to avoid narrow-screen
 wrapping. No new framework, application state, selection store or backend exists.
+
+Phone Create places the completed result card before the workflow form and labels
+it **Preview & results**. Its workflow filename line is hidden. Running jobs keep
+the live status/Cancel dock; failed/unknown jobs retain their diagnostics. Desktop
+restores the original output placement and labels.
 
 ## Implementation boundaries
 

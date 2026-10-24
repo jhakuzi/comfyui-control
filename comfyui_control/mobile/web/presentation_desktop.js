@@ -92,6 +92,9 @@ window.ComfyDesktopImagePresentation = class DesktopImagePresentation {
     this.footer.dataset.desktopSlot = "";
     this.footer.hidden = true;
     const output = document.getElementById("job-output");
+    this.jobOutput = output;
+    this.jobOutputAnchor = document.createComment("Original result section placement");
+    output.before(this.jobOutputAnchor);
     output.after(this.frame, this.footer);
     this.workflowCard = document.querySelector("#generate-form > .card");
     this.geometryFrame = null;
@@ -332,6 +335,15 @@ window.ComfyDesktopImagePresentation = class DesktopImagePresentation {
       if (this.active && previewing) {
         if (element.parentElement !== this.rightColumn) this.rightColumn.append(element);
       } else if (element.previousSibling !== anchor) anchor.after(element);
+    }
+    const completed = document.getElementById("generation-panel").dataset.completed === "true";
+    this.jobOutput.dataset.completed = String(completed);
+    if (completed) document.getElementById("job-title").textContent = this.active ? "Your image is ready" : "Preview & results";
+    if (this.active) {
+      if (this.jobOutput.previousSibling !== this.jobOutputAnchor) this.jobOutputAnchor.after(this.jobOutput);
+    } else {
+      const create = document.getElementById("create-page");
+      if (create.firstElementChild !== this.jobOutput) create.prepend(this.jobOutput);
     }
     if (this.active) {
       if (this.images.parentElement !== this.frame) this.frame.append(this.images);

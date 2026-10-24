@@ -53,6 +53,9 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   tabs, fixed dock, inline/native details, prompt history, negative-prompt state,
   slider bounds, exact reuse, New variation and viewer navigation.
   Phone Compare is an additional button, using the existing picker and comparison.
+  Phone Create places the result section before the workflow form, labels completed
+  results `Preview & results`, and hides their workflow filename. Active jobs stay
+  in the dock; failure/unknown-job diagnostics remain visible.
   See `docs/PHONE_UI.md` for current behavior and verification.
 - Keep new public assets in `mobile/server.py`'s allowlist and `web/sw.js`'s shell;
   bump the shell cache when shipping changed assets. Never cache private APIs or
@@ -104,6 +107,8 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   the Upscale/Delete row, clamped to the viewport; regular picker matches Preview.
   Both presentations hide the viewer filename/iPhone instructions. Phone places
   Details after the image action and reuse/Compare rows; Desktop keeps its placement.
+  Phone Close overlays the image top right; the image flexes to fit the controls
+  within the viewport. Expanded metadata/diagnostics use bounded internal scrolling.
 - Do not modify any ComfyUI installation. User explicitly declined an external
   immediate-VRAM-cleanup patch. The existing idle-only `/free` request remains;
   server-side processing timing is outside this app's guarantee.

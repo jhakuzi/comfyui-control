@@ -29,7 +29,7 @@ or real user configuration was touched.
 Phone styles are isolated in `presentation_phone.css`; the shared `style.css`,
 Desktop stylesheet and 1000×600 breakpoint are unchanged. The public-asset allowlist
 and service-worker shell include the new stylesheet, with cache
-`comfy-control-mobile-phone-actions-2`. Private APIs/images remain uncached.
+`comfy-control-mobile-phone-actions-3`. Private APIs/images remain uncached.
 
 Verification completed:
 
@@ -63,6 +63,28 @@ rows so keyboard order matches visual order. Desktop restores the original DOM
 placement. The service-worker shell was bumped to `phone-actions-2`. Phone and
 Desktop action checks passed in Chromium and WebKit (four browser runs), along
 with all three focused presentation-boundary tests and `git diff --check`.
+
+## Phone Create results review follow-up
+
+Phone Create now places the existing `job-output` section before the workflow
+form. Completed results use the title `Preview & results` and hide the workflow
+filename line. The original nodes, selected image, controls and handlers are reused.
+Active jobs remain in the fixed dock; failure/unknown-job diagnostics are preserved.
+Desktop restores the original output anchor and completed title. The service-worker
+shell was bumped to `phone-actions-3`.
+
+The Phone viewer now overlays Close at the image's top-right corner and uses a
+viewport-height flex layout. The image fits the space remaining around the touch
+controls; short landscape screens use single-row action grids. Details stays at
+the bottom, with internal scrolling for expanded metadata. Diagnostic messages
+also have bounded internal scroll areas instead of forcing whole-viewer scroll.
+
+Verification: Phone/Desktop actions, responsive behavior and generation transitions
+passed in both Chromium and WebKit (eight browser runs). All three focused
+presentation-boundary tests and `git diff --check` passed. Phone checks assert
+result order/title, hidden filename, top-right overlay bounds, visible touch controls
+and no dialog overflow at all five portrait/tablet/landscape sizes. Screenshots
+were visually inspected. Physical-device checks remain outstanding.
 
 ## Previous release handoff — 2026-10-23
 

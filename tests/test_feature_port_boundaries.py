@@ -49,7 +49,7 @@ def test_existing_main_assets_ui_settings_and_versions_are_unchanged():
         '<div class="actions" id="preview-reuse-actions">', '<div class="actions">').replace(
         '<span id="generate-label" data-generate-label>✦ Generate</span>', '<span aria-hidden="true">✦</span> Generate')
     assert hashlib.sha256(original.encode()).hexdigest() == BASELINE['files']['comfyui_control/mobile/web/index.html']
-    original_sw = (web / 'sw.js').read_text().replace('comfy-control-mobile-phone-actions-2', 'comfy-control-mobile-1.0.1')
+    original_sw = (web / 'sw.js').read_text().replace('comfy-control-mobile-phone-actions-3', 'comfy-control-mobile-1.0.1')
     for asset in ACTIVE_ASSETS:
         original_sw = original_sw.replace(f'  "/{asset}",\n', '')
     assert hashlib.sha256(original_sw.encode()).hexdigest() == BASELINE['files']['comfyui_control/mobile/web/sw.js']
@@ -60,7 +60,8 @@ def test_existing_main_assets_ui_settings_and_versions_are_unchanged():
                for selector in re.findall(r'([^{}]+)\{', css))
     phone_css = re.sub(r'/\*.*?\*/', '', (web / 'presentation_phone.css').read_text(), flags=re.S)
     assert all(selector.strip().startswith(':where(html[data-presentation="mobile"])')
-               for selector in re.findall(r'([^{}]+)\{', phone_css))
+               for selector in re.findall(r'([^{}]+)\{', phone_css)
+               if not selector.strip().startswith('@media '))
 
 
 def test_feature_assets_are_public_and_existing_component_skins_stay_frozen(tmp_path):

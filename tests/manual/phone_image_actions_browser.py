@@ -85,6 +85,9 @@ async def main(engine, output):
             upscale = actions.locator('[data-action="upscale"]')
             delete = actions.locator('[data-action="trash"]')
             await expect(edit).to_be_enabled()
+            await expect(page.locator('#job-title')).to_have_text('Preview & results')
+            await expect(page.locator('#job-detail')).to_be_hidden()
+            assert await page.locator('#job-output').evaluate('el => el === document.getElementById("create-page").firstElementChild')
             await prompt.fill('Keep this Phone draft')
             saved_form = await page.evaluate('JSON.stringify({draft,preset:preset.id,randomSeed,selectedJob})')
 
@@ -101,6 +104,10 @@ async def main(engine, output):
                 await page.set_viewport_size(dict(width=width, height=height))
                 assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
                 assert await page.locator('#generation-dock').evaluate('el => getComputedStyle(el).position') == 'fixed'
+                await expect(page.locator('#job-title')).to_have_text('Preview & results')
+                result_box = await page.locator('#job-card').bounding_box()
+                form_box = await page.locator('#generate-form').bounding_box()
+                assert result_box['y'] + result_box['height'] <= form_box['y'], (result_box, form_box)
                 await expect(page.locator('#same-seed')).to_have_text('Same seed')
                 await expect(page.locator('#variation')).to_have_text('New variation')
                 await page.locator('#job-images > button').nth(1).tap()
@@ -108,8 +115,18 @@ async def main(engine, output):
                 await expect(page.locator('#image-caption')).to_be_hidden()
                 await expect(page.locator('#image-dialog .viewer > .actions:has(#download-image) + p.hint')).to_be_hidden()
                 assert await page.locator('#image-details').evaluate('el => el === el.parentElement.lastElementChild')
+                assert await page.locator('#image-dialog').evaluate('el => el.scrollHeight <= el.clientHeight + 1')
+                image_box = await page.locator('#full-image').bounding_box()
+                close_box = await page.locator('#close-image').bounding_box()
+                assert close_box['y'] >= image_box['y'] and close_box['y'] + close_box['height'] <= image_box['y'] + image_box['height'] + 1
+                assert close_box['x'] + close_box['width'] <= image_box['x'] + image_box['width']
+                for control in await page.locator('#image-dialog button:not([hidden]), #download-image, #image-details > summary').all():
+                    if not await control.is_visible(): continue
+                    box = await control.bounding_box()
+                    assert box['y'] >= 0 and box['y'] + box['height'] <= height, box
                 await page.locator('#image-details > summary').tap()
                 await expect(page.locator('#copy-image-prompt')).to_be_visible()
+                assert await page.locator('#image-dialog').evaluate('el => el.scrollHeight <= el.clientHeight + 1')
                 await page.locator('#image-details > summary').tap()
                 await expect(page.locator('#vary-image')).to_have_text('New variation')
                 for button in [heart, edit, upscale, delete, page.locator('#phone-compare-image')]:
@@ -182,8 +199,11 @@ async def main(engine, output):
             await expect(page.locator('#edit-image-dialog')).to_be_hidden()
             await expect(page.locator('#phone-compare-image')).to_be_hidden()
             await expect(page.locator('#vary-image')).to_have_text('Compare')
+            assert await page.locator('#job-output').evaluate('el => el.parentElement.id === "generation-panel"')
+            await expect(page.locator('#job-title')).to_have_text('Your image is ready')
             assert await page.locator('#image-details').evaluate('el => !!(el.compareDocumentPosition(document.getElementById("reuse-image")) & Node.DOCUMENT_POSITION_FOLLOWING)')
             await page.set_viewport_size(dict(width=390, height=844))
+            await expect(page.locator('#job-title')).to_have_text('Preview & results')
             await expect(page.locator('#phone-compare-image')).to_be_visible()
             await page.locator('#close-image').tap()
             await expect(page.locator('#prompt-history')).to_be_visible()
