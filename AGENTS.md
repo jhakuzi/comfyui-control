@@ -51,7 +51,7 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   `:where(html[data-presentation="mobile"])`. The existing placement helper also
   places shared image controls and refresh/cleanup buttons on Phone. Preserve its
   tabs, fixed dock, inline/native details, prompt history, negative-prompt state,
-  slider bounds, exact reuse, New variation and viewer navigation/instructions.
+  slider bounds, exact reuse, New variation and viewer navigation.
   Phone Compare is an additional button, using the existing picker and comparison.
   See `docs/PHONE_UI.md` for current behavior and verification.
 - Keep new public assets in `mobile/server.py`'s allowlist and `web/sw.js`'s shell;
@@ -102,7 +102,8 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   the source image, preserve square scrolling rows, wait for thumbnail decoding,
   and honor reduced motion. Enlarged-view picker centers over Compare, bottom at
   the Upscale/Delete row, clamped to the viewport; regular picker matches Preview.
-  Desktop hides the viewer filename/iPhone instructions; Phone restores them.
+  Both presentations hide the viewer filename/iPhone instructions. Phone places
+  Details after the image action and reuse/Compare rows; Desktop keeps its placement.
 - Do not modify any ComfyUI installation. User explicitly declined an external
   immediate-VRAM-cleanup patch. The existing idle-only `/free` request remains;
   server-side processing timing is outside this app's guarantee.

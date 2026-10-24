@@ -16,8 +16,9 @@ The app version remains 1.0.4. This work does not merge or release it.
 | Fixed Desktop preview and section/prompt overlays | Desktop retains these arrangements. Phone keeps live previews, native collapsing details and inline expanded prompts in normal page flow. |
 
 Phone also retains Create/Gallery navigation, the fixed Generate dock, prompt
-history/favourites, fixed-seed explanation, filenames, image details, saving,
-previous/next buttons, swipe handlers and iPhone guidance. Save image gets the
+history/favourites, fixed-seed explanation, image details, saving,
+previous/next buttons and swipe handlers. The viewer hides its filename and
+iPhone save/browse instructions; Details sits at the bottom after all action rows. Save image gets the
 flexible middle column between 48px navigation buttons to avoid narrow-screen
 wrapping. No new framework, application state, selection store or backend exists.
 

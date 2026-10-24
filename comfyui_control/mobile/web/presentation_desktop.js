@@ -22,6 +22,9 @@ window.ComfyDesktopImagePresentation = class DesktopImagePresentation {
     this.originalVariationLabel = variation.textContent;
     this.viewerVariation = document.getElementById("vary-image");
     this.originalViewerVariationLabel = this.viewerVariation.textContent;
+    this.viewerDetails = document.getElementById("image-details");
+    this.viewerDetailsAnchor = document.createComment("Original viewer details placement");
+    this.viewerDetails.before(this.viewerDetailsAnchor);
     // Phone keeps New variation and gets direct access to the same Compare flow.
     this.phoneCompare = document.createElement("button");
     this.phoneCompare.id = "phone-compare-image";
@@ -399,5 +402,11 @@ window.ComfyDesktopImagePresentation = class DesktopImagePresentation {
       if (this.actions.parentElement !== destination.parentElement || this.actions.nextElementSibling !== destination)
         destination.before(this.actions);
     }
+    // Use DOM order so keyboard navigation follows the visible Phone layout.
+    if (this.active) {
+      if (this.viewerDetails.previousSibling !== this.viewerDetailsAnchor)
+        this.viewerDetailsAnchor.after(this.viewerDetails);
+    } else if (this.viewerDetails.parentElement.lastElementChild !== this.viewerDetails)
+      this.viewerDetails.parentElement.append(this.viewerDetails);
   }
 };

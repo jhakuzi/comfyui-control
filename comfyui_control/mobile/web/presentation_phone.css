@@ -106,6 +106,13 @@
   min-width: 0;
   padding: 8px;
 }
+:where(html[data-presentation="mobile"]) #image-caption,
+:where(html[data-presentation="mobile"]) #image-dialog .viewer > .actions:has(#download-image) + p.hint {
+  display: none;
+}
+:where(html[data-presentation="mobile"]) #image-dialog .heading:has(#close-image) {
+  justify-content: flex-end;
+}
 :where(html[data-presentation="mobile"]) #desktop-compare-picker {
   padding: 16px;
   background: var(--surface);

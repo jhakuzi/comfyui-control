@@ -18,7 +18,8 @@ fit narrow portrait/landscape screens.
 
 Phone retains its tabs, fixed Generate/job dock, live preview, inline prompts,
 native collapsing sections/negative prompt, history/favourites, seed hint, original
-slider bounds, exact reuse, swipe/navigation, details and iPhone instructions.
+slider bounds, exact reuse, swipe/navigation and details. The viewer now hides
+its filename and iPhone instructions and places Details below all action rows.
 One shared component and placement helper serve both presentations; there is no
 second state store, request/submission implementation or new polling. Action forms
 close on Desktop breakpoint transitions. Shared stale-response, permissions,
@@ -28,7 +29,7 @@ or real user configuration was touched.
 Phone styles are isolated in `presentation_phone.css`; the shared `style.css`,
 Desktop stylesheet and 1000×600 breakpoint are unchanged. The public-asset allowlist
 and service-worker shell include the new stylesheet, with cache
-`comfy-control-mobile-phone-actions-1`. Private APIs/images remain uncached.
+`comfy-control-mobile-phone-actions-2`. Private APIs/images remain uncached.
 
 Verification completed:
 
@@ -52,6 +53,16 @@ not repository/runtime dependencies. The host needed session-local ICU/JPEG
 libraries for WebKit; no system installation was changed. Fresh output directories
 were used. Real GPU inference, physical Phone/keyboard/safe-area behavior, NAS/VPN
 and custom-node compatibility still require hands-on testing before merge.
+
+## Phone viewer review follow-up
+
+The user requested hiding the filename and iPhone instructions and moving Details
+to the bottom of the Phone viewer. Phone-scoped CSS hides the prose/header text;
+the existing placement helper moves the original Details node after the action
+rows so keyboard order matches visual order. Desktop restores the original DOM
+placement. The service-worker shell was bumped to `phone-actions-2`. Phone and
+Desktop action checks passed in Chromium and WebKit (four browser runs), along
+with all three focused presentation-boundary tests and `git diff --check`.
 
 ## Previous release handoff — 2026-10-23
 
