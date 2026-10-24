@@ -18,6 +18,7 @@ let state = { jobs: [], online: false },
   busy = false;
 let submitting = false;
 let galleryRevision = "", galleryPromise = null, galleryTimer = null, galleryEpoch = 0;
+let galleryMutation = 0;
 let mappingDraft = new Map(),
   gallery = [],
   viewerItems = [],
@@ -104,6 +105,7 @@ async function api(path, options = {}) {
   return body;
 }
 function showLogin() {
+  galleryLibrary.close();
   imageWorkflowDialogs?.close();
   selectedImageActions?.select(null);
   imageActionSignature = "";
@@ -172,6 +174,7 @@ function restoreUI() {
   uiReady = true;
 }
 function selectTab(name) {
+  if (name !== "gallery") galleryLibrary.close();
   $("workspace").dataset.page = name;
   $("create-page").hidden = name !== "create";
   $("gallery-page").hidden = name !== "gallery";
@@ -1035,7 +1038,7 @@ function applyState(value) {
 function renderImages(container, items, choose = null) {
   container.imageItems = items;
   container.chooseImage = choose;
-  const signature = JSON.stringify(items.map((item) => [item.id, item.url, item.thumbnail]));
+  const signature = JSON.stringify(items.map((item) => [item.id, item.url, item.thumbnail, !!item.kept]));
   if (container.dataset.signature === signature) return;
   container.dataset.signature = signature;
   const existing = new Map([...container.children].map((button) => [button.dataset.imageId, button]));
@@ -1045,7 +1048,19 @@ function renderImages(container, items, choose = null) {
   items.forEach((item, index) => {
     const source = item.thumbnail || item.url;
     const previous = existing.get(item.id);
+    const paintHeart = (button) => {
+      const marked = (container.id === "gallery-grid" || container === galleryLibrary.grid) && !!item.kept;
+      let badge = button.querySelector(".gallery-image-heart");
+      if (marked && !badge) {
+        badge = node("span", "♥", "gallery-image-heart");
+        badge.setAttribute("aria-hidden", "true");
+        button.append(badge);
+      } else if (!marked) badge?.remove();
+      if (marked) button.setAttribute("aria-description", "Favourite");
+      else button.removeAttribute("aria-description");
+    };
     if (previous?.dataset.source === source && previous.querySelector("img")) {
+      paintHeart(previous);
       if (container.children[index] !== previous) container.insertBefore(previous, container.children[index] || null);
       return;
     }
@@ -1076,9 +1091,10 @@ function renderImages(container, items, choose = null) {
       button.replaceChildren(node("span", "Image unavailable", "missing"));
       container.dataset.signature = "";
     });
-    if (container === desktopImages.compareGrid) desktopImages.prepareThumbnail(button, image);
+    if (container === desktopImages.compareGrid || container === galleryLibrary.grid) desktopImages.prepareThumbnail(button, image);
     picture.append(image);
     button.append(picture);
+    paintHeart(button);
     button.addEventListener("click", () => {
       const currentItems = container.imageItems;
       const currentIndex = currentItems.findIndex((entry) => entry.id === item.id);
@@ -1101,11 +1117,14 @@ function loadGallery(force = false) {
   if (galleryPromise) return galleryPromise;
   clearTimeout(galleryTimer);
   const epoch = galleryEpoch;
+  const mutation = galleryMutation;
+  let refreshAgain = false;
   $("refresh-gallery").disabled = true;
   galleryPromise = (async () => {
     try {
       const result = await api(`/api/gallery?since=${encodeURIComponent(galleryRevision)}${force ? "&refresh=1" : ""}`);
       if (epoch !== galleryEpoch) return;
+      if (mutation !== galleryMutation) { refreshAgain = true; return; }
       galleryRevision = result.revision;
       if (result.images) {
         const oldGallery = gallery;
@@ -1126,7 +1145,7 @@ function loadGallery(force = false) {
         }
       }
       renderImages($("gallery-grid"), gallery);
-      comparison.gallery(gallery);
+      comparison.gallery(comparisonGallery());
       renderPreviewComparisonGallery();
       $("gallery-empty").hidden = !!gallery.length;
       syncSelectedImageActions();
@@ -1137,7 +1156,9 @@ function loadGallery(force = false) {
       if (epoch === galleryEpoch) {
         galleryPromise = null;
         $("refresh-gallery").disabled = false;
-        if (connected && !document.hidden && !$("gallery-page").hidden && !$("workspace").hidden)
+        if (refreshAgain && connected && !document.hidden && !$("gallery-page").hidden && !$("workspace").hidden)
+          void loadGallery(true);
+        else if (connected && !document.hidden && !$("gallery-page").hidden && !$("workspace").hidden)
           galleryTimer = setTimeout(() => loadGallery(), 5000);
       }
     }
@@ -1146,9 +1167,14 @@ function loadGallery(force = false) {
 }
 async function comparePreviewImage() {
   const item = actionImage();
-  if (!desktopImages.active || !item) return;
+  if (!item || selectedImageActions?.pending) return;
   desktopImages.openComparePicker(item.id);
   await loadGallery(true);
+}
+function comparisonGallery() {
+  // An older favourite can be the selected source even outside recent Gallery.
+  const favourites = galleryLibrary.dialog.open && galleryLibrary.mode === "favourites" ? galleryLibrary.items : [];
+  return [...new Map([...favourites, ...gallery].map((item) => [item.id, item])).values()];
 }
 function renderPreviewComparisonGallery() {
   if (!desktopImages.comparing) return;
@@ -1156,12 +1182,13 @@ function renderPreviewComparisonGallery() {
   const candidates = gallery.filter((item) => item.id !== sourceId);
   desktopImages.compareStatus.textContent = candidates.length ? "" : "No other images in the gallery yet.";
   renderImages(desktopImages.compareGrid, candidates, (item) => {
-    if (!desktopImages.active || !desktopImages.comparing || actionImage()?.id !== sourceId) return;
-    if (!gallery.some((entry) => entry.id === sourceId) || !gallery.some((entry) => entry.id === item.id)) {
+    if (!desktopImages.comparing || actionImage()?.id !== sourceId) return;
+    const images = comparisonGallery();
+    if (!images.some((entry) => entry.id === sourceId) || !images.some((entry) => entry.id === item.id)) {
       desktopImages.compareStatus.textContent = "An image is no longer available. Close this gallery and try again.";
       return;
     }
-    comparison.gallery(gallery);
+    comparison.gallery(images);
     comparison.selected = [sourceId, item.id];
     comparison.update();
     desktopImages.comparePicker.close();
@@ -1214,33 +1241,46 @@ function actionImage() {
   const items = previewImages();
   return items.find((item) => item.id === $("job-images").dataset.selectedImage) || items[0];
 }
+function imageActionStateSignature(item, canRequest) {
+  return JSON.stringify([item?.id, item?.modified, item?.kept, state.online, canRequest]);
+}
 function syncSelectedImageActions(force = false) {
-  const active = desktopImages.active && $("login").hidden;
+  const active = $("login").hidden && !$("workspace").hidden;
   if (active && !selectedImageActions) {
     imageWorkflowDialogs = new ComfyImageWorkflowDialogs({ read: readStore, write: writeStore });
     selectedImageActions = new ComfySavedImageActions($("selected-image-actions"), {
       api, changed: imageActionChanged, workflow: runImageWorkflow,
       present: ({ pending }) => {
-        if (desktopImages.active) $("same-seed").disabled = $("variation").disabled = pending || !actionImage();
+        $("same-seed").disabled = $("variation").disabled = pending || (desktopImages.active && !actionImage());
+        $("phone-compare-image").disabled = pending || !actionImage();
       },
     });
   }
   const previewing = $("gallery-page").hidden;
-  const item = active && (previewing || $("image-dialog").open) ? actionImage() : null;
+  // Phone's active job stays in its compact dock with the live preview. Saved
+  // image actions belong to the completed result or the explicit image viewer.
+  const savedPreview = previewing && (desktopImages.active ||
+    (!submitting && currentJob()?.status === "complete"));
+  const item = active && (savedPreview || $("image-dialog").open) ? actionImage() : null;
   desktopImages.render({ viewing: $("image-dialog").open, selected: !!item,
     previewing, pending: !!selectedImageActions?.pending, imageId: item?.id,
     reconnecting: (!connected || !state.online) && $("login").hidden && !$("workspace").hidden,
     canCleanup: connected && state.online && !recovering && !busy && !submitting && !cleaningVRAM &&
       !state.jobs.some((job) => activeStatuses.has(job.status)) });
   const canRequest = connected && !recovering && !document.hidden;
-  const signature = JSON.stringify([item?.id, item?.modified, item?.kept, state.online, canRequest]);
+  const signature = imageActionStateSignature(item, canRequest);
   if (!force && signature === imageActionSignature) return;
   imageActionSignature = signature;
   imageWorkflowDialogs?.close();
   selectedImageActions?.select(item, { connected: canRequest });
 }
 async function imageActionChanged(item, result) {
-  const collections = new Set([gallery, viewerItems, ...state.jobs.map((job) => job.images || [])]);
+  galleryMutation++;
+  // Local metadata changed without receiving a Gallery snapshot. Another device
+  // may return to the old revision; it must still replace our optimistic data.
+  galleryRevision = "";
+  const favouriteViewer = galleryLibrary.dialog.open && galleryLibrary.mode === "favourites" && viewerItems === galleryLibrary.items;
+  const collections = new Set([gallery, viewerItems, galleryLibrary.items, ...state.jobs.map((job) => job.images || [])]);
   const selected = viewerItems[viewerIndex]?.id;
   for (const items of collections) {
     const index = items.findIndex((entry) => entry.id === item.id);
@@ -1248,22 +1288,29 @@ async function imageActionChanged(item, result) {
     if (result.trash) items.splice(index, 1);
     else items[index].kept = result.kept;
   }
+  galleryLibrary.changed(item, result);
   renderImages($("job-images"), previewImages());
   renderImages($("gallery-grid"), gallery);
-  comparison.gallery(gallery);
-  if ($("image-dialog").open && result.trash) {
+  comparison.gallery(comparisonGallery());
+  if ($("image-dialog").open && (result.trash || (favouriteViewer && !result.kept))) {
     if (viewerItems.length) openImage(viewerItems, selected === item.id ? Math.min(viewerIndex, viewerItems.length - 1)
       : viewerItems.findIndex((entry) => entry.id === selected));
     else $("image-dialog").close();
   }
-  syncSelectedImageActions(true);
+  const current = actionImage();
+  if (typeof result.kept === "boolean" && selectedImageActions?.capabilities &&
+      selectedImageActions.item?.id === item.id && current?.id === item.id &&
+      selectedImageActions.item.modified === current.modified)
+    imageActionSignature = imageActionStateSignature(current, connected && !recovering && !document.hidden);
+  syncSelectedImageActions(!!result.trash);
   if (result.trash) {
     notice("Image deleted to Wastebin. The original file remains in place.");
     refreshFullState();
   }
 }
 async function runImageWorkflow(item, action, modified) {
-  const current = () => desktopImages.active && actionImage()?.id === item.id && actionImage()?.modified === item.modified;
+  const epoch = imageReuseEpoch;
+  const current = () => imageReuseEpoch === epoch && actionImage()?.id === item.id && actionImage()?.modified === item.modified;
   if (busy || pendingSubmission) throw new Error("Finish or retry the pending submission before starting an image action.");
   if (!connected || recovering || !state.online) throw new Error("Reconnect to ComfyUI before starting an image action.");
   const parameters = await imageWorkflowDialogs.options(item, action);
@@ -1423,6 +1470,7 @@ async function bootstrap() {
   }
 }
 function pauseConnection() {
+  galleryLibrary.close();
   stopGallerySync();
   saveDraft();
   saveUI();
@@ -1499,6 +1547,8 @@ new ResizeObserver(() => {
   document.documentElement.style.setProperty("--generation-dock-height", `${height}px`);
 }).observe($("generation-dock"));
 wideLayout.addEventListener("change", () => {
+  imageWorkflowDialogs?.close();
+  if (desktopImages.comparing) desktopImages.comparePicker.close();
   renderImages($("job-images"), previewImages());
   // Restore Phone's original terminal-only visibility after a desktop round trip.
   const terminal = ["complete", "failed", "cancelled"].includes(currentJob()?.status);
@@ -1732,6 +1782,7 @@ let selectedImageActions = null, imageWorkflowDialogs = null, imageActionSignatu
 const desktopImages = new ComfyDesktopImagePresentation({ media: wideLayout,
   actions: $("selected-image-actions"), preview: $("preview-reuse-actions"),
   viewer: $("reuse-image").parentElement, reuse: $("same-seed"), variation: $("variation"), images: $("job-images"),
+  compare: guarded(comparePreviewImage),
   promptToggle: (input, wrap, button) => configurePromptToggle(input, wrap, button,
     preset.id + ":" + input.id.slice("control-".length), "Negative prompt"),
   cleanup: async () => {
@@ -1748,6 +1799,15 @@ const imageFeatureAPI = new ComfyImageFeatureAPI({ api, requestId, submit: submi
   readPending: () => pendingSubmission, writePending: (value) => {
     pendingSubmission = value;
     writeStore("pending", value);
+  } });
+const galleryLibrary = new ComfyGalleryLibrary({ renderImages, openImage,
+  empty: (tokens) => imageFeatureAPI.deletePermanently(tokens, true),
+  load: async (mode) => {
+    if (!connected || recovering || document.hidden || $("workspace").hidden)
+      throw new Error("Reconnect before refreshing this collection.");
+    if (mode === "favourites") return (await api("/api/gallery?favourites=1&refresh=1")).filter((item) => item.kept);
+    const entries = await imageFeatureAPI.wastebin();
+    return entries.map((entry) => ({ ...entry, id: entry.token, url: entry.thumbnail, thumbnail: null }));
   } });
 const promptHistory = new PromptHistoryView({ api, reuse: (entry) => {
   if (!preset) throw new Error("Choose a workflow before reusing a prompt.");

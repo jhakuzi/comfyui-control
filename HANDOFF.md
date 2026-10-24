@@ -1,4 +1,195 @@
-# Session handoff — 2026-10-23
+# Session handoff — 2026-10-24
+
+## Authorized 1.0.5 release
+
+The user authorized pushing the testing branch, merging to main and building COPR.
+This supersedes the earlier testing-only restriction below. Version 1.0.5-1
+packages the Phone modernization and shared Gallery library. Version hashes and
+stable ZIP/source RPM downloads are refreshed for the release. The reported
+Phone Gallery load delay remains unconfirmed and unchanged. Release checks passed: 437 pytest tests and six fresh Phone/Desktop/shared-library
+browser checks across Chromium/WebKit. Build results follow after the tag workflow
+completes.
+
+## Phone Gallery copy follow-up
+
+Phone hides the introductory “Recent images from ComfyUI output…” paragraph
+using scoped presentation CSS. Desktop copy and the Gallery empty-state hint
+remain unchanged. Shell cache is bumped to `gallery-library-3`.
+
+## Phone modernization testing branch
+
+Branch: `testing/phone-ui-modernization`, created from the freshly cloned latest
+main `2fb6352`. Changes are for review/testing only; no main merge, version bump,
+tag, release rebuild or publish is authorized by this session. The previous
+release handoff below remains historical context.
+
+Read `docs/GALLERY_COLLECTIONS.md` for the new shared Gallery collection views.
+Read `docs/PHONE_UI.md` for the Desktop-to-Phone behavior mapping, architecture,
+verification commands and remaining device checks. The existing Phone UI now has
+shared Heart/Edit/Upscale/virtual Delete controls in completed results and the
+viewer, plus a separate Compare button that preserves New variation. Workflow,
+model and Gallery refresh icons, idle-only VRAM cleanup, prompt chevrons, compact
+labelled LoRA strength rows and live step metrics match Desktop's vocabulary.
+Touch controls, square scrolling Compare rows and flexible Save image navigation
+fit narrow portrait/landscape screens.
+
+Phone retains its tabs, fixed Generate/job dock, live preview, inline prompts,
+native collapsing sections/negative prompt, history/favourites, seed hint, original
+slider bounds, exact reuse, swipe/navigation and details. The viewer now hides
+its filename and iPhone instructions and places Details below all action rows.
+One shared component and placement helper serve both presentations; there is no
+second state store, request/submission implementation or new polling. Action forms
+close on Desktop breakpoint transitions. Shared stale-response, permissions,
+confirmation and UUID retry behavior remain authoritative. No ComfyUI installation
+or real user configuration was touched.
+
+Phone styles are isolated in `presentation_phone.css`; the shared `style.css`,
+Desktop stylesheet and 1000×600 breakpoint are unchanged. The public-asset allowlist
+and service-worker shell include the new stylesheet, with cache
+`comfy-control-mobile-gallery-library-2`. Private APIs/images remain uncached.
+
+Verification completed:
+
+- **431 pytest tests passed**, including optional Node shared-component checks.
+- **16 browser runs passed**: Phone image actions plus Desktop image actions,
+  responsive layout/reconnect/privacy/reuse, Generate feedback, refresh stability,
+  bypassed LoRAs, saved-workflow picker and generation transitions, each in Chromium
+  and WebKit. Phone uses touch input at 320×568, 390×844, 430×932, 768×1024 and
+  844×390, plus Desktop transitions. Checks include real Edit/Upscale protocol
+  submissions, pixel/parameter targeting, exact 64-bit seeds, uncertain UUID retry,
+  draft preservation, Favourites, cancelled/confirmed virtual deletion and offline
+  action disabling. Phone picker also covers short-screen scrolling and late
+  responses after cancel; shared Desktop checks cover decoding/reduced motion.
+- `git diff --check` passed. Phone screenshots were visually inspected in both
+  engines. Historical assertions forbidding Phone controls were updated narrowly;
+  frozen shared-asset and Desktop geometry checks remain active.
+
+Tests used this checkout's `.venv` and isolated loopback protocol fixtures. Browser
+downloads, compatibility libraries, logs and screenshots are session work assets,
+not repository/runtime dependencies. The host needed session-local ICU/JPEG
+libraries for WebKit; no system installation was changed. Fresh output directories
+were used. Real GPU inference, physical Phone/keyboard/safe-area behavior, NAS/VPN
+and custom-node compatibility still require hands-on testing before merge.
+
+## Phone viewer review follow-up
+
+The user requested hiding the filename and iPhone instructions and moving Details
+to the bottom of the Phone viewer. Phone-scoped CSS hides the prose/header text;
+the existing placement helper moves the original Details node after the action
+rows so keyboard order matches visual order. Desktop restores the original DOM
+placement. The service-worker shell was bumped to `phone-actions-2`. Phone and
+Desktop action checks passed in Chromium and WebKit (four browser runs), along
+with all three focused presentation-boundary tests and `git diff --check`.
+
+## Phone Create results review follow-up
+
+Phone Create now places the existing `job-output` section before the workflow
+form. Completed results use the title `Preview & results` and hide the workflow
+filename line. The original nodes, selected image, controls and handlers are reused.
+Active jobs remain in the fixed dock; failure/unknown-job diagnostics are preserved.
+Desktop restores the original output anchor and completed title. The service-worker
+shell was bumped to `phone-actions-3`.
+
+The Phone viewer now overlays Close at the image's top-right corner and uses a
+viewport-height flex layout. The image fits the space remaining around the touch
+controls; short landscape screens use single-row action grids. Details stays at
+the bottom, with internal scrolling for expanded metadata. Diagnostic messages
+also have bounded internal scroll areas instead of forcing whole-viewer scroll.
+
+Verification: Phone/Desktop actions, responsive behavior and generation transitions
+passed in both Chromium and WebKit (eight browser runs). All three focused
+presentation-boundary tests and `git diff --check` passed. Phone checks assert
+result order/title, hidden filename, top-right overlay bounds, visible touch controls
+and no dialog overflow at all five portrait/tablet/landscape sizes. Screenshots
+were visually inspected. Physical-device checks remain outstanding.
+
+## Desktop and Phone Gallery collections
+
+Gallery now has bin and heart icon buttons immediately after Refresh, using one
+shared `feature_gallery_library.js/css` component. Both open bounded native
+dialogs with square, scrolling thumbnail rows using the existing `renderImages`
+and decoded/reduced-motion thumbnail handling. Favourites opens the shared image
+viewer/actions. Wastebin uses the existing private list/thumbnail API and can show
+a larger thumbnail with its filename and stored error/notice; browsing performs
+no restore or permanent deletion. No new polling, queue or selection store exists.
+
+Main Gallery and Favourites tiles display small yellow hearts. Metadata changes
+update badges in place without replacing image/button DOM. Confirmed mutations
+invalidate older Gallery reads, preventing a delayed response from reversing a
+heart. Popup close/tab/lifecycle/authentication guards ignore stale reads and clear
+private grids on sign-in. Unmarking in Favourites safely advances/closes its viewer.
+
+`GET /api/gallery?favourites=1` lists the requesting browser's exact-version marks,
+including older files beyond the recent 200/ordinary retained 500. The existing
+bounded local/network scan retains marked references across restarts and scans by
+other browsers. Recent Gallery remains capped at 200; private marks, output scope,
+permissions, corruption safeguards and scan/mark bounds stay authoritative.
+Older favourites can still use full viewing/actions and Compare. Deleted entries
+remain excluded from ordinary Gallery/Favourites and original files stay intact.
+
+The new public JS/CSS are allowlisted and included in shell cache
+`comfy-control-mobile-gallery-library-1`. Shared `style.css`, Desktop/Phone
+arrangement styles, versions and release assets are unchanged. Restart a running
+app for the Python query update, then reload both WebUI pages.
+
+Verification: **434 pytest tests passed**, including new local/network cases for
+older favourites beyond both limits, restart, browser isolation, replaced versions,
+deleted exclusion and private thumbnail authorization. **12 browser runs passed**:
+collection flow plus existing Desktop/Phone actions, responsive behavior, Gallery
+synchronization and comparison, each in Chromium and WebKit. The new flow covers
+five viewport sizes, live badges/DOM identity, empty/multiple rows, decoded previews,
+private collections, stale Gallery/collection responses, error/retry, sign-in
+clearing, preserved drafts/files and older-favourite viewing/Compare. Screenshots
+were inspected. Physical Phone and actual NAS/GPU checks remain outside fixtures.
+
+## Shared library, stable Desktop actions and Clear Bin follow-up
+
+The user explicitly requested sharing hearts/bin contents across Desktop and Phone,
+larger Desktop popups, removal of heart-click flicker and confirmed Clear Bin.
+These changes supersede the browser-private image-library contracts above. The
+controller has one WebUI access boundary/password; admitted clients now share
+library metadata in the same output scope. Jobs, cancellation, prompt history,
+optional image-settings sharing and initial per-image Delete ownership stay intact.
+
+Existing version-2 sidecars remain compatible. Scans atomically merge validated
+legacy marks into a shared output bucket, preserving other/stale records and
+corruption safeguards. Unmarking removes old copies so they cannot resurrect a
+heart. Bin records retain their original owner and identity; shared listing,
+thumbnails, restore and confirmed permanent deletion still check output scope.
+Legacy listing discovers original owners, and the worker uses those owners for
+legacy reads/writes. Permanent deletion checks source ownership against the original
+record, retaining all filesystem, symlink, replacement, root and NFS guards.
+
+Reproduction measured a 15.5px movement in viewer controls from the temporary
+“Saving…” row and a 41px popup-grid movement from loading prose. Both now measure
+zero movement. Heart saves acknowledge the same capabilities without another GET;
+read refreshes retain existing prose. Collection grid/status geometry is fixed,
+with accessible busy state and no visible transient loading/empty text. Desktop
+popups are up to 1200×900 with four columns; Phone retains two columns/bounds.
+A cross-device test also found the Gallery revision remained stale after optimistic
+metadata changes; invalidating it on confirmed edits fixes reversed device marks.
+
+Clear Bin confirms the exact displayed token snapshot before calling the existing
+permanent-delete transport. Cancel does nothing; new entries stay out; failed
+entries retain errors. Duplicate actions are disabled. Confirmed results refresh
+the list, and uncertain responses require a read refresh without automatic retry.
+Only generated fixture files were permanently removed during verification.
+
+The shell cache is `comfy-control-mobile-gallery-library-2`. Restart the app for
+backend changes, then reload both WebUI pages. See `docs/GALLERY_COLLECTIONS.md`.
+
+Verification completed: **437 pytest tests passed**, including authenticated
+cross-device access, denied unauthenticated library/deletion routes, private
+jobs/history, lossless legacy marks, original-owner changes, output/version guards,
+legacy trash, local/network deletion and partial failures. **14 browser checks
+passed**: collections, shared-library/Clear Bin updates, Desktop/Phone actions,
+responsive behavior, Gallery synchronization and comparison in Chromium and WebKit.
+The final update checks include a lost response after actual fixture deletion,
+with read reconciliation and no automatic retry. `git diff --check` passed.
+Screenshots and before/after geometry were inspected. No real user files, ComfyUI
+installation, version, release artifact or system setting was modified by tests.
+
+## Previous release handoff — 2026-10-23
 
 ## Release baseline and next session
 

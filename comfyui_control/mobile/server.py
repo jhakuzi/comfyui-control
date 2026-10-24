@@ -22,7 +22,7 @@ from .settings import check_password, lan_address
 ASSETS = Path(__file__).with_name("web")
 ICON = Path(__file__).parents[1] / "assets" / "comfyui-control.png"
 OWNER = web.RequestKey("mobile_owner", str) if hasattr(web, "RequestKey") else "mobile_owner"
-PUBLIC = {"/", "/feature_generate.js", "/feature_generate.css", "/feature_image_actions.js", "/feature_image_api.js", "/feature_image_workflows.js", "/presentation_desktop.js", "/presentation_desktop.css", "/app.js", "/comparison.js", "/prompt_history.js", "/image_details.js", "/style.css", "/manifest.webmanifest", "/sw.js", "/icon.png", "/icon-192.png", "/icon-512.png", "/api/login", "/api/session"}
+PUBLIC = {"/", "/feature_gallery_library.js", "/feature_gallery_library.css", "/feature_generate.js", "/feature_generate.css", "/feature_image_actions.js", "/feature_image_api.js", "/feature_image_workflows.js", "/presentation_desktop.js", "/presentation_desktop.css", "/presentation_phone.css", "/app.js", "/comparison.js", "/prompt_history.js", "/image_details.js", "/style.css", "/manifest.webmanifest", "/sw.js", "/icon.png", "/icon-192.png", "/icon-512.png", "/api/login", "/api/session"}
 
 
 def json_response(value, **kwargs):
@@ -213,7 +213,8 @@ class MobileHTTP:
         return json_response(self.service.public_job(await self.service.cancel(request.match_info["id"], owner=request[OWNER])))
 
     async def gallery(self, request):
-        images = await self.service.gallery(owner=request[OWNER], force=request.query.get('refresh') == '1')
+        images = await self.service.gallery(owner=request[OWNER], force=request.query.get('refresh') == '1',
+                                           favourites=request.query.get('favourites') == '1')
         if 'since' not in request.query:
             return json_response(images)
         revision = hashlib.sha256(json.dumps(images, sort_keys=True).encode()).hexdigest()

@@ -1,4 +1,4 @@
-"""Saved-image capabilities and per-browser Keep marks, separate from job state.
+"""Saved-image capabilities and shared output-library marks, separate from job state.
 
 Image workflow names and bindings are explicitly supplied by the user. Graphs
 still come from ComfyUI; only these literal inputs are replaced for an action.
@@ -90,6 +90,9 @@ def upscale_multiplier_binding(graph):
     return dict(node=node_id, input=name, role='advanced', key='action-scale', label='Upscale multiplier')
 
 
+SHARED_LIBRARY_OWNER = hashlib.sha256(b'comfyui-control-shared-image-library').hexdigest()
+
+
 class ImageLibrary:
     """Small atomic sidecar; existing presets, jobs and image files stay intact."""
     def __init__(self, path):
@@ -123,6 +126,7 @@ class ImageLibrary:
             self.deleted = {}
             self.kept = {}
             self.valid = False  # Never overwrite a damaged library automatically.
+        self.index_kept()
         self.index_deleted()
 
     @staticmethod
@@ -131,6 +135,62 @@ class ImageLibrary:
 
     def contains(self, scope, owner, item):
         return self.kept.get(self.key(scope, owner), {}).get(item['id']) == item.get('modified', '')
+
+    def index_kept(self):
+        # Image IDs already include the controller/output scope. This also makes
+        # old browser-owned marks visible before their first migration scan.
+        self.kept_versions = {(identifier, modified) for entries in self.kept.values()
+                              for identifier, modified in entries.items()}
+
+    def contains_shared(self, item):
+        return (item['id'], item.get('modified', '')) in self.kept_versions
+
+    def merge_shared(self, scope, images):
+        """Fold validated legacy marks into this output's shared bucket atomically."""
+        if not self.valid:
+            return  # Preserve corrupt metadata; mutations still fail closed.
+        key = self.key(scope, SHARED_LIBRARY_OWNER)
+        shared = dict(self.kept.get(key, {}))
+        versions = {(item['id'], item.get('modified', '')) for item in images}
+        updated = {}
+        for source, entries in self.kept.items():
+            if source == key:
+                continue
+            remaining = dict(entries)
+            for identifier, modified in entries.items():
+                if (identifier, modified) in versions:
+                    shared[identifier] = modified
+                    remaining.pop(identifier)
+            updated[source] = remaining
+        if shared or key in self.kept:
+            updated[key] = shared
+        if updated == self.kept:
+            return
+        self.save(updated, self.deleted)
+        self.kept = updated
+        self.index_kept()
+
+    def mark_shared(self, scope, item, keep):
+        # Remove old copies on an explicit update, otherwise an unhearted image
+        # could reappear from another browser's pre-sharing bucket.
+        key = self.key(scope, SHARED_LIBRARY_OWNER)
+        entries = dict(self.kept.get(key, {}))
+        if not self.valid:
+            raise ValueError('The saved image library could not be read. Back it up before repairing it.')
+        if type(keep) is not bool:
+            raise ValueError('Favourite must be true or false.')
+        if keep:
+            if len(entries) >= 2000 and item['id'] not in entries:
+                raise ValueError('Favourites is full (2,000 images). Remove a favourite first.')
+            entries[item['id']] = item.get('modified', '')
+        else:
+            entries.pop(item['id'], None)
+        updated = {source: {identifier: modified for identifier, modified in values.items() if identifier != item['id']}
+                   for source, values in self.kept.items() if source != key}
+        updated[key] = entries
+        self.save(updated, self.deleted)
+        self.kept = updated
+        self.index_kept()
 
     def mark(self, scope, owner, item, keep):
         if not self.valid:
@@ -150,6 +210,7 @@ class ImageLibrary:
             raise ValueError('The saved image library is full. Remove some favourites first.')
         self.save(updated, self.deleted)
         self.kept = updated
+        self.index_kept()
 
     def save(self, kept, deleted):
         if not self.valid:
@@ -171,14 +232,15 @@ class ImageLibrary:
             return (scope, item.get('id')) in self.deleted_ids
         return (scope, item.get('id'), item['modified']) in self.deleted_versions
 
-    def entries(self, scope, owner):
+    def entries(self, scope, owner, *, shared=False):
         return [record for record in self.deleted.values()
-                if record['scope'] == scope and record['owner'] == owner and not record.get('purged')]
+                if record['scope'] == scope and (shared or record['owner'] == owner) and not record.get('purged')]
 
-    def entry(self, scope, owner, token):
+    def entry(self, scope, owner, token, *, shared=False):
         record = self.deleted.get(token)
-        if not record or record['scope'] != scope or record['owner'] != owner or record.get('purged'):
-            raise ValueError('This Wastebin entry belongs to another browser or output folder, or is no longer available.')
+        if not record or record['scope'] != scope or (not shared and record['owner'] != owner) or record.get('purged'):
+            boundary = 'output folder' if shared else 'browser or output folder'
+            raise ValueError(f'This Wastebin entry belongs to another {boundary}, or is no longer available.')
         return record
 
     def delete(self, scope, owner, item, identity, legacy=None):

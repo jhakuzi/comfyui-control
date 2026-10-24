@@ -116,8 +116,8 @@ async def main(browser_name, root):
             await expect(page.locator('.prompt-editor-toggle')).to_have_attribute('aria-expanded', 'true')
             await page.locator('.prompt-editor-toggle').click()
             await page.set_viewport_size(dict(width=390, height=844))
-            await expect(page.locator('.desktop-vram-cleanup')).to_have_count(0)
-            await expect(page.locator('#refresh-gallery')).to_have_text('Refresh')
+            await expect(page.locator('.desktop-vram-cleanup')).to_have_count(1)
+            await expect(page.locator('#refresh-gallery svg')).to_have_count(1)
             await expect(page.locator('.prompt-editor-toggle')).to_have_text('Expand')
             await layout(1440, 900, True)
             await page.locator("#notice").evaluate("el => el.hidden=true")
@@ -283,7 +283,7 @@ async def main(browser_name, root):
                 else:
                     await expect(page.locator(parent + ' #progress')).to_be_visible()
                     await expect(page.locator(parent + ' #job-detail')).to_be_visible()
-                    await expect(page.locator('#stat-steps')).to_be_hidden()
+                    await expect(page.locator('#stat-steps')).to_be_visible()
                     await expect(page.locator('#job-detail')).to_contain_text('8 / 20 steps · Quantized workflow')
                 await expect(page.locator(parent + ' #generation-stats')).to_be_visible()
                 for scroll in (0, 800, 100000):

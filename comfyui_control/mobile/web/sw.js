@@ -1,5 +1,5 @@
 /* Only public shell assets are cached. Authenticated responses never enter CacheStorage. */
-const CACHE = "comfy-control-mobile-prompt-overlays-1";
+const CACHE = "comfy-control-mobile-gallery-library-3";
 const SHELL = [
   "/",
   "/app.js",
@@ -8,8 +8,11 @@ const SHELL = [
   "/feature_image_actions.js",
   "/feature_image_api.js",
   "/feature_image_workflows.js",
+  "/feature_gallery_library.js",
+  "/feature_gallery_library.css",
   "/presentation_desktop.js",
   "/presentation_desktop.css",
+  "/presentation_phone.css",
   "/comparison.js",
   "/prompt_history.js",
   "/image_details.js",

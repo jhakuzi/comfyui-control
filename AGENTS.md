@@ -24,6 +24,7 @@ Paths below are under `comfyui_control/` unless stated otherwise:
 | `network_output.py`, `background_process.py` | Authorized output filesystem operations and bounded workers. |
 | `mobile/web/app.js` | One shared application controller, selection, drafts, requests, generation and pending journal. |
 | `mobile/web/feature_*.js` | Shared Generate/image-action components and transport. |
+| `mobile/web/feature_gallery_library.js/css` | Shared Gallery toolbar, Favourites/Wastebin collection previews and heart indicators. |
 | `tests/`, `tests/manual/` at repository root | pytest and automated browser/protocol fixtures. |
 
 ## Desktop and Phone boundaries
@@ -39,7 +40,7 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   labels, never API requests or business logic.
 - The existing desktop breakpoint is 1000px wide and 600px tall. Retain it unless
   explicitly asked to change it. There is no Forge presentation coordinator or
-  separate Phone adapter on this branch; do not import Forge layout/theme files.
+  separate Phone JavaScript adapter on this branch; do not import Forge layout/theme files.
 - Reuse existing DOM nodes, IDs and handlers; restore their original placement and
   labels on leaving desktop. New desktop containers use `data-desktop-slot`.
   Phone changes require an explicit request. Desktop work must preserve Phone
@@ -47,6 +48,16 @@ Paths below are under `comfyui_control/` unless stated otherwise:
 - Shared `style.css`, `index.html`, `app.js` and feature components affect both
   presentations. Make necessary changes narrowly and verify both. Do not add
   polling, duplicate listeners or redundant capability requests.
+- Phone refinements live in `presentation_phone.css`, scoped to
+  `:where(html[data-presentation="mobile"])`. The existing placement helper also
+  places shared image controls and refresh/cleanup buttons on Phone. Preserve its
+  tabs, fixed dock, inline/native details, prompt history, negative-prompt state,
+  slider bounds, exact reuse, New variation and viewer navigation.
+  Phone Compare is an additional button, using the existing picker and comparison.
+  Phone Create places the result section before the workflow form, labels completed
+  results `Preview & results`, and hides their workflow filename. Active jobs stay
+  in the dock; failure/unknown-job diagnostics remain visible.
+  See `docs/PHONE_UI.md` for current behavior and verification.
 - Keep new public assets in `mobile/server.py`'s allowlist and `web/sw.js`'s shell;
   bump the shell cache when shipping changed assets. Never cache private APIs or
   images. Preserve reduced-motion support.
@@ -84,13 +95,38 @@ Paths below are under `comfyui_control/` unless stated otherwise:
 - Desktop Gallery uses an icon refresh. Prompt controls use chevrons and an
   idle-only broom action calling the existing VRAM API. Desktop hides prompt
   history and the fixed-seed explanatory hint; Phone retains both.
+- Phone also has refresh/cleanup icons, prompt chevrons and live step metrics in
+  its existing dock. Shared Heart/Edit/Upscale/Delete controls appear on completed
+  results and in the saved-image viewer; a running Phone job retains its live
+  preview without those controls. One component, capability signature and pending
+  journal serve both presentations. Action forms close on breakpoint transitions.
+- Both presentations have Gallery Wastebin/Favourites icons next to Refresh and
+  heart indicators on marked thumbnails. Collection dialogs reuse `renderImages`,
+  thumbnail decoding/reduced motion and the existing viewer. Wastebin previews use
+  only private `/api/trash` thumbnails. Favourites includes older marked versions
+  outside the recent 200; scanning and marks remain bounded and controller/output
+  scoped. All clients admitted by this WebUI's access rules share the image library.
+  Keep thumbnails/DOM identity on mark updates, ignore stale reads after
+  close/authentication/mutations, and add no collection polling. See
+  `docs/GALLERY_COLLECTIONS.md` for details and checks.
+- Desktop collection dialogs are viewport-clamped up to 1200×900 with four columns;
+  Phone keeps two. Keep loading geometry stable and avoid visible transient prose
+  during heart saves. Confirmed heart updates reuse current capabilities without
+  a redundant read. Invalidate the Gallery revision after local metadata edits.
+- Wastebin's Clear Bin confirms an explicit displayed token snapshot and calls the
+  existing permanent-delete API. New entries stay out of that snapshot; failures
+  stay in the bin with errors. Disable duplicate actions while clearing. An uncertain
+  response requires Refresh, never automatic resubmission.
 - Both Desktop Preview and enlarged viewer use Compare instead of New variation.
   One second-image picker reuses the shared gallery renderer/loader and existing
   comparison dialog. Keep drafts/selection on cancel, ignore late responses, exclude
   the source image, preserve square scrolling rows, wait for thumbnail decoding,
   and honor reduced motion. Enlarged-view picker centers over Compare, bottom at
   the Upscale/Delete row, clamped to the viewport; regular picker matches Preview.
-  Desktop hides the viewer filename/iPhone instructions; Phone restores them.
+  Both presentations hide the viewer filename/iPhone instructions. Phone places
+  Details after the image action and reuse/Compare rows; Desktop keeps its placement.
+  Phone Close overlays the image top right; the image flexes to fit the controls
+  within the viewport. Expanded metadata/diagnostics use bounded internal scrolling.
 - Do not modify any ComfyUI installation. User explicitly declined an external
   immediate-VRAM-cleanup patch. The existing idle-only `/free` request remains;
   server-side processing timing is outside this app's guarantee.
@@ -105,14 +141,19 @@ Paths below are under `comfyui_control/` unless stated otherwise:
 - Preserve unknown workflow nodes, links, model choices, GGUF/LoRA wiring and
   saved editor settings. Change only validated mapped literals; never invent a
   replacement Qwen/SeedVR pipeline. Named action bindings live in `IMAGE_WORKFLOWS`.
-- Favourites use the existing private Keep sidecar (`keep`/`kept`). Virtual Delete
+- Favourites use the existing Keep sidecar (`keep`/`kept`), now shared between
+  devices of this controller/output. Valid legacy browser marks merge atomically;
+  unmarking must remove old copies so a heart cannot reappear. Virtual Delete
   changes metadata only. Restore removes that marker; only explicitly confirmed
   permanent deletion may remove originals. Retain configured-root, file/directory
   identity, symlink, ownership and output-scope guards and bounded NFS workers.
   Failed deletion stays in Wastebin with its error.
-- Preserve Host/Origin checks, authentication, CSP and browser isolation. Optional
-  metadata sharing grants no access to another browser's jobs, cancellation,
-  history or deletion permissions. Never commit credentials or private prompts.
+- Preserve Host/Origin checks, authentication and CSP. Library sharing includes
+  bin listing/thumbnails, restore and confirmed permanent deletion. Preserve each
+  bin record's original owner for source-ownership and legacy-worker checks.
+  Live jobs, cancellation, prompt history and optional settings reuse remain
+  browser-specific. Sharing does not change initial image Delete permissions.
+  Never commit credentials or private prompts.
 - Keep blocking filesystem/NFS/GPU work off Qt and HTTP event loops. Preserve
   atomic metadata writes and corruption safeguards. Do not disturb user settings
   or unrelated mounts; do not start competing app instances against one config.
@@ -137,6 +178,9 @@ For WebUI changes, install optional Playwright and its browsers:
 .venv/bin/python tests/manual/desktop_image_actions_browser.py --browser chromium --output /tmp/control-desktop-actions-check
 .venv/bin/python tests/manual/mobile_responsive_browser.py --browser chromium --output /tmp/control-responsive-check
 .venv/bin/python tests/manual/mobile_generate_button_browser.py --browser chromium --output /tmp/control-generate-check
+.venv/bin/python tests/manual/phone_image_actions_browser.py --browser chromium --output /tmp/control-phone-actions-check
+.venv/bin/python tests/manual/gallery_collections_browser.py --browser chromium --output /tmp/control-gallery-library-check
+.venv/bin/python tests/manual/gallery_library_updates_browser.py --browser chromium --output /tmp/control-shared-library-check
 git diff --check
 ```
 
