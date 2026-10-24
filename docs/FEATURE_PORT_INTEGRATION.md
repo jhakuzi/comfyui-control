@@ -1,5 +1,9 @@
 # Main-based feature port history
 
+Phone image-action integration is now enabled on `testing/phone-ui-modernization`.
+The Phone-deferred and unchanged-Phone statements below describe the initial port,
+not the current testing branch. See [PHONE_UI.md](PHONE_UI.md) for this integration.
+
 The sections below record the initial integration baseline. The reviewed changes
 now released as 1.0.4 additionally update the shared workflow picker, option refresh
 and safely configured LoRA bypasses, plus the isolated Desktop presentation. The

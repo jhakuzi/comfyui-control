@@ -91,7 +91,7 @@ class SavedImageActions {
     const item = { ...this.item }, capability = this.capabilities, epoch = this.epoch;
     if (action === "trash" && !confirm(`Delete “${item.filename}”?${item.kept ? " This image is in Favourites." : ""} The file will stay in place. You can restore it from Wastebin.`)) return;
     this.pending = true;
-    this.buttons.forEach((button) => { button.disabled = true; });
+    this.renderCapabilities();
     this.status.textContent = action === "trash" ? "Deleting image…"
       : action === "edit" || action === "upscale" ? "Preparing image…" : "Saving…";
     try {

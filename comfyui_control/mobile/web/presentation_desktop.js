@@ -1,16 +1,15 @@
 "use strict";
 
-/* Placement only. Selection, permissions, requests and workflows belong to the
-   shared controller/components. Uses main's existing wide-layout breakpoint. */
+/* Placement only. Shared image controls work in both presentations; wide-layout
+   arrangement is reversible. Requests and workflows stay in shared components. */
 window.ComfyDesktopImagePresentation = class DesktopImagePresentation {
-  constructor({ media, actions, preview, viewer, reuse, variation, images, cleanup, promptToggle }) {
+  constructor({ media, actions, preview, viewer, reuse, variation, images, cleanup, promptToggle, compare }) {
     Object.assign(this, { media, actions, preview, viewer, reuse, variation, images });
     this.cleanup = cleanup;
     this.promptToggle = promptToggle;
     this.negativeEditors = new Map();
     this.cleanupButtons = new Set();
     this.galleryRefresh = document.getElementById("refresh-gallery");
-    this.galleryRefreshLabel = this.galleryRefresh.textContent;
     this.refreshIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/></svg>';
     this.offlineNotice = document.createElement("span");
     this.offlineNotice.id = "desktop-offline-notice";
@@ -23,6 +22,14 @@ window.ComfyDesktopImagePresentation = class DesktopImagePresentation {
     this.originalVariationLabel = variation.textContent;
     this.viewerVariation = document.getElementById("vary-image");
     this.originalViewerVariationLabel = this.viewerVariation.textContent;
+    // Phone keeps New variation and gets direct access to the same Compare flow.
+    this.phoneCompare = document.createElement("button");
+    this.phoneCompare.id = "phone-compare-image";
+    this.phoneCompare.type = "button";
+    this.phoneCompare.textContent = "Compare";
+    this.phoneCompare.hidden = true;
+    this.phoneCompare.addEventListener("click", compare);
+    preview.append(this.phoneCompare);
     this.comparePicker = document.createElement("dialog");
     this.comparePicker.id = "desktop-compare-picker";
     this.comparePicker.dataset.desktopSlot = "";
@@ -112,6 +119,12 @@ window.ComfyDesktopImagePresentation = class DesktopImagePresentation {
 
   sizeComparePicker() {
     if (!this.comparing) return;
+    // Phone uses the native safe-area/dynamic-viewport dialog bounds. Remove
+    // Desktop's measured geometry before orientation or presentation changes.
+    if (!this.active) {
+      for (const key of ["width", "height", "left", "top"]) this.comparePicker.style.removeProperty(key);
+      return;
+    }
     const panel = document.getElementById("generation-panel");
     let rect = panel.getBoundingClientRect();
     // The same viewer is available on Gallery, where the Create column is hidden.
@@ -175,7 +188,7 @@ window.ComfyDesktopImagePresentation = class DesktopImagePresentation {
   }
 
   renderMetrics(progress) {
-    this.steps.hidden = !this.active;
+    this.steps.hidden = false;
     this.stepValue.textContent = progress ? `${progress.value} / ${progress.max}` : "-- / --";
   }
 
@@ -286,22 +299,18 @@ window.ComfyDesktopImagePresentation = class DesktopImagePresentation {
         content.style.removeProperty("max-height");
       }
     }
-    if (this.active && !this.galleryRefresh.querySelector("svg")) {
+    if (!this.galleryRefresh.querySelector("svg")) {
       this.galleryRefresh.innerHTML = this.refreshIcon;
       this.galleryRefresh.setAttribute("aria-label", "Refresh gallery");
       this.galleryRefresh.title = "Refresh gallery";
-    } else if (!this.active && this.galleryRefresh.querySelector("svg")) {
-      this.galleryRefresh.textContent = this.galleryRefreshLabel;
-      this.galleryRefresh.removeAttribute("aria-label");
-      this.galleryRefresh.removeAttribute("title");
     }
     for (const button of this.cleanupButtons) {
-      if (!button.isConnected || !this.active) {
+      if (!button.isConnected) {
         button.remove();
         this.cleanupButtons.delete(button);
       }
     }
-    if (this.active) for (const toggle of document.querySelectorAll(".prompt-editor:not(.desktop-negative-editor) .prompt-editor-toggle")) {
+    for (const toggle of document.querySelectorAll(".prompt-editor:not(.desktop-negative-editor) .prompt-editor-toggle")) {
       if (toggle.parentElement.querySelector(".desktop-vram-cleanup")) continue;
       const button = document.createElement("button");
       button.type = "button";
@@ -323,30 +332,24 @@ window.ComfyDesktopImagePresentation = class DesktopImagePresentation {
     }
     if (this.active) {
       if (this.images.parentElement !== this.frame) this.frame.append(this.images);
-      for (const input of document.querySelectorAll('#preset, #model-controls select')) {
-        if (this.selectors.has(input)) continue;
-        const source = document.getElementById(input.id === "preset" ? "refresh-workflows" : "refresh-models");
-        const row = document.createElement("div");
-        row.className = "desktop-selector-tools";
-        row.dataset.desktopSlot = "";
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "small desktop-selector-refresh";
-        const label = document.querySelector(`label[for="${input.id}"]`)?.textContent || "model choices";
-        button.setAttribute("aria-label", `Refresh ${label}`);
-        button.title = `Refresh ${label}`;
-        button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/></svg>';
-        button.addEventListener("click", () => source.click());
-        input.before(row);
-        row.append(input, button);
-        this.selectors.set(input, { row, button, source });
-      }
-    } else {
-      if (this.images.previousSibling !== this.imagesAnchor) this.imagesAnchor.after(this.images);
-      for (const [input, { row }] of this.selectors) {
-        if (row.isConnected) row.replaceWith(input);
-      }
-      this.selectors.clear();
+    } else if (this.images.previousSibling !== this.imagesAnchor) this.imagesAnchor.after(this.images);
+    for (const input of document.querySelectorAll('#preset, #model-controls select')) {
+      if (this.selectors.has(input)) continue;
+      const source = document.getElementById(input.id === "preset" ? "refresh-workflows" : "refresh-models");
+      const row = document.createElement("div");
+      row.className = "desktop-selector-tools";
+      row.dataset.desktopSlot = "";
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "small desktop-selector-refresh";
+      const label = document.querySelector(`label[for="${input.id}"]`)?.textContent || "model choices";
+      button.setAttribute("aria-label", `Refresh ${label}`);
+      button.title = `Refresh ${label}`;
+      button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/></svg>';
+      button.addEventListener("click", () => source.click());
+      input.before(row);
+      row.append(input, button);
+      this.selectors.set(input, { row, button, source });
     }
     for (const [input, { row, button, source }] of this.selectors) {
       if (!row.isConnected) this.selectors.delete(input);
@@ -358,7 +361,7 @@ window.ComfyDesktopImagePresentation = class DesktopImagePresentation {
 
   render({ viewing = false, previewing = true, selected = false, pending = false, imageId, canCleanup = false, reconnecting = false } = {}) {
     document.documentElement.dataset.presentation = this.active ? "desktop" : "mobile";
-    if (this.comparing && (!this.active || (!previewing && !viewing) || !selected || this.comparePicker.dataset.imageId !== imageId))
+    if (this.comparing && ((!previewing && !viewing) || !selected || this.comparePicker.dataset.imageId !== imageId))
       this.comparePicker.close();
     const variationLabel = this.active ? "Compare" : this.originalVariationLabel;
     if (this.variation.textContent !== variationLabel) this.variation.textContent = variationLabel;
@@ -371,8 +374,12 @@ window.ComfyDesktopImagePresentation = class DesktopImagePresentation {
     for (const button of this.cleanupButtons) button.disabled = !canCleanup;
     const label = this.active ? "Reuse settings" : this.originalLabel;
     if (this.reuse.textContent !== label) this.reuse.textContent = label;
-    this.reuse.disabled = this.variation.disabled = this.active && (!selected || pending);
-    this.actions.hidden = !this.active || !selected;
+    this.reuse.disabled = this.variation.disabled = pending || (this.active && !selected);
+    this.actions.hidden = !selected;
+    this.phoneCompare.hidden = this.active || !selected;
+    this.phoneCompare.disabled = !selected || pending;
+    const phoneDestination = viewing ? this.viewer : this.preview;
+    if (this.phoneCompare.parentElement !== phoneDestination) phoneDestination.append(this.phoneCompare);
     if (this.active) this.reuse.hidden = this.variation.hidden = !selected;
     this.slot.hidden = !this.active || !selected || !previewing;
     // Keep the two action rows accessible below the scrolling result, without
@@ -387,7 +394,7 @@ window.ComfyDesktopImagePresentation = class DesktopImagePresentation {
       if (this.active && button.dataset.imageId === imageId) button.setAttribute("aria-current", "true");
       else button.removeAttribute("aria-current");
     }
-    if (this.active && selected) {
+    if (selected) {
       const destination = viewing ? this.viewer : this.preview;
       if (this.actions.parentElement !== destination.parentElement || this.actions.nextElementSibling !== destination)
         destination.before(this.actions);

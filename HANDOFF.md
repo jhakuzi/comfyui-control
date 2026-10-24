@@ -1,4 +1,59 @@
-# Session handoff — 2026-10-23
+# Session handoff — 2026-10-24
+
+## Phone modernization testing branch
+
+Branch: `testing/phone-ui-modernization`, created from the freshly cloned latest
+main `2fb6352`. Changes are for review/testing only; no main merge, version bump,
+tag, release rebuild or publish is authorized by this session. The previous
+release handoff below remains historical context.
+
+Read `docs/PHONE_UI.md` for the Desktop-to-Phone behavior mapping, architecture,
+verification commands and remaining device checks. The existing Phone UI now has
+shared Heart/Edit/Upscale/virtual Delete controls in completed results and the
+viewer, plus a separate Compare button that preserves New variation. Workflow,
+model and Gallery refresh icons, idle-only VRAM cleanup, prompt chevrons, compact
+labelled LoRA strength rows and live step metrics match Desktop's vocabulary.
+Touch controls, square scrolling Compare rows and flexible Save image navigation
+fit narrow portrait/landscape screens.
+
+Phone retains its tabs, fixed Generate/job dock, live preview, inline prompts,
+native collapsing sections/negative prompt, history/favourites, seed hint, original
+slider bounds, exact reuse, swipe/navigation, details and iPhone instructions.
+One shared component and placement helper serve both presentations; there is no
+second state store, request/submission implementation or new polling. Action forms
+close on Desktop breakpoint transitions. Shared stale-response, permissions,
+confirmation and UUID retry behavior remain authoritative. No ComfyUI installation
+or real user configuration was touched.
+
+Phone styles are isolated in `presentation_phone.css`; the shared `style.css`,
+Desktop stylesheet and 1000×600 breakpoint are unchanged. The public-asset allowlist
+and service-worker shell include the new stylesheet, with cache
+`comfy-control-mobile-phone-actions-1`. Private APIs/images remain uncached.
+
+Verification completed:
+
+- **431 pytest tests passed**, including optional Node shared-component checks.
+- **16 browser runs passed**: Phone image actions plus Desktop image actions,
+  responsive layout/reconnect/privacy/reuse, Generate feedback, refresh stability,
+  bypassed LoRAs, saved-workflow picker and generation transitions, each in Chromium
+  and WebKit. Phone uses touch input at 320×568, 390×844, 430×932, 768×1024 and
+  844×390, plus Desktop transitions. Checks include real Edit/Upscale protocol
+  submissions, pixel/parameter targeting, exact 64-bit seeds, uncertain UUID retry,
+  draft preservation, Favourites, cancelled/confirmed virtual deletion and offline
+  action disabling. Phone picker also covers short-screen scrolling and late
+  responses after cancel; shared Desktop checks cover decoding/reduced motion.
+- `git diff --check` passed. Phone screenshots were visually inspected in both
+  engines. Historical assertions forbidding Phone controls were updated narrowly;
+  frozen shared-asset and Desktop geometry checks remain active.
+
+Tests used this checkout's `.venv` and isolated loopback protocol fixtures. Browser
+downloads, compatibility libraries, logs and screenshots are session work assets,
+not repository/runtime dependencies. The host needed session-local ICU/JPEG
+libraries for WebKit; no system installation was changed. Fresh output directories
+were used. Real GPU inference, physical Phone/keyboard/safe-area behavior, NAS/VPN
+and custom-node compatibility still require hands-on testing before merge.
+
+## Previous release handoff — 2026-10-23
 
 ## Release baseline and next session
 

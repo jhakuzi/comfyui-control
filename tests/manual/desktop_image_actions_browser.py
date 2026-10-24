@@ -444,26 +444,27 @@ async def main(engine, output):
             await until(lambda:bool(service.image_library.deleted))
             await expect(page.locator('#image-caption')).to_have_text('first.png')
             assert all((images/name).read_bytes()==data for name,data in originals.items())
-            # No new phone controls, requests, changed labels or open action forms.
+            # Switching presentation closes the form; Phone reuses these controls
+            # while retaining its original reuse/variation labels and draft.
             await edit.click()
             await page.set_viewport_size({'width':390,'height':844})
             await expect(page.locator('#edit-image-dialog')).to_be_hidden()
-            await expect(actions).to_be_hidden()
+            await expect(actions).to_be_visible()
+            await expect(page.locator('#phone-compare-image')).to_be_visible()
             await expect(page.locator('#same-seed')).to_have_text('Same seed')
             await page.locator('#close-image').click()
             await page.screenshot(path=str(output/'phone-after-desktop.png'))
-            before=sum('/actions' in url for _,url,_ in calls)
             await page.reload()
             await expect(page.locator('#same-seed')).to_have_text('Same seed')
-            await expect(actions).to_be_hidden()
-            assert sum('/actions' in url for _,url,_ in calls)==before
+            await expect(edit).to_be_enabled()
+            await expect(actions).to_be_visible()
             assert not errors,errors
             await browser.close()
     finally:
         await runner.cleanup()
         await service.stop()
         await upstream.close()
-    print(f'{engine}: desktop selection, favourite persistence/races, native two-row layout, dialog cancellation, exact full reuse, real edit/upscale, failures, virtual Delete and Phone isolation passed')
+    print(f'{engine}: desktop selection, favourite persistence/races, native two-row layout, dialog cancellation, exact full reuse, real edit/upscale, failures, virtual Delete and Phone transition passed')
 
 
 if __name__=='__main__':

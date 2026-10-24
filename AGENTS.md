@@ -39,7 +39,7 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   labels, never API requests or business logic.
 - The existing desktop breakpoint is 1000px wide and 600px tall. Retain it unless
   explicitly asked to change it. There is no Forge presentation coordinator or
-  separate Phone adapter on this branch; do not import Forge layout/theme files.
+  separate Phone JavaScript adapter on this branch; do not import Forge layout/theme files.
 - Reuse existing DOM nodes, IDs and handlers; restore their original placement and
   labels on leaving desktop. New desktop containers use `data-desktop-slot`.
   Phone changes require an explicit request. Desktop work must preserve Phone
@@ -47,6 +47,13 @@ Paths below are under `comfyui_control/` unless stated otherwise:
 - Shared `style.css`, `index.html`, `app.js` and feature components affect both
   presentations. Make necessary changes narrowly and verify both. Do not add
   polling, duplicate listeners or redundant capability requests.
+- Phone refinements live in `presentation_phone.css`, scoped to
+  `:where(html[data-presentation="mobile"])`. The existing placement helper also
+  places shared image controls and refresh/cleanup buttons on Phone. Preserve its
+  tabs, fixed dock, inline/native details, prompt history, negative-prompt state,
+  slider bounds, exact reuse, New variation and viewer navigation/instructions.
+  Phone Compare is an additional button, using the existing picker and comparison.
+  See `docs/PHONE_UI.md` for current behavior and verification.
 - Keep new public assets in `mobile/server.py`'s allowlist and `web/sw.js`'s shell;
   bump the shell cache when shipping changed assets. Never cache private APIs or
   images. Preserve reduced-motion support.
@@ -84,6 +91,11 @@ Paths below are under `comfyui_control/` unless stated otherwise:
 - Desktop Gallery uses an icon refresh. Prompt controls use chevrons and an
   idle-only broom action calling the existing VRAM API. Desktop hides prompt
   history and the fixed-seed explanatory hint; Phone retains both.
+- Phone also has refresh/cleanup icons, prompt chevrons and live step metrics in
+  its existing dock. Shared Heart/Edit/Upscale/Delete controls appear on completed
+  results and in the saved-image viewer; a running Phone job retains its live
+  preview without those controls. One component, capability signature and pending
+  journal serve both presentations. Action forms close on breakpoint transitions.
 - Both Desktop Preview and enlarged viewer use Compare instead of New variation.
   One second-image picker reuses the shared gallery renderer/loader and existing
   comparison dialog. Keep drafts/selection on cancel, ignore late responses, exclude
@@ -137,6 +149,7 @@ For WebUI changes, install optional Playwright and its browsers:
 .venv/bin/python tests/manual/desktop_image_actions_browser.py --browser chromium --output /tmp/control-desktop-actions-check
 .venv/bin/python tests/manual/mobile_responsive_browser.py --browser chromium --output /tmp/control-responsive-check
 .venv/bin/python tests/manual/mobile_generate_button_browser.py --browser chromium --output /tmp/control-generate-check
+.venv/bin/python tests/manual/phone_image_actions_browser.py --browser chromium --output /tmp/control-phone-actions-check
 git diff --check
 ```
 

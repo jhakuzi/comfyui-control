@@ -12,7 +12,9 @@ Desktop uses equal-width columns, fixed last-result previews, a themed live head
 upward section overlays and panel-aligned prompt/negative-prompt overlays. Compare
 in Preview and the enlarged viewer opens the shared second-image picker and existing
 comparison dialog. VRAM cleanup uses the existing idle-only API; ComfyUI itself is
-unchanged. Phone keeps its original presentation and controls. See [HANDOFF.md](../HANDOFF.md)
+unchanged. Phone exposes shared saved-image actions and Compare with touch controls,
+retaining its tabs, dock, native details and New variation. See
+[PHONE_UI.md](PHONE_UI.md) and [HANDOFF.md](../HANDOFF.md)
 for the complete current behavior, shared refresh/picker/LoRA changes and limitations.
 
 ## Responsibilities
@@ -22,6 +24,7 @@ for the complete current behavior, shared refresh/picker/LoRA changes and limita
 | `mobile/web/style.css` | Unchanged main theme, component skins and responsive layout. |
 | `mobile/web/presentation_desktop.css` | Desktop arrangement, overlays, controls and selected-image indication; every selector is scoped to `:where(html[data-presentation="desktop"])`. |
 | `mobile/web/presentation_desktop.js` | Placement and desktop label changes only. Restores original nodes/labels on leaving desktop. No requests, workflow logic or application store. |
+| `mobile/web/presentation_phone.css` | Phone touch targets, compact selectors, inline LoRA strength controls, action grids and bounded comparison picker. |
 | `mobile/web/app.js` | Shared selection, requests, generation state, pending journal, settings reuse and reconnect. |
 | `mobile/web/feature_image_actions.js` | Existing selected-image actions, confirmed heart state, capabilities, version/permission checks, pending/error rendering and stale-response guards. |
 | `mobile/web/feature_image_api.js` | Existing image-workflow transport, using the same pending UUID journal and generation submission controller. |
@@ -48,8 +51,9 @@ on close. No second set of controls, navigation listeners or selection persisten
 is created. A thin accent outline identifies the selected desktop result when
 there are multiple outputs. It is removed on Phone.
 
-Components are mounted lazily on desktop. Phone does not fetch capabilities or
-expose new action controls. Capability refreshes follow selection, confirmed
+Components are mounted lazily after authentication and reused on both presentations.
+Phone exposes them for completed results and the explicit image viewer.
+Capability refreshes follow selection, confirmed
 mutations, gallery refresh and existing connection events, with no new polling.
 Disconnected/hidden pages invalidate pending reads and display disabled actions
 without starting requests. Actual workflow submissions use the same busy state,
@@ -60,6 +64,11 @@ metadata and removes that image from the current collections; originals stay in
 place. This task adds no new Wastebin management UI or permanent-delete path.
 
 ## Verification
+
+Phone modernization intentionally supersedes the historical pixel-identical Phone
+requirement below. Keep the frozen shared assets and Desktop geometry checks;
+use `phone_image_actions_browser.py` for the authorized Phone changes. The older
+baseline comparison remains useful only when inspecting unchanged regions.
 
 ```bash
 QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q

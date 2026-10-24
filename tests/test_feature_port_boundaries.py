@@ -1,4 +1,4 @@
-"""Desktop image additions must preserve main's shared skins and Phone UI."""
+"""Presentation additions preserve shared skins, native UI and backend contracts."""
 import asyncio
 from copy import deepcopy
 import hashlib
@@ -18,7 +18,8 @@ from test_mobile_integration import until
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE = json.loads((Path(__file__).parent / 'fixtures/main_presentation_baseline.json').read_text())
 ACTIVE_ASSETS = {'feature_generate.js', 'feature_generate.css', 'feature_image_actions.js',
-                 'feature_image_api.js', 'feature_image_workflows.js', 'presentation_desktop.js', 'presentation_desktop.css'}
+                 'feature_image_api.js', 'feature_image_workflows.js', 'presentation_desktop.js', 'presentation_desktop.css',
+                 'presentation_phone.css'}
 GENERATE_INTEGRATION = {'comfyui_control/mobile/web/' + name for name in ('index.html', 'app.js', 'sw.js')}
 
 
@@ -48,15 +49,18 @@ def test_existing_main_assets_ui_settings_and_versions_are_unchanged():
         '<div class="actions" id="preview-reuse-actions">', '<div class="actions">').replace(
         '<span id="generate-label" data-generate-label>✦ Generate</span>', '<span aria-hidden="true">✦</span> Generate')
     assert hashlib.sha256(original.encode()).hexdigest() == BASELINE['files']['comfyui_control/mobile/web/index.html']
-    original_sw = (web / 'sw.js').read_text().replace('comfy-control-mobile-prompt-overlays-1', 'comfy-control-mobile-1.0.1')
+    original_sw = (web / 'sw.js').read_text().replace('comfy-control-mobile-phone-actions-1', 'comfy-control-mobile-1.0.1')
     for asset in ACTIVE_ASSETS:
         original_sw = original_sw.replace(f'  "/{asset}",\n', '')
     assert hashlib.sha256(original_sw.encode()).hexdigest() == BASELINE['files']['comfyui_control/mobile/web/sw.js']
-    assert {file.name for file in web.glob('presentation*')} == {'presentation_desktop.js', 'presentation_desktop.css'}
+    assert {file.name for file in web.glob('presentation*')} == {'presentation_desktop.js', 'presentation_desktop.css', 'presentation_phone.css'}
     assert not (web / 'theme.css').exists()
     css = re.sub(r'/\*.*?\*/', '', (web / 'presentation_desktop.css').read_text(), flags=re.S)
     assert all(selector.strip().startswith(':where(html[data-presentation="desktop"])')
                for selector in re.findall(r'([^{}]+)\{', css))
+    phone_css = re.sub(r'/\*.*?\*/', '', (web / 'presentation_phone.css').read_text(), flags=re.S)
+    assert all(selector.strip().startswith(':where(html[data-presentation="mobile"])')
+               for selector in re.findall(r'([^{}]+)\{', phone_css))
 
 
 def test_feature_assets_are_public_and_existing_component_skins_stay_frozen(tmp_path):
@@ -73,6 +77,7 @@ def test_feature_assets_are_public_and_existing_component_skins_stay_frozen(tmp_
                 assert response.status == 200
                 expected = BASELINE['files']['comfyui_control/mobile/web/' + name]
                 assert hashlib.sha256(await response.read()).hexdigest() == expected
+            assert (await client.get('/presentation_phone.css')).status == 200
         finally:
             await client.close()
     asyncio.run(scenario())

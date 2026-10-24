@@ -1146,7 +1146,7 @@ function loadGallery(force = false) {
 }
 async function comparePreviewImage() {
   const item = actionImage();
-  if (!desktopImages.active || !item) return;
+  if (!item || selectedImageActions?.pending) return;
   desktopImages.openComparePicker(item.id);
   await loadGallery(true);
 }
@@ -1156,7 +1156,7 @@ function renderPreviewComparisonGallery() {
   const candidates = gallery.filter((item) => item.id !== sourceId);
   desktopImages.compareStatus.textContent = candidates.length ? "" : "No other images in the gallery yet.";
   renderImages(desktopImages.compareGrid, candidates, (item) => {
-    if (!desktopImages.active || !desktopImages.comparing || actionImage()?.id !== sourceId) return;
+    if (!desktopImages.comparing || actionImage()?.id !== sourceId) return;
     if (!gallery.some((entry) => entry.id === sourceId) || !gallery.some((entry) => entry.id === item.id)) {
       desktopImages.compareStatus.textContent = "An image is no longer available. Close this gallery and try again.";
       return;
@@ -1215,18 +1215,23 @@ function actionImage() {
   return items.find((item) => item.id === $("job-images").dataset.selectedImage) || items[0];
 }
 function syncSelectedImageActions(force = false) {
-  const active = desktopImages.active && $("login").hidden;
+  const active = $("login").hidden && !$("workspace").hidden;
   if (active && !selectedImageActions) {
     imageWorkflowDialogs = new ComfyImageWorkflowDialogs({ read: readStore, write: writeStore });
     selectedImageActions = new ComfySavedImageActions($("selected-image-actions"), {
       api, changed: imageActionChanged, workflow: runImageWorkflow,
       present: ({ pending }) => {
-        if (desktopImages.active) $("same-seed").disabled = $("variation").disabled = pending || !actionImage();
+        $("same-seed").disabled = $("variation").disabled = pending || (desktopImages.active && !actionImage());
+        $("phone-compare-image").disabled = pending || !actionImage();
       },
     });
   }
   const previewing = $("gallery-page").hidden;
-  const item = active && (previewing || $("image-dialog").open) ? actionImage() : null;
+  // Phone's active job stays in its compact dock with the live preview. Saved
+  // image actions belong to the completed result or the explicit image viewer.
+  const savedPreview = previewing && (desktopImages.active ||
+    (!submitting && currentJob()?.status === "complete"));
+  const item = active && (savedPreview || $("image-dialog").open) ? actionImage() : null;
   desktopImages.render({ viewing: $("image-dialog").open, selected: !!item,
     previewing, pending: !!selectedImageActions?.pending, imageId: item?.id,
     reconnecting: (!connected || !state.online) && $("login").hidden && !$("workspace").hidden,
@@ -1263,7 +1268,8 @@ async function imageActionChanged(item, result) {
   }
 }
 async function runImageWorkflow(item, action, modified) {
-  const current = () => desktopImages.active && actionImage()?.id === item.id && actionImage()?.modified === item.modified;
+  const epoch = imageReuseEpoch;
+  const current = () => imageReuseEpoch === epoch && actionImage()?.id === item.id && actionImage()?.modified === item.modified;
   if (busy || pendingSubmission) throw new Error("Finish or retry the pending submission before starting an image action.");
   if (!connected || recovering || !state.online) throw new Error("Reconnect to ComfyUI before starting an image action.");
   const parameters = await imageWorkflowDialogs.options(item, action);
@@ -1499,6 +1505,8 @@ new ResizeObserver(() => {
   document.documentElement.style.setProperty("--generation-dock-height", `${height}px`);
 }).observe($("generation-dock"));
 wideLayout.addEventListener("change", () => {
+  imageWorkflowDialogs?.close();
+  if (desktopImages.comparing) desktopImages.comparePicker.close();
   renderImages($("job-images"), previewImages());
   // Restore Phone's original terminal-only visibility after a desktop round trip.
   const terminal = ["complete", "failed", "cancelled"].includes(currentJob()?.status);
@@ -1732,6 +1740,7 @@ let selectedImageActions = null, imageWorkflowDialogs = null, imageActionSignatu
 const desktopImages = new ComfyDesktopImagePresentation({ media: wideLayout,
   actions: $("selected-image-actions"), preview: $("preview-reuse-actions"),
   viewer: $("reuse-image").parentElement, reuse: $("same-seed"), variation: $("variation"), images: $("job-images"),
+  compare: guarded(comparePreviewImage),
   promptToggle: (input, wrap, button) => configurePromptToggle(input, wrap, button,
     preset.id + ":" + input.id.slice("control-".length), "Negative prompt"),
   cleanup: async () => {
