@@ -1,5 +1,15 @@
 # Session handoff — 2026-10-24
 
+## Authorized 1.0.5 release
+
+The user authorized pushing the testing branch, merging to main and building COPR.
+This supersedes the earlier testing-only restriction below. Version 1.0.5-1
+packages the Phone modernization and shared Gallery library. Version hashes and
+stable ZIP/source RPM downloads are refreshed for the release. The reported
+Phone Gallery load delay remains unconfirmed and unchanged. Release checks passed: 437 pytest tests and six fresh Phone/Desktop/shared-library
+browser checks across Chromium/WebKit. Build results follow after the tag workflow
+completes.
+
 ## Phone Gallery copy follow-up
 
 Phone hides the introductory “Recent images from ComfyUI output…” paragraph

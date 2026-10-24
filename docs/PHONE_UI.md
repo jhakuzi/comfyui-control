@@ -1,7 +1,7 @@
 # Phone UI modernization
 
 Testing branch: `testing/phone-ui-modernization`, based on main `2fb6352`.
-The app version remains 1.0.4. This work does not merge or release it.
+The Phone modernization is packaged in 1.0.5; see `releases/1.0.5.md`.
 
 ## Desktop review and Phone integration
 

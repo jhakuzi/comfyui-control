@@ -1,5 +1,5 @@
 Name:           comfyui-control
-Version:        1.0.4
+Version:        1.0.5
 Release:        1%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
@@ -62,6 +62,11 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Sat Oct 24 2026 ComfyUI Control contributors - 1.0.5-1
+- Modernize Phone controls, results and image viewer using shared WebUI components.
+- Share Favourites and Wastebin across devices and add confirmed Clear Bin.
+- Stabilize heart updates and enlarge Desktop collection dialogs.
+
 * Fri Oct 23 2026 ComfyUI Control contributors - 1.0.4-1
 - Refresh model choices in place and expose configured bypassed LoRAs safely.
 - Show saved ComfyUI workflows plus the selected image's reused workflow.
