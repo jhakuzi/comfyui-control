@@ -1,5 +1,20 @@
 # Session handoff — 2026-10-24
 
+## Firefox tab-title verification / testing checkout update — 2026-10-25
+
+The user reported no sampling percentage in Firefox. Read-only inspection showed
+`/home/jhaku/Downloads/Testing/comfyui-control-integration-testing` was still at
+`7e53df5` (1.1.0), which has no document.title percentage code. The published RPM
+also predates this feature. No Firefox-specific runtime patch was needed.
+Both background_results_browser and batch_count_browser now accept Firefox;
+both passed in isolated Playwright Firefox 157 on Desktop (1440x1000) and Phone
+(390x844). Covered 25%/65% hidden-tab titles, reset, completed preview recovery,
+run progression, fixed/random seeds, drafts and cancellation. These are fixtures,
+not the user's Firefox profile or real GPU inference. Update the clean testing
+checkout by fast-forward only; user must restart that app and reload the WebUI.
+No GitHub push or release is included.
+
+
 ## Batch Count behavior — 2026-10-25
 
 The user explicitly confirmed Batch Count means repeated separate workflow runs,

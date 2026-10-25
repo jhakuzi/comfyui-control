@@ -98,7 +98,7 @@ async def main(engine, output):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--browser', choices=['chromium', 'webkit'], default='chromium')
+    parser.add_argument('--browser', choices=['chromium', 'webkit', 'firefox'], default='chromium')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     asyncio.run(main(args.browser, args.output))
