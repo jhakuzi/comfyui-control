@@ -492,3 +492,7 @@
 :where(html[data-presentation="desktop"]) #gallery-page > .heading {
   display: none;
 }
+
+:where(html[data-presentation="desktop"]) .gallery-select-icon {
+  display: none;
+}

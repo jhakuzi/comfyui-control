@@ -1,5 +1,33 @@
 # Session handoff — 2026-10-24
 
+## Phone Gallery selection and compact layout — 2026-10-25
+
+Phone removes MADE BY YOU, retains Your gallery with a compact heading, and reduces
+vertical gaps between tabs/header/comparison/grid. Four 48px icon controls retain
+8px gaps: Refresh, pictographic Select, Wastebin and Favourites. Narrow screens
+wrap the heading without shrinking touch targets. Desktop keeps its current row
+and text Select button; the existing placement adapter moves the same Select node
+between presentations.
+
+`feature_gallery_bulk.js` now serves both presentations with one selection map,
+action runner, permission/version/snapshot guards and in-app Delete confirmation.
+Phone taps select multiple images; holding a selected image for 550ms opens the
+same Favourite selected/Delete selected menu. Pointer movement >10px, pointer
+cancellation/up, multitouch, scroll, resize and lifecycle/mode changes cancel a
+pending hold. Suppress the release click so a held selection is not toggled off.
+Native callouts/text selection are disabled only inside Gallery selection mode;
+ordinary image viewing/saving remains available outside that mode. Menus and
+feedback overlays do not shift the grid. No new backend routes or polling.
+
+Verification: 453 pytest tests passed. Ten browser script/engine checks passed in
+Chromium/WebKit: new Phone Gallery fixture, Desktop bulk, Phone/Desktop actions,
+and collection previews. Phone fixture covers 320/390/430/768/844px layouts,
+48px targets/8px gaps, icon order, compact vertical bounds, hold cancellation,
+release suppression, bulk favourite/delete/cancel, unchanged originals, Compare,
+drafts and presentation round trips. Chromium uses a native held touch contact;
+WebKit verifies PointerEvents and real taps. Physical iPhone hold behavior remains
+for user testing. Shell cache is `comfy-control-phone-gallery-bulk-1`.
+
 ## Single-row Desktop Gallery toolbar — 2026-10-25
 
 Desktop now places the existing Refresh/Wastebin/Favourites tool group immediately

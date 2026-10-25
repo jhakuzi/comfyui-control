@@ -129,7 +129,10 @@ async def main(engine, output):
                 await page.set_viewport_size(dict(width=width, height=height))
                 assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
                 buttons = page.locator('#gallery-page .gallery-library-tools > button')
-                assert await buttons.evaluate_all('els => els.map(el => el.id)') == ['refresh-gallery', 'gallery-wastebin', 'gallery-favourites']
+                expected_tools = (['refresh-gallery', 'gallery-wastebin', 'gallery-favourites']
+                    if width >= 1000 and height >= 600 else ['refresh-gallery', 'select-gallery-images', 'gallery-wastebin', 'gallery-favourites'])
+                await expect(buttons).to_have_count(len(expected_tools))
+                assert await buttons.evaluate_all('els => els.map(el => el.id)') == expected_tools
                 for button in await buttons.all():
                     box = await button.bounding_box()
                     assert box['width'] >= 48 and box['height'] >= 48, box

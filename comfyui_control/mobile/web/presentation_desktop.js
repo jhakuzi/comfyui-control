@@ -383,9 +383,13 @@ window.ComfyDesktopImagePresentation = class DesktopImagePresentation {
     }
     const destination = this.active ? document.querySelector("#gallery-page > .comparison-actions")
       : this.galleryToolsAnchor.parentElement;
-    if (this.galleryTools.parentElement === destination) return;
-    if (this.active) destination.append(this.galleryTools);
-    else this.galleryToolsAnchor.after(this.galleryTools);
+    if (this.galleryTools.parentElement !== destination) {
+      if (this.active) destination.append(this.galleryTools);
+      else this.galleryToolsAnchor.after(this.galleryTools);
+    }
+    const select = document.getElementById("select-gallery-images");
+    const beforeSelect = this.active ? document.getElementById("select-compare") : this.galleryRefresh;
+    if (select && select.previousElementSibling !== beforeSelect) beforeSelect.after(select);
   }
 
   render({ viewing = false, previewing = true, selected = false, pending = false, imageId, canCleanup = false, reconnecting = false } = {}) {

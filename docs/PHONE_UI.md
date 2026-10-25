@@ -92,3 +92,25 @@ and Desktop layout/geometry checks remain in force. These fixtures exercise actu
 application HTTP routes and a local ComfyUI protocol stub. They do not prove real
 GPU/model inference, physical iPhone/Android behavior, mobile keyboards, safe-area
 hardware, NAS/VPN or installed custom-node compatibility. Test those before merge.
+
+## Compact Gallery and bulk selection
+
+Phone hides MADE BY YOU and retains a smaller Your gallery heading. Tabs, heading,
+comparison row and grid use tighter vertical gaps; icon controls remain 48px with
+8px gaps. A pictographic Select button appears immediately after Refresh. It uses
+the existing shared bulk-selection component and moves back to the Desktop row
+as the normal text button on presentation changes.
+
+Tap Select and tap thumbnails to select multiple images. Hold a selected image
+for 550ms to open Favourite selected/Delete selected. Delete confirms the exact
+snapshot and moves entries to Wastebin, keeping originals. Movement/scroll,
+pointer cancellation, multitouch, resize and lifecycle changes cancel a hold.
+The release click is suppressed to preserve the held selection. Ordinary image
+viewing and native save behavior remain outside selection mode. No separate
+selection store, action runner, backend routes or polling were added.
+
+Verify `tests/manual/phone_gallery_bulk_browser.py` in Chromium/WebKit alongside
+Desktop bulk selection, Phone/Desktop image actions and collection fixtures.
+The fixture checks responsive/touch dimensions, gesture cancellation, release,
+real-API bulk actions, confirmation and preserved drafts/Compare/Desktop behavior.
+Native iOS callouts and physical touch behavior still require device testing.

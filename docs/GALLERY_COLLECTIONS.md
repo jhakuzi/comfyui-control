@@ -2,7 +2,9 @@
 
 Desktop and Phone share Refresh, Wastebin (bin) and Favourites (heart) controls.
 Desktop places them to the right of Compare in one row with the selection buttons;
-Phone retains their original Gallery heading placement.
+Phone retains their Gallery heading placement, adding a pictographic Select
+button immediately after Refresh. Phone hides MADE BY YOU and compacts vertical
+spacing while preserving 48px targets and 8px button gaps.
 They have accessible names and 48px touch targets, wrapping together on narrow
 screens. Devices connected to the same controller and configured output folder
 see the same heart marks and bin contents, including existing marks/deletions.
@@ -51,7 +53,7 @@ response shows guidance to Refresh and is never automatically resubmitted. Close
 dismisses the view; an already-confirmed deletion continues. Opening/previewing a
 collection never restores or removes files. No restore control was added.
 
-## Desktop bulk selection
+## Gallery bulk selection
 
 Select two images and Select share the former selection-button width, while Compare
 keeps the other half. Select enables any number of visible Gallery images with a
@@ -70,8 +72,12 @@ action API serially and reconcile through the controller. Permission/stale error
 stay selected and report their reason. A lost response stops further requests and
 requires Gallery reconciliation before retry; there is no automatic write retry.
 Leaving Gallery/Desktop, authentication changes or backgrounding clears selection
-and stops further batch requests. Refresh drops removed/replaced versions. Phone
-keeps its existing comparison row and normal image opening behavior.
+and stops further batch requests. Refresh drops removed/replaced versions. Phone keeps its existing comparison row and normal image opening behavior outside
+selection mode. Tap its Select icon, then tap images to select them. Hold a selected
+image for 550ms to open the same bulk menu. Moving/scrolling, pointer cancellation,
+multitouch, resize and lifecycle changes cancel the hold; its release cannot
+accidentally deselect the image. Native image callouts are retained outside selection
+mode. Both presentations share action execution, validation and confirmation.
 
 ## Confirmations and unavailable originals
 
@@ -115,7 +121,7 @@ Listing/previewing does not silently prune records.
   Private grids clear on sign-in; late responses cannot repaint a different view.
   Thumbnails retain decoding, fallback, loading rings and reduced-motion behavior.
 - Public assets remain allowlisted. Shell cache is
-  `comfy-control-desktop-gallery-bulk-5`; APIs/images remain uncached.
+  `comfy-control-phone-gallery-bulk-1`; APIs/images remain uncached.
 
 Restart the app for the Python library change, then reload Desktop and Phone.
 Sharing applies to the same controller/output, independently of whether a device

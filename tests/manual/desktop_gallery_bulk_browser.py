@@ -234,7 +234,7 @@ async def main(engine, output):
             assert (images / 'd.png').read_bytes() == originals['d.png']
             # Phone has original two-button comparison row, no bulk UI; in-app Delete.
             await page.set_viewport_size(dict(width=390, height=844))
-            await expect(select).to_be_hidden()
+            await expect(select).to_be_visible()
             await expect(page.locator('#gallery-page h1')).to_be_visible()
             await expect(menu).to_be_hidden()
             await expect(page.locator('.gallery-bulk-actions')).to_be_hidden()

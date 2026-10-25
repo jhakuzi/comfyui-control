@@ -1,6 +1,6 @@
 "use strict";
 
-/* Desktop-only transient selection. Reuse the controller's image-action transport
+/* Shared transient Gallery selection. Reuse the controller's image-action transport
    and confirmed-result reconciliation; never persist a second image library. */
 window.ComfyGalleryBulk = class GalleryBulk {
   constructor({ grid, comparison, media, canAct, mutating, act, changed, finished, confirmAction }) {
@@ -13,7 +13,8 @@ window.ComfyGalleryBulk = class GalleryBulk {
     this.toggle = document.createElement("button");
     this.toggle.id = "select-gallery-images";
     this.toggle.type = "button";
-    this.toggle.dataset.desktopSlot = "";
+    this.toggle.innerHTML = '<svg class="gallery-select-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8 12 3 3 5-6"/></svg><span class="gallery-select-label"></span>';
+    this.toggleLabel = this.toggle.querySelector("span");
     this.toggle.setAttribute("aria-controls", grid.id);
     this.toggle.addEventListener("click", () => {
       if (this.pending || !this.canAct()) return;
@@ -47,14 +48,44 @@ window.ComfyGalleryBulk = class GalleryBulk {
     document.body.append(this.menu);
     this.keepButton = this.menu.querySelector("#favourite-gallery-selected");
     this.deleteButton = this.menu.querySelector("#delete-gallery-selected");
-    this.keepButton.addEventListener("click", () => { this.closeMenu(true); this.perform("keep"); });
-    this.deleteButton.addEventListener("click", () => { this.closeMenu(true); this.perform("delete"); });
+    this.keepButton.addEventListener("click", () => { this.closeMenu(true); this.suppressClick = null; this.perform("keep"); });
+    this.deleteButton.addEventListener("click", () => { this.closeMenu(true); this.suppressClick = null; this.perform("delete"); });
     grid.addEventListener("contextmenu", (event) => {
       const button = event.target.closest("button[data-image-id]");
       if (!button || !this.canOpenMenu(button)) return;
       event.preventDefault();
+      if (!this.media.matches) {
+        this.cancelPress();
+        this.suppressClick = { button, until: performance.now() + 1000 };
+      }
       this.openMenu(button, event.clientX, event.clientY);
     });
+    grid.addEventListener("pointerdown", (event) => {
+      this.cancelPress();
+      if (this.media.matches || event.pointerType !== "touch" || !event.isPrimary) return;
+      const button = event.target.closest("button[data-image-id]");
+      if (!button || !this.canOpenMenu(button)) return;
+      const press = this.press = { id: event.pointerId, button, x: event.clientX, y: event.clientY };
+      press.timer = setTimeout(() => {
+        if (this.press !== press) return;
+        this.cancelPress();
+        if (!this.canOpenMenu(button)) return;
+        this.suppressClick = { button, until: performance.now() + 1000 };
+        this.openMenu(button, press.x, press.y);
+      }, 550);
+    }, { passive: true });
+    grid.addEventListener("pointermove", (event) => {
+      if (this.press && event.pointerId === this.press.id &&
+          Math.hypot(event.clientX - this.press.x, event.clientY - this.press.y) > 10) this.cancelPress();
+    }, { passive: true });
+    for (const name of ["pointerup", "pointercancel"]) document.addEventListener(name, () => this.cancelPress(), { passive: true });
+    grid.addEventListener("click", (event) => {
+      if (this.suppressClick?.button.contains(event.target) && performance.now() <= this.suppressClick.until) {
+        this.suppressClick = null;
+        event.preventDefault();
+        event.stopImmediatePropagation(); // The release after a hold must not deselect the image.
+      }
+    }, true);
     grid.addEventListener("keydown", (event) => {
       if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
       const button = event.target.closest("button[data-image-id]");
@@ -77,18 +108,27 @@ window.ComfyGalleryBulk = class GalleryBulk {
       } else if (event.key === "Tab") this.closeMenu(true);
     });
     document.addEventListener("pointerdown", (event) => {
+      if (this.press && event.pointerId !== this.press.id) this.cancelPress();
       if (!this.menu.contains(event.target)) this.closeMenu();
     }, true);
     document.addEventListener("scroll", (event) => {
+      this.cancelPress();
       if (!this.menu.contains(event.target)) this.closeMenu(true);
     }, true);
-    window.addEventListener("resize", () => this.closeMenu(true));
+    window.addEventListener("resize", () => { this.cancelPress(); this.closeMenu(true); });
     this.selectCompare.addEventListener("click", () => this.reset(), true);
     this.compareButton.addEventListener("click", () => this.reset(), true);
     this.render();
   }
 
+  cancelPress() {
+    if (this.press) clearTimeout(this.press.timer);
+    this.press = null;
+  }
+
   reset() {
+    this.cancelPress();
+    this.suppressClick = null;
     this.closeMenu();
     this.epoch++;
     this.selecting = false;
@@ -111,7 +151,7 @@ window.ComfyGalleryBulk = class GalleryBulk {
   }
 
   choose(item) {
-    if (!this.selecting || !this.media.matches) return false;
+    if (!this.selecting) return false;
     if (!this.pending && this.canAct()) {
       if (this.selected.has(item.id)) this.selected.delete(item.id);
       else this.selected.set(item.id, { ...item });
@@ -145,16 +185,21 @@ window.ComfyGalleryBulk = class GalleryBulk {
   }
 
   render() {
-    this.toggle.hidden = !this.media.matches;
-    this.toggle.textContent = this.selecting ? "Done selecting" : "Select";
+    this.toggleLabel.textContent = this.selecting ? "Done selecting" : "Select";
+    this.toggle.setAttribute("aria-label", this.selecting ? "Done selecting images" : "Select images");
+    this.toggle.title = this.selecting ? "Done selecting images" : "Select images";
     this.toggle.setAttribute("aria-pressed", String(this.selecting));
     this.toggle.disabled = this.pending || !this.canAct();
-    this.controls.hidden = !this.selecting || !this.media.matches;
+    this.controls.hidden = !this.selecting;
     this.controls.setAttribute("aria-busy", String(this.pending));
     this.count.textContent = `${this.selected.size} selected`;
     this.keepButton.disabled = this.deleteButton.disabled = this.pending || !this.selected.size || !this.canAct();
     this.menu.setAttribute("aria-label", `Actions for ${this.selected.size} selected images`);
-    if (!this.selecting || this.pending || this.confirming || !this.selected.size || !this.canAct()) this.closeMenu();
+    if (!this.selecting || this.pending || this.confirming || !this.selected.size || !this.canAct()) {
+      this.cancelPress();
+      this.closeMenu();
+    }
+    this.grid.classList.toggle("gallery-multi-select", this.selecting);
     this.selectCompare.disabled = this.pending;
     this.compareButton.disabled = this.pending || this.selecting || this.comparison.selected.length !== 2;
     for (const button of this.grid.querySelectorAll("button[data-image-id]")) {

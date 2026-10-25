@@ -1828,7 +1828,7 @@ const galleryLibrary = new ComfyGalleryLibrary({ renderImages, openImage,
     return entries.map((entry) => ({ ...entry, id: entry.token, url: entry.thumbnail, thumbnail: null }));
   } });
 galleryBulk = new ComfyGalleryBulk({ confirmAction: (options) => imageConfirmation.ask(options), grid: $("gallery-grid"), comparison, media: wideLayout,
-  canAct: () => wideLayout.matches && connected && !recovering && !document.hidden &&
+  canAct: () => connected && !recovering && !document.hidden &&
     !$("workspace").hidden && !$("gallery-page").hidden && !galleryLibrary.dialog.open,
   mutating: () => { galleryMutation++; galleryRevision = ""; $("refresh-gallery").disabled = true; },
   act: (item, action) => api(`/api/images/${encodeURIComponent(item.id)}/actions`, {
