@@ -79,6 +79,21 @@ multitouch, resize and lifecycle changes cancel the hold; its release cannot
 accidentally deselect the image. Native image callouts are retained outside selection
 mode. Both presentations share action execution, validation and confirmation.
 
+## Desktop Gallery viewer keyboard controls
+
+When viewing an image from the Desktop Gallery, Left/Right browse previous/next
+using the same wrapping behavior as the arrow buttons. Backspace invokes confirmed
+Delete for the current image. Space toggles the current image in the shared bulk
+selection, showing a yellow outline; navigate and repeat to accumulate images.
+Closing the viewer retains these selections in the Gallery.
+
+Right-click the displayed image for Favourite selected/Delete selected. With no
+selection, the current image is selected first. This is the same menu and action
+runner as the Gallery grid. The menu and feedback appear above/inside the modal;
+Delete retains the exact selected snapshot and confirmation. Typing, nested
+forms/dialogs/menus and pending actions do not trigger shortcuts. Phone and
+normal generation-preview controls are unchanged.
+
 ## Confirmations and unavailable originals
 
 Delete, bulk Delete and Clear Bin use one themed in-app alertdialog. Cancel is
@@ -121,7 +136,7 @@ Listing/previewing does not silently prune records.
   Private grids clear on sign-in; late responses cannot repaint a different view.
   Thumbnails retain decoding, fallback, loading rings and reduced-motion behavior.
 - Public assets remain allowlisted. Shell cache is
-  `comfy-control-phone-gallery-bulk-1`; APIs/images remain uncached.
+  `comfy-control-desktop-viewer-keys-1`; APIs/images remain uncached.
 
 Restart the app for the Python library change, then reload Desktop and Phone.
 Sharing applies to the same controller/output, independently of whether a device

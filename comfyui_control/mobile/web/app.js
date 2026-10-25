@@ -1206,6 +1206,26 @@ function renderPreviewComparisonGallery() {
     void comparison.open();
   });
 }
+function desktopGalleryViewer() {
+  return wideLayout.matches && $("image-dialog").open && !$("gallery-page").hidden &&
+    viewerItems === gallery && !galleryLibrary.dialog.open;
+}
+function syncViewerSelection() {
+  if (!galleryBulk) return;
+  const active = desktopGalleryViewer(), item = viewerItems[viewerIndex];
+  const selected = active && !!item && galleryBulk.selected.get(item.id)?.modified === item.modified;
+  $("full-image").classList.toggle("viewer-image-selected", !!selected);
+  if (active) {
+    $("full-image").tabIndex = 0;
+    $("full-image").setAttribute("aria-keyshortcuts", "ArrowLeft ArrowRight Backspace Space");
+    $("full-image").setAttribute("aria-haspopup", "menu");
+    $("full-image").setAttribute("aria-description", `${selected ? "Selected" : "Not selected"}. ${galleryBulk.selected.size} images selected. Space toggles selection; arrow keys browse.`);
+  } else {
+    for (const name of ["tabindex", "aria-keyshortcuts", "aria-haspopup", "aria-description"]) $("full-image").removeAttribute(name);
+  }
+  const statusParent = active ? $("image-dialog").querySelector(".viewer") : galleryBulk.controls;
+  if (galleryBulk.status.parentElement !== statusParent) statusParent.append(galleryBulk.status);
+}
 function openImage(items, index) {
   imageReuseEpoch++;
   viewerItems = items;
@@ -1223,6 +1243,7 @@ function openImage(items, index) {
   if (!$("image-dialog").open) $("image-dialog").showModal();
   if (items === $("job-images").imageItems) $("job-images").dataset.selectedImage = item.id;
   syncSelectedImageActions();
+  syncViewerSelection();
 }
 async function reuseImage(variation) {
   const epoch = imageReuseEpoch, item = viewerItems[viewerIndex];
@@ -1688,7 +1709,33 @@ $("gallery-tab").addEventListener("click", () => {
 });
 $("refresh-gallery").addEventListener("click", () => loadGallery(true));
 $("close-image").addEventListener("click", () => $("image-dialog").close());
-$("image-dialog").addEventListener("close", () => { imageReuseEpoch++; syncSelectedImageActions(); });
+$("image-dialog").addEventListener("close", () => {
+  imageReuseEpoch++;
+  galleryBulk?.closeMenu();
+  syncSelectedImageActions();
+  syncViewerSelection();
+});
+$("image-dialog").addEventListener("keydown", (event) => {
+  if (!desktopGalleryViewer() || event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey ||
+      event.target.isContentEditable || event.target.closest("input, textarea, select") ||
+      galleryBulk.menu.contains(event.target) || [...document.querySelectorAll("dialog[open]")].some((dialog) => dialog !== $("image-dialog"))) return;
+  if (!["ArrowLeft", "ArrowRight", "Backspace", " ", "Spacebar"].includes(event.key)) return;
+  event.preventDefault();
+  if (galleryBulk.pending || galleryBulk.confirming || selectedImageActions?.pending || selectedImageActions?.confirming) return;
+  if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+    galleryBulk.closeMenu();
+    if (viewerItems.length > 1) openImage(viewerItems, viewerIndex + (event.key === "ArrowRight" ? 1 : -1));
+  } else if (!event.repeat && event.key === "Backspace") {
+    if (!selectedImageActions.buttons.get("trash").disabled) void selectedImageActions.perform("trash");
+  } else if (!event.repeat) galleryBulk.selectImage(viewerItems[viewerIndex]);
+});
+$("full-image").addEventListener("contextmenu", (event) => {
+  if (!desktopGalleryViewer() || galleryBulk.pending || galleryBulk.confirming ||
+      selectedImageActions?.pending || selectedImageActions?.confirming) return;
+  event.preventDefault();
+  if (!galleryBulk.selected.size) galleryBulk.selectImage(viewerItems[viewerIndex]);
+  galleryBulk.openViewerMenu($("full-image"), $("image-dialog"), event.clientX, event.clientY);
+});
 $("previous-image").addEventListener("click", () =>
   openImage(viewerItems, viewerIndex - 1),
 );
@@ -1827,7 +1874,7 @@ const galleryLibrary = new ComfyGalleryLibrary({ renderImages, openImage,
     const entries = await imageFeatureAPI.wastebin();
     return entries.map((entry) => ({ ...entry, id: entry.token, url: entry.thumbnail, thumbnail: null }));
   } });
-galleryBulk = new ComfyGalleryBulk({ confirmAction: (options) => imageConfirmation.ask(options), grid: $("gallery-grid"), comparison, media: wideLayout,
+galleryBulk = new ComfyGalleryBulk({ selectionChanged: syncViewerSelection, confirmAction: (options) => imageConfirmation.ask(options), grid: $("gallery-grid"), comparison, media: wideLayout,
   canAct: () => connected && !recovering && !document.hidden &&
     !$("workspace").hidden && !$("gallery-page").hidden && !galleryLibrary.dialog.open,
   mutating: () => { galleryMutation++; galleryRevision = ""; $("refresh-gallery").disabled = true; },

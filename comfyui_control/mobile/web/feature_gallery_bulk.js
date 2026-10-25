@@ -3,8 +3,8 @@
 /* Shared transient Gallery selection. Reuse the controller's image-action transport
    and confirmed-result reconciliation; never persist a second image library. */
 window.ComfyGalleryBulk = class GalleryBulk {
-  constructor({ grid, comparison, media, canAct, mutating, act, changed, finished, confirmAction }) {
-    Object.assign(this, { grid, comparison, media, canAct, mutating, act, changed, finished, confirmAction });
+  constructor({ grid, comparison, media, canAct, mutating, act, changed, finished, confirmAction, selectionChanged = () => {} }) {
+    Object.assign(this, { grid, comparison, media, canAct, mutating, act, changed, finished, confirmAction, selectionChanged });
     this.selected = new Map();
     this.epoch = 0;
     this.selecting = false;
@@ -161,6 +161,16 @@ window.ComfyGalleryBulk = class GalleryBulk {
     return true;
   }
 
+  selectImage(item) {
+    if (!item || this.pending || this.confirming || !this.canAct()) return;
+    if (!this.selecting) {
+      this.comparison.selecting = false;
+      this.comparison.update();
+      this.selecting = true;
+    }
+    this.choose(item);
+  }
+
   canOpenMenu(button) {
     return this.selecting && !this.pending && !this.confirming && this.canAct() &&
       this.grid.contains(button) && this.selected.has(button.dataset.imageId);
@@ -168,7 +178,18 @@ window.ComfyGalleryBulk = class GalleryBulk {
 
   openMenu(button, x, y) {
     if (!this.canOpenMenu(button)) return;
-    this.menuAnchor = button;
+    this.showMenu(button, x, y, document.body);
+  }
+
+  openViewerMenu(anchor, host, x, y) {
+    if (!host.open || !host.contains(anchor) || !this.selecting || !this.selected.size ||
+        this.pending || this.confirming || !this.canAct()) return;
+    this.showMenu(anchor, x, y, host);
+  }
+
+  showMenu(anchor, x, y, host) {
+    host.append(this.menu); // A viewer menu must share its modal's top layer.
+    this.menuAnchor = anchor;
     this.menu.hidden = false;
     this.menu.style.left = this.menu.style.top = "0px";
     const rect = this.menu.getBoundingClientRect();
@@ -182,6 +203,7 @@ window.ComfyGalleryBulk = class GalleryBulk {
     this.menu.hidden = true;
     if (restoreFocus && this.menuAnchor?.isConnected) this.menuAnchor.focus({ preventScroll: true });
     this.menuAnchor = null;
+    if (this.menu.parentElement !== document.body) document.body.append(this.menu);
   }
 
   render() {
@@ -217,6 +239,7 @@ window.ComfyGalleryBulk = class GalleryBulk {
         button.removeAttribute("aria-keyshortcuts");
       }
     }
+    this.selectionChanged();
   }
 
   async perform(action) {

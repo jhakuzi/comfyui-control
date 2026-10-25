@@ -1,5 +1,29 @@
 # Session handoff — 2026-10-24
 
+## Desktop Gallery viewer keys and selection — 2026-10-25
+
+The normal Desktop Gallery image viewer supports Left/Right using its existing
+wrapping previous/next navigation. Backspace calls the existing single-image
+Delete action with its in-app confirmation; Space toggles the current saved
+image/version in the shared Gallery bulk selection. Selections accumulate while
+browsing, show a yellow outline, and remain marked in the Gallery after closing.
+No second selection map, backend API or write runner was created.
+
+Right-click the image to use the same Favourite selected/Delete selected menu. If
+nothing is selected, the current image is selected first. The menu node moves
+into the viewer's modal top layer while open, then restores to body on dismissal.
+Bulk feedback moves with the viewer to remain visible without shifting layout.
+Input/contenteditable and nested dialog/menu focus are excluded from shortcuts;
+Space/Backspace repeat events and in-flight/confirming actions are guarded. Phone
+and generation-preview behavior are unchanged. Cache: `comfy-control-desktop-viewer-keys-1`.
+
+Verification: 453 pytest tests and twelve Chromium/WebKit browser script/engine
+checks passed (new viewer keys, Desktop bulk, Phone bulk, Desktop/Phone actions,
+collection previews). The new fixture checks navigation/wrap, selection toggles
+and accumulation, modal menu navigation/dismissal, favourite batches, Backspace
+cancel/confirmation, typing, batch Delete, preserved originals/drafts and Phone
+breakpoint behavior. Test deletion acts only on generated fixtures.
+
 ## Phone Gallery selection and compact layout — 2026-10-25
 
 Phone removes MADE BY YOU, retains Your gallery with a compact heading, and reduces

@@ -496,3 +496,8 @@
 :where(html[data-presentation="desktop"]) .gallery-select-icon {
   display: none;
 }
+
+:where(html[data-presentation="desktop"]) #full-image.viewer-image-selected {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+}

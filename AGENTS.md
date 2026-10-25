@@ -130,6 +130,12 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   a 550ms hold on a selected Phone thumbnail opens it. Preserve movement, scroll,
   pointer cancellation/multitouch/lifecycle guards and suppress the release click.
   Keep 48px Phone targets and existing 8px gaps while compacting vertical spacing.
+- The normal Desktop Gallery image viewer uses Left/Right for navigation,
+  Backspace for the existing confirmed single Delete and Space for the current
+  image/version in the shared bulk selection. Retain selections while browsing;
+  right-click uses the same bulk menu within the modal top layer. Exclude typing,
+  nested dialogs/menus, repeats and pending actions from shortcuts. Phone remains
+  unaffected. Restore menu/feedback nodes when the viewer closes.
 - `feature_image_confirm.js` supplies the shared in-app confirmation dialog for
   single/bulk Delete and Clear Bin. Keep Cancel/Escape, initial Cancel focus,
   snapshot/stale guards and separate virtual/permanent deletion wording.
