@@ -21,7 +21,14 @@ Verification: 493 pytest tests passed, including native readiness/start fixtures
 six Gallery browser runs passed (viewer shortcuts, Phone bulk actions and shared
 collections, each in Chromium and WebKit). ZIP contents match the new module and
 all three bundled workflow JSONs. Source RPM built successfully; diff check passed.
-GitHub/COPR result links will be recorded after publication.
+Published successfully:
+- Testing head `7e53df5e49bdf09ef1008876a1968f2fe96b1963` pushed; clean user testing checkout fast-forwarded.
+- [PR #2](https://github.com/jhakuzi/comfyui-control/pull/2) merged with expected-head guard; main release commit `6c1c73e20e7ed3522bb99403a07547bf70f08790`.
+- Annotated tag `v1.1.0` points to that merge.
+- [GitHub packaging run](https://github.com/jhakuzi/comfyui-control/actions/runs/40179370877) built/tested the Fedora RPM and submitted COPR.
+- [COPR build 11204598](https://copr.fedorainfracloud.org/coprs/jhakuzi/comfyui-control/build/11204598/) succeeded: `1.1.0-1`, `fedora-44-x86_64`.
+- User commands: `sudo dnf upgrade --refresh comfyui-control`; restart app and reload WebUI clients. Complete fresh-source commands are in the session output `release-1.1.0.md`.
+This documentation-only publication record follows the release tag; do not move it.
 
 ## Optional native workflow installer — 2026-10-25
 
