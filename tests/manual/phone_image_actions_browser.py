@@ -271,11 +271,11 @@ async def main(engine, output):
             await expect(prompt).to_have_value('Keep this Phone draft')
             await page.locator('#job-images > button').nth(1).tap()
             await expect(heart).to_have_attribute('aria-pressed', 'true')
-            page.once('dialog', lambda dialog: dialog.dismiss())
             await delete.tap()
+            await page.locator('#cancel-image-confirm').tap()
             assert not service.image_library.deleted
-            page.once('dialog', lambda dialog: dialog.accept())
             await delete.tap()
+            await page.locator('#accept-image-confirm').tap()
             await until(lambda: bool(service.image_library.deleted))
             await expect(page.locator('#image-caption')).to_have_text('first.png')
             assert all((images / name).read_bytes() == data for name, data in originals.items())

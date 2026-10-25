@@ -411,3 +411,43 @@
   height: var(--desktop-editor-height, 90px);
   box-shadow: 0 16px 36px #0009;
 }
+
+/* Split the original selection half; Compare keeps the other half. */
+:where(html[data-presentation="desktop"]) #gallery-page > .comparison-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);
+}
+:where(html[data-presentation="desktop"]) #gallery-page > .comparison-actions button {
+  min-width: 0;
+}
+:where(html[data-presentation="desktop"]) .gallery-bulk-actions {
+  align-items: center;
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+:where(html[data-presentation="desktop"]) .gallery-bulk-count {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+:where(html[data-presentation="desktop"]) .gallery-bulk-status {
+  flex-basis: 100%;
+  margin: 0;
+}
+:where(html[data-presentation="desktop"]) .gallery-bulk-status:empty {
+  display: none;
+}
+:where(html[data-presentation="desktop"]) #gallery-grid > .gallery-bulk-selected {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+}
+:where(html[data-presentation="desktop"]) #gallery-grid > .gallery-bulk-selected::after {
+  content: "✓";
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: var(--accent);
+  color: var(--accent-text);
+  border-radius: 8px;
+  padding: 4px 12px;
+  font-weight: 700;
+}

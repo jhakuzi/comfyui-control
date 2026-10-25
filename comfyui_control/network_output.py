@@ -607,7 +607,30 @@ def virtual_image(root, operation, data):
             os.close(parent)
             parent = child
             directories.append(list(file_identity(os.fstat(parent))[:2]))
-        fd = os.open(relative.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
+        def recheck_directory():
+            current = open_output_directory(root)
+            try:
+                current_directories = [list(file_identity(os.fstat(current))[:2])]
+                for part in relative.parts[:-1]:
+                    child = _open_directory(current, part)
+                    os.close(current)
+                    current = child
+                    current_directories.append(list(file_identity(os.fstat(current))[:2]))
+                if current_directories != directories:
+                    raise ValueError('The original directory changed. Nothing was deleted.')
+            finally:
+                os.close(current)
+        try:
+            fd = os.open(relative.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
+        except FileNotFoundError:
+            # An explicit Clear Bin can complete an already-removed original,
+            # including a lost reply after unlink. Only a missing leaf in the
+            # exact saved root/parent chain qualifies. Missing mounts, replaced
+            # directories, permissions and symlinks must still fail closed.
+            if operation != 'delete' or directories != data.get('identity', {}).get('directories'):
+                raise
+            recheck_directory()
+            return {'ok': True, 'missing': True}
         with os.fdopen(fd, 'rb') as stream:
             info = os.fstat(stream.fileno())
             if not stat.S_ISREG(info.st_mode):
@@ -626,16 +649,7 @@ def virtual_image(root, operation, data):
                 return contents
             if operation != 'delete':
                 raise ValueError('Unknown Wastebin operation.')
-            current = open_output_directory(root)
-            try:
-                for part in relative.parts[:-1]:
-                    child = _open_directory(current, part)
-                    os.close(current)
-                    current = child
-                if file_identity(os.fstat(current))[:2] != file_identity(os.fstat(parent))[:2]:
-                    raise ValueError('The original directory changed. Nothing was deleted.')
-            finally:
-                os.close(current)
+            recheck_directory()
             # Recheck the directory entry immediately before unlinking through its
             # held parent FD; a substituted symlink/file must never be followed.
             if file_identity(os.stat(relative.name, dir_fd=parent, follow_symlinks=False)) != identity['file']:

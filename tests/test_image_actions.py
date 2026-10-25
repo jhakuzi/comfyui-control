@@ -221,7 +221,32 @@ def test_permanent_delete_requires_confirmation_and_preserves_other_files(tmp_pa
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize('failure', ['replacement', 'symlink', 'parent', 'root', 'missing'])
+@pytest.mark.parametrize('network', [False, True])
+def test_clear_bin_completes_confirmed_missing_original_without_unlinking_replacements(tmp_path, network):
+    async def scenario():
+        output = tmp_path / 'out'
+        path = output / 'nested' / 'gone.png'
+        picture(path)
+        picture(output / 'unselected.png')
+        untouched = (output / 'unselected.png').read_bytes()
+        service = MobileService(tmp_path / 'data', MobileSettings(), output)
+        service.network_output = network
+        token = await delete_image(service, 'gone.png')
+        path.unlink()  # Removed outside the app, or an earlier unlink lost its reply.
+        assert len(await service.image_trash(BOB)) == 1
+        result = await service.delete_permanently(BOB, dict(confirm=True, tokens=[token]))
+        assert result['results'] == [dict(token=token, deleted=True)]
+        assert await service.image_trash(ALICE) == []
+        picture(path)  # A future file at the same name is outside this tombstone.
+        with pytest.raises(ValueError):
+            await service.delete_permanently(ALICE, dict(confirm=True, tokens=[token]))
+        assert path.is_file() and (output / 'unselected.png').read_bytes() == untouched
+        reopened = MobileService(tmp_path / 'data', MobileSettings(), output)
+        assert await reopened.image_trash(BOB) == []
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('failure', ['replacement', 'symlink', 'parent', 'root', 'missing-parent', 'missing-root'])
 def test_permanent_delete_rejects_changed_files_or_locations(tmp_path, failure):
     async def scenario():
         output = tmp_path / 'out'
@@ -245,12 +270,15 @@ def test_permanent_delete_rejects_changed_files_or_locations(tmp_path, failure):
         elif failure == 'root':
             output.rename(tmp_path / 'unmounted')
             picture(path)
-        else:
+        elif failure == 'missing-parent':
             path.unlink()
+            path.parent.rmdir()
+        else:
+            output.rename(tmp_path / 'missing-root')
         result = await service.delete_permanently(ALICE, {'confirm': True}, token)
         assert result['results'][0]['error']
         assert (tmp_path / 'outside.png').is_file()
-        if failure != 'missing':
+        if failure not in {'missing-parent', 'missing-root'}:
             assert path.exists()
         reopened = MobileService(tmp_path / 'data', MobileSettings(), output)
         entries = await reopened.image_trash(ALICE)

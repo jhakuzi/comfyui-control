@@ -95,3 +95,15 @@ favourite persistence and delayed responses, exact full reuse, cancellation,
 missing workflows, API failures, actual Edit/Upscale submissions, uncertain retry
 and virtual Delete. These are protocol and local filesystem fixtures, not real
 Qwen/SeedVR inference, NAS hardware or physical Phone verification.
+
+## Desktop Gallery multi-selection
+
+`feature_gallery_bulk.js` adds only transient Desktop selection and coordinates
+with the existing Compare mode. Requests and confirmed-result updates remain in
+`app.js` and use the current per-image API. Its layout/checkmarks are scoped in
+`presentation_desktop.css`; Phone retains its original Gallery comparison row.
+`feature_image_confirm.js` supplies a shared native dialog styled within the app
+for single/bulk Delete and Clear Bin, including Cancel/Escape and stale guards.
+
+Verify `tests/manual/desktop_gallery_bulk_browser.py` in Chromium and WebKit,
+alongside Desktop/Phone actions and collection/shared-library fixtures.

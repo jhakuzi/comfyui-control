@@ -32,7 +32,7 @@ so another device returning to an earlier server state still reconciles correctl
 ## Clear Bin
 
 Clear Bin appears only in Wastebin and is disabled while empty/loading/clearing.
-It captures the displayed token list before asking for confirmation, including the
+It captures the displayed token list before showing an in-app confirmation, including the
 image count and the fact that original files will be removed permanently. Cancel
 sends no request. Confirmation calls the existing `POST /api/trash/empty` with
 `confirm: true` and that exact token snapshot. Images binned later are not added.
@@ -48,6 +48,36 @@ Duplicate Clear/Refresh actions are disabled while deletion runs. A lost or inva
 response shows guidance to Refresh and is never automatically resubmitted. Close
 dismisses the view; an already-confirmed deletion continues. Opening/previewing a
 collection never restores or removes files. No restore control was added.
+
+## Desktop bulk selection
+
+Select two images and Select share the former selection-button width, while Compare
+keeps the other half. Select enables any number of visible Gallery images with a
+checkmark and count. Favourite selected explicitly adds every selection to Favourites
+without toggling existing hearts off. Delete selected asks once and moves only the
+captured image versions to Wastebin; original files remain in place.
+
+Bulk and Compare selection are mutually exclusive. Requests use the existing image
+action API serially and reconcile through the controller. Permission/stale errors
+stay selected and report their reason. A lost response stops further requests and
+requires Gallery reconciliation before retry; there is no automatic write retry.
+Leaving Gallery/Desktop, authentication changes or backgrounding clears selection
+and stops further batch requests. Refresh drops removed/replaced versions. Phone
+keeps its existing comparison row and normal image opening behavior.
+
+## Confirmations and unavailable originals
+
+Delete, bulk Delete and Clear Bin use one themed in-app alertdialog. Cancel is
+focused initially; Cancel/Escape sends no write. Confirmations are bound to the
+captured image versions or Bin tokens, and stale views cannot authorize an action.
+
+A Bin preview depends on its original file. If unavailable, the tile shows its
+filename and a preview-unavailable label with storage guidance. On explicitly
+confirmed Clear Bin, an already-missing original can complete its tombstone only
+if the configured root and every saved parent directory still match and are
+rechecked. Nothing is unlinked for that entry. Missing/changed storage or parents,
+symlinks, replacements, ownership and permission failures remain in the Bin.
+Listing/previewing does not silently prune records.
 
 ## Data and shared implementation
 
@@ -71,7 +101,7 @@ collection never restores or removes files. No restore control was added.
   Private grids clear on sign-in; late responses cannot repaint a different view.
   Thumbnails retain decoding, fallback, loading rings and reduced-motion behavior.
 - Public assets remain allowlisted. Shell cache is
-  `comfy-control-mobile-gallery-library-3`; APIs/images remain uncached.
+  `comfy-control-desktop-gallery-bulk-2`; APIs/images remain uncached.
 
 Restart the app for the Python library change, then reload Desktop and Phone.
 Sharing applies to the same controller/output, independently of whether a device

@@ -127,3 +127,10 @@
 :where(html[data-presentation="desktop"]) #gallery-library-dialog .image-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
+
+#image-confirm-dialog {
+  width: min(480px, calc(100% - 32px - var(--safe-area-left) - var(--safe-area-right)));
+  padding: 20px;
+}
+#image-confirm-dialog h2 { margin: 0 0 12px; }
+#image-confirm-message { overflow-wrap: anywhere; }

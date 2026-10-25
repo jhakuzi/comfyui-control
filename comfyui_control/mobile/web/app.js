@@ -19,6 +19,8 @@ let state = { jobs: [], online: false },
 let submitting = false;
 let galleryRevision = "", galleryPromise = null, galleryTimer = null, galleryEpoch = 0;
 let galleryMutation = 0;
+let galleryBulk = null;
+const imageConfirmation = new ComfyImageConfirmation();
 let mappingDraft = new Map(),
   gallery = [],
   viewerItems = [],
@@ -105,6 +107,8 @@ async function api(path, options = {}) {
   return body;
 }
 function showLogin() {
+  imageConfirmation.cancel();
+  galleryBulk?.reset();
   galleryLibrary.close();
   imageWorkflowDialogs?.close();
   selectedImageActions?.select(null);
@@ -174,6 +178,8 @@ function restoreUI() {
   uiReady = true;
 }
 function selectTab(name) {
+  imageConfirmation.cancel();
+  galleryBulk?.reset();
   if (name !== "gallery") galleryLibrary.close();
   $("workspace").dataset.page = name;
   $("create-page").hidden = name !== "create";
@@ -272,6 +278,7 @@ function updateGenerate() {
   renderImages($("job-images"), previewImages());
   syncGenerationDock();
   syncSelectedImageActions();
+  galleryBulk?.render();
 }
 function setReusedWorkflow(item) {
   const picker = $("preset");
@@ -1088,7 +1095,10 @@ function renderImages(container, items, choose = null) {
         image.src = item.url;
         return;
       }
-      button.replaceChildren(node("span", "Image unavailable", "missing"));
+      if (container === galleryLibrary.grid && galleryLibrary.mode === "wastebin") {
+        button.replaceChildren(node("span", item.filename + " · Preview unavailable", "missing"));
+        galleryLibrary.thumbnailUnavailable();
+      } else button.replaceChildren(node("span", "Image unavailable", "missing"));
       container.dataset.signature = "";
     });
     if (container === desktopImages.compareGrid || container === galleryLibrary.grid) desktopImages.prepareThumbnail(button, image);
@@ -1100,7 +1110,7 @@ function renderImages(container, items, choose = null) {
       const currentIndex = currentItems.findIndex((entry) => entry.id === item.id);
       if (currentIndex < 0) return;
       if (container.chooseImage) { container.chooseImage(currentItems[currentIndex]); return; }
-      if (container.id === "gallery-grid" && comparison.choose(currentItems[currentIndex])) return;
+      if (container.id === "gallery-grid" && (galleryBulk?.choose(currentItems[currentIndex]) || comparison.choose(currentItems[currentIndex]))) return;
       openImage(currentItems, currentIndex);
     });
     if (previous) previous.replaceWith(button);
@@ -1146,6 +1156,7 @@ function loadGallery(force = false) {
       }
       renderImages($("gallery-grid"), gallery);
       comparison.gallery(comparisonGallery());
+      galleryBulk?.gallery(gallery);
       renderPreviewComparisonGallery();
       $("gallery-empty").hidden = !!gallery.length;
       syncSelectedImageActions();
@@ -1155,7 +1166,7 @@ function loadGallery(force = false) {
     } finally {
       if (epoch === galleryEpoch) {
         galleryPromise = null;
-        $("refresh-gallery").disabled = false;
+        $("refresh-gallery").disabled = !!galleryBulk?.pending;
         if (refreshAgain && connected && !document.hidden && !$("gallery-page").hidden && !$("workspace").hidden)
           void loadGallery(true);
         else if (connected && !document.hidden && !$("gallery-page").hidden && !$("workspace").hidden)
@@ -1250,6 +1261,7 @@ function syncSelectedImageActions(force = false) {
     imageWorkflowDialogs = new ComfyImageWorkflowDialogs({ read: readStore, write: writeStore });
     selectedImageActions = new ComfySavedImageActions($("selected-image-actions"), {
       api, changed: imageActionChanged, workflow: runImageWorkflow,
+      confirmAction: (options) => imageConfirmation.ask(options),
       present: ({ pending }) => {
         $("same-seed").disabled = $("variation").disabled = pending || (desktopImages.active && !actionImage());
         $("phone-compare-image").disabled = pending || !actionImage();
@@ -1274,7 +1286,7 @@ function syncSelectedImageActions(force = false) {
   imageWorkflowDialogs?.close();
   selectedImageActions?.select(item, { connected: canRequest });
 }
-async function imageActionChanged(item, result) {
+async function imageActionChanged(item, result, { quiet = false } = {}) {
   galleryMutation++;
   // Local metadata changed without receiving a Gallery snapshot. Another device
   // may return to the old revision; it must still replace our optimistic data.
@@ -1292,6 +1304,7 @@ async function imageActionChanged(item, result) {
   renderImages($("job-images"), previewImages());
   renderImages($("gallery-grid"), gallery);
   comparison.gallery(comparisonGallery());
+  galleryBulk?.gallery(gallery);
   if ($("image-dialog").open && (result.trash || (favouriteViewer && !result.kept))) {
     if (viewerItems.length) openImage(viewerItems, selected === item.id ? Math.min(viewerIndex, viewerItems.length - 1)
       : viewerItems.findIndex((entry) => entry.id === selected));
@@ -1303,7 +1316,7 @@ async function imageActionChanged(item, result) {
       selectedImageActions.item.modified === current.modified)
     imageActionSignature = imageActionStateSignature(current, connected && !recovering && !document.hidden);
   syncSelectedImageActions(!!result.trash);
-  if (result.trash) {
+  if (result.trash && !quiet) {
     notice("Image deleted to Wastebin. The original file remains in place.");
     refreshFullState();
   }
@@ -1470,6 +1483,8 @@ async function bootstrap() {
   }
 }
 function pauseConnection() {
+  imageConfirmation.cancel();
+  galleryBulk?.reset();
   galleryLibrary.close();
   stopGallerySync();
   saveDraft();
@@ -1547,6 +1562,8 @@ new ResizeObserver(() => {
   document.documentElement.style.setProperty("--generation-dock-height", `${height}px`);
 }).observe($("generation-dock"));
 wideLayout.addEventListener("change", () => {
+  imageConfirmation.cancel();
+  galleryBulk?.reset();
   imageWorkflowDialogs?.close();
   if (desktopImages.comparing) desktopImages.comparePicker.close();
   renderImages($("job-images"), previewImages());
@@ -1801,6 +1818,7 @@ const imageFeatureAPI = new ComfyImageFeatureAPI({ api, requestId, submit: submi
     writeStore("pending", value);
   } });
 const galleryLibrary = new ComfyGalleryLibrary({ renderImages, openImage,
+  confirmAction: (options) => imageConfirmation.ask(options),
   empty: (tokens) => imageFeatureAPI.deletePermanently(tokens, true),
   load: async (mode) => {
     if (!connected || recovering || document.hidden || $("workspace").hidden)
@@ -1809,6 +1827,20 @@ const galleryLibrary = new ComfyGalleryLibrary({ renderImages, openImage,
     const entries = await imageFeatureAPI.wastebin();
     return entries.map((entry) => ({ ...entry, id: entry.token, url: entry.thumbnail, thumbnail: null }));
   } });
+galleryBulk = new ComfyGalleryBulk({ confirmAction: (options) => imageConfirmation.ask(options), grid: $("gallery-grid"), comparison, media: wideLayout,
+  canAct: () => wideLayout.matches && connected && !recovering && !document.hidden &&
+    !$("workspace").hidden && !$("gallery-page").hidden && !galleryLibrary.dialog.open,
+  mutating: () => { galleryMutation++; galleryRevision = ""; $("refresh-gallery").disabled = true; },
+  act: (item, action) => api(`/api/images/${encodeURIComponent(item.id)}/actions`, {
+    method: "POST", body: JSON.stringify({ action, modified: item.modified,
+      ...(action === "keep" ? { keep: true } : { confirm: true }) }),
+  }),
+  changed: (item, result) => imageActionChanged(item, result, { quiet: true }),
+  finished: (action, completed, current) => {
+    $("refresh-gallery").disabled = false;
+    if (current && action === "delete" && completed) refreshFullState();
+  },
+});
 const promptHistory = new PromptHistoryView({ api, reuse: (entry) => {
   if (!preset) throw new Error("Choose a workflow before reusing a prompt.");
   const changes = [];

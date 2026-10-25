@@ -2,11 +2,12 @@
 
 /* One action view for any explicitly selected saved image. No last-job lookup. */
 class SavedImageActions {
-  constructor(container, { api, changed, workflow, present = () => {}, unavailable = ({ reason, status }) => { status.textContent = reason || ""; } }) {
+  constructor(container, { api, changed, workflow, confirmAction, present = () => {}, unavailable = ({ reason, status }) => { status.textContent = reason || ""; } }) {
     this.container = container;
     this.api = api;
     this.changed = changed;
     this.workflow = workflow;
+    this.confirmAction = confirmAction;
     this.present = present;
     this.unavailableAction = unavailable;
     this.epoch = 0;
@@ -88,14 +89,24 @@ class SavedImageActions {
   }
 
   async perform(action) {
-    if (!this.item || this.pending) return;
+    if (!this.item || this.pending || this.confirming) return;
     if (!this.capabilities?.actions[action]?.available) {
       this.unavailableAction({ action, reason: this.capabilities?.actions[action]?.reason,
         status: this.status });
       return;
     }
     const item = { ...this.item }, capability = this.capabilities, epoch = this.epoch;
-    if (action === "trash" && !confirm(`Delete “${item.filename}”?${item.kept ? " This image is in Favourites." : ""} The file will stay in place. You can restore it from Wastebin.`)) return;
+    if (action === "trash") {
+      this.confirming = true;
+      let confirmed;
+      try {
+        confirmed = await this.confirmAction({ title: "Move image to Wastebin?", accept: "Delete",
+          message: `Delete “${item.filename}”?${item.kept ? " This image is in Favourites." : ""} The original file stays in place.`,
+          current: () => epoch === this.epoch && this.item?.id === item.id && this.item?.modified === item.modified,
+        });
+      } finally { this.confirming = false; }
+      if (!confirmed || epoch !== this.epoch) return;
+    }
     this.pending = true;
     this.renderCapabilities();
     this.status.textContent = action === "trash" ? "Deleting image…"

@@ -117,6 +117,19 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   existing permanent-delete API. New entries stay out of that snapshot; failures
   stay in the bin with errors. Disable duplicate actions while clearing. An uncertain
   response requires Refresh, never automatic resubmission.
+- Desktop Gallery splits Select two images beside a multi-image Select mode.
+  Reuse the existing per-image action route and controller reconciliation; retain
+  exact-version snapshots, permissions, partial failures and uncertain-result
+  handling. No bulk selection persists. Compare and bulk selection are mutually
+  exclusive; leaving Desktop/Gallery clears bulk selection and stops further
+  batch requests. Phone has its original two-button comparison row.
+- `feature_image_confirm.js` supplies the shared in-app confirmation dialog for
+  single/bulk Delete and Clear Bin. Keep Cancel/Escape, initial Cancel focus,
+  snapshot/stale guards and separate virtual/permanent deletion wording.
+- Confirmed Clear Bin may complete a missing original only when the saved root
+  and parent directory identities still match. Missing/replaced storage, files,
+  symlinks, ownership and permission failures remain guarded. No listing silently
+  removes missing-file markers. Preview failures show filenames and storage guidance.
 - Both Desktop Preview and enlarged viewer use Compare instead of New variation.
   One second-image picker reuses the shared gallery renderer/loader and existing
   comparison dialog. Keep drafts/selection on cancel, ignore late responses, exclude

@@ -1,5 +1,44 @@
 # Session handoff — 2026-10-24
 
+## Desktop Gallery and Bin follow-up — 2026-10-25
+
+New local branch `testing/desktop-gallery-bulk` starts from main `59fe52f` after
+1.0.5. This addition is for testing; no new merge, release or COPR build is part
+of this request.
+
+Desktop splits the old Select two images footprint into that button and Select,
+with Compare retaining the other half. Select supports more than two images,
+checkmarks/count, Favourite selected and Delete selected. Compare selection is
+mutually exclusive. Existing image-action POSTs run serially with exact selected
+versions, current permissions, explicit keep:true and one confirmed Delete
+snapshot. Confirmed results reconcile through `imageActionChanged`; failures stay
+selected. Uncertain replies stop the batch without automatic retry. Navigation,
+authentication, backgrounding and leaving Desktop stop further batch requests.
+Refresh prunes removed/replaced versions. Drafts/jobs remain in the controller;
+selection is transient and never persisted. Phone's Gallery layout/Compare remains
+unchanged.
+
+One shared themed alertdialog replaces browser confirm for single Delete, bulk
+Delete and Clear Bin on both presentations. Cancel/Escape sends nothing; focus
+starts on Cancel; stale selections/dialogs cannot authorize later actions. New
+assets are allowlisted and shell cache is `comfy-control-desktop-gallery-bulk-2`.
+
+The user's Clear Bin error was reproduced with an original removed outside the
+app. Explicit clearing can now finish an already-missing leaf only after matching
+and rechecking the saved root/parent identity chain. No replacement is unlinked;
+missing/changed mounts or parents, permissions, symlinks and ownership still fail
+closed. Tombstones prevent replay. Unavailable Bin previews show the filename
+and explanatory copy; images absent from storage cannot have a preview rebuilt.
+No real user files or Bin entries were removed during this work.
+
+Verification: 440 pytest tests and ten browser script/engine checks passed in
+Chromium/WebKit (new bulk/missing-file fixture, shared-library updates, Desktop
+and Phone image actions, collection previews). Tests cover >2 selection, idempotent
+favourites, cancellation, partial permission failures, duplicate guards, changed
+versions, lost replies, navigation, drafts, Phone layout and confirmed missing-file
+cleanup. Use `tests/manual/desktop_gallery_bulk_browser.py` for the new fixture.
+Restart the testing app for the backend fix and reload both WebUI pages.
+
 ## Authorized 1.0.5 release
 
 The user authorized pushing the testing branch, merging to main and building COPR.
