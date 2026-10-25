@@ -115,7 +115,11 @@ browser tab switches. Returning from a suspended page reconciles state/history
 without resubmitting work or replacing unsent drafts. If frequent live summaries
 overtake a full state response, matching missing image details can still be
 applied without rolling back newer progress. Preview & results then shows the
-finished image instead of retaining the previous completed result.
+finished image instead of retaining the previous completed result. Preview &
+results also follows the latest job in that browser session when returning to an
+older Comfy Control tab/window; a remembered earlier job ID does not pin the
+preview after new work finishes. Explicit unsent drafts and batch run tracking
+are preserved.
 
 During sampling the browser tab title shows the current stage percentage, using
 the same validated fraction as Generate. Loading, processing, completion, failure

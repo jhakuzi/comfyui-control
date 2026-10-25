@@ -195,9 +195,12 @@ function selectTab(name) {
   else stopGallerySync();
 }
 function currentJob() {
+  // Jobs are creation-ordered and already restricted to this browser session.
+  // An older tab's remembered ID must not pin results after newer work arrives.
+  // "new" remains an explicit unsent draft, including settings-reuse flows.
   return selectedJob === "new"
     ? null
-    : batchJob(state.jobs.find((item) => item.id === selectedJob) || state.jobs.at(-1));
+    : batchJob(state.jobs.at(-1));
 }
 function batchJob(job) {
   if (!job?.batch_id) return job;

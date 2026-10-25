@@ -1,5 +1,31 @@
 # Session handoff — 2026-10-24
 
+## Returning-tab preview selection fix — 2026-10-25
+
+User confirmed Ctrl+Shift+R still showed the previous result. Reproduced the bug
+in Firefox with two Comfy Control tabs sharing a browser session: the second tab
+retained the first completed job ID while a later job finished in the first tab.
+Returning/focusing the stale tab kept displaying old.png and could persist that
+old selection again. The previous missing-detail response fix did not address
+this independent selection bug. The pre-fix regression failed with old.png where
+new.png was expected.
+
+`currentJob()` now derives the current run from the latest creation-ordered job
+in the server's already browser-private state; a stale remembered ID cannot pin
+Preview & results to an earlier generation. The explicit "new" draft sentinel
+is preserved, and batchJob still follows active runs, then terminal diagnostics/
+results within the newest batch. No job submission, prompt settings or server
+privacy rules change. The browser regression now opens a second same-session tab,
+returns to it after generation and checks the newest preview again after reload.
+Shell cache bumped; user testing checkout must fast-forward and app restart/page
+reload are needed. Verification: 512 pytest tests passed. Background-return and
+batch checks passed in Chromium/WebKit/Firefox for Desktop and Phone; Desktop
+submission transitions passed in Chromium/WebKit (eight script runs). Additional
+three-engine runs explicitly force the older saved job ID before reloading and
+verify the newest preview. Draft preservation and exact submission counts remain
+covered. `git diff --check` passed. No release publication is part of this fix.
+
+
 ## Remove workflow import hint — 2026-10-25
 
 Removed the requested API-format import onboarding paragraph from the shared

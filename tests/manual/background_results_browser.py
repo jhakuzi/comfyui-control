@@ -60,6 +60,12 @@ async def check(browser, engine, output, viewport):
         await complete(first, 'old.png')
         await expect(page.locator('#job-images img')).to_have_attribute('alt', 'old.png')
         await expect(page.locator('#generate')).to_be_enabled()
+        # Another Comfy Control tab/window retains the earlier selected job in
+        # memory. It must follow new work by this same browser session as well.
+        returning = await context.new_page()
+        await returning.goto(str(mobile.make_url('/')))
+        await expect(returning.locator('#job-images img')).to_have_attribute('alt', 'old.png')
+        await page.bring_to_front()
         second = await start()
         await stub.emit('progress', dict(prompt_id=second['prompt_id'], value=10, max=40))
         await expect(page).to_have_title('25% · ' + title)
@@ -89,6 +95,14 @@ async def check(browser, engine, output, viewport):
         await expect(page.locator('#job-images img')).to_have_attribute('alt', 'new.png')
         assert count <= 3, count
         await expect(page).to_have_title(title)
+        await returning.bring_to_front()
+        await returning.evaluate('window.dispatchEvent(new Event("focus"))')
+        await expect(returning.locator('#job-images img')).to_have_attribute('alt', 'new.png')
+        await returning.evaluate('(id) => localStorage.setItem("comfy-mobile-job", JSON.stringify(id))', first['id'])
+        await returning.reload()
+        await expect(returning.locator('#job-images img')).to_have_attribute('alt', 'new.png')
+        await returning.close()
+        await page.bring_to_front()
         await page.unroute('**/api/state', overtaken)
         # Real suspension/BFCache uses pagehide and resumes with a full snapshot.
         await page.evaluate('''() => {
