@@ -623,13 +623,28 @@ def virtual_image(root, operation, data):
         try:
             fd = os.open(relative.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
         except FileNotFoundError:
-            # An explicit Clear Bin can complete an already-removed original,
-            # including a lost reply after unlink. Only a missing leaf in the
-            # exact saved root/parent chain qualifies. Missing mounts, replaced
-            # directories, permissions and symlinks must still fail closed.
-            if operation != 'delete' or directories != data.get('identity', {}).get('directories'):
+            # This branch only completes metadata for an absent leaf; it never
+            # unlinks. NFS remounts can renumber st_dev while keeping directory
+            # inode IDs. Accept that case only on a currently mounted NFS root,
+            # with every saved parent inode matching and no nested device change.
+            if operation != 'delete':
                 raise
+            saved = data.get('identity', {}).get('directories')
+            remounted = None
+            if directories != saved:
+                matching_inodes = (isinstance(saved, list) and len(saved) == len(directories)
+                    and all(isinstance(pair, list) and len(pair) == 2
+                            and all(type(value) is int for value in pair) for pair in saved)
+                    and all(old[1] == current[1] and old[0] == saved[0][0]
+                            and current[0] == directories[0][0]
+                            for old, current in zip(saved, directories)))
+                remounted = mount_record(str(root)) if matching_inodes else None
+                if not remounted or remounted[0] not in {'nfs', 'nfs4'}:
+                    raise ValueError('The original is missing, but its saved output storage or parent directories changed. '
+                                     'Reconnect the original output storage before clearing this entry.') from None
             recheck_directory()
+            if remounted and mount_record(str(root)) != remounted:
+                raise ValueError('The output mount changed while checking the missing original. Entry was not cleared.')
             return {'ok': True, 'missing': True}
         with os.fdopen(fd, 'rb') as stream:
             info = os.fstat(stream.fileno())

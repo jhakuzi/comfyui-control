@@ -1,5 +1,31 @@
 # Session handoff — 2026-10-24
 
+## Missing Bin originals after NFS remount — 2026-10-25
+
+Read-only diagnosis confirmed the running app uses the updated Downloads testing
+checkout. The affected Bin records saved NFS device 111; the mounted output now
+reports device 96, with the same root/Edited directory inode IDs. Checked originals
+were absent. The first missing-leaf fix rejected that device mismatch and surfaced
+raw ENOENT, so it did not cover the user's actual remount case.
+
+The missing-leaf branch of `network_output.virtual_image` now accepts a device-only
+renumber on a currently mounted NFS/NFS4 root if all saved parent inode IDs match
+and both saved/current chains stay on their respective single devices. Recheck
+the current directory chain and mount before returning metadata-only completion.
+No unlink occurs on this branch. Existing files still require their complete
+saved identity; absent/changed mounts, parents, permissions and symlinks retain
+the entry. Invalid missing-file locations now produce a useful identity-change
+message rather than just ENOENT. Confirmation, scope, ownership and tombstones
+remain enforced by the existing service.
+
+Tests reproduce saved-device/current-device differences for NFS/NFS4, root/nested
+files, unmounted/autofs/local roots, changed parent/root inode IDs, nested devices,
+malformed identities, a mount changing during validation and existing-file guards.
+All 453 pytest tests passed, including the 13 new NFS-remount cases.
+All deletion tests use fixture files. No real user Bin entries were cleared.
+The worker is launched fresh per operation, so the running testing app picks up
+this worker-only fix after its checkout is updated; no frontend cache bump is needed.
+
 ## Desktop Gallery text cleanup — 2026-10-25
 
 Desktop-scoped CSS hides MADE BY YOU, Your gallery and the introductory Gallery

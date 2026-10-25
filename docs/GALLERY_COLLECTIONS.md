@@ -81,8 +81,14 @@ A Bin preview depends on its original file. If unavailable, the tile shows its
 filename and a preview-unavailable label with storage guidance. On explicitly
 confirmed Clear Bin, an already-missing original can complete its tombstone only
 if the configured root and every saved parent directory still match and are
-rechecked. Nothing is unlinked for that entry. Missing/changed storage or parents,
+rechecked. An NFS remount can change the Linux device number while preserving
+inode IDs. For an already-missing leaf only, matching inode IDs throughout the
+saved parent chain on a currently mounted NFS/NFS4 root can complete the record;
+nested device changes are rejected and the current directories/mount are rechecked.
+Nothing is unlinked for that entry. Existing files retain the full original
+fingerprint check, including the saved device ID. Missing/changed storage or parents,
 symlinks, replacements, ownership and permission failures remain in the Bin.
+Identity-mismatch errors now explain why a missing-file record was retained.
 Listing/previewing does not silently prune records.
 
 ## Data and shared implementation

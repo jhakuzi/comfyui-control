@@ -129,10 +129,14 @@ Paths below are under `comfyui_control/` unless stated otherwise:
 - `feature_image_confirm.js` supplies the shared in-app confirmation dialog for
   single/bulk Delete and Clear Bin. Keep Cancel/Escape, initial Cancel focus,
   snapshot/stale guards and separate virtual/permanent deletion wording.
-- Confirmed Clear Bin may complete a missing original only when the saved root
-  and parent directory identities still match. Missing/replaced storage, files,
-  symlinks, ownership and permission failures remain guarded. No listing silently
-  removes missing-file markers. Preview failures show filenames and storage guidance.
+- Confirmed Clear Bin may complete a missing original when the saved root/parent
+  identities match. For an NFS remount that only renumbered st_dev, metadata-only
+  cleanup may accept matching inode IDs for the full parent chain on a currently
+  mounted NFS root, without nested device changes; recheck directories and mount.
+  This exception must never unlink an existing file or relax its full fingerprint
+  check. Missing/replaced storage, parents, symlinks, ownership and permission
+  failures remain guarded. No listing silently removes missing-file markers.
+  Preview failures show filenames and storage guidance.
 - Both Desktop Preview and enlarged viewer use Compare instead of New variation.
   One second-image picker reuses the shared gallery renderer/loader and existing
   comparison dialog. Keep drafts/selection on cancel, ignore late responses, exclude
