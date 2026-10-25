@@ -62,7 +62,7 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   bump the shell cache when shipping changed assets. Never cache private APIs or
   images. Preserve reduced-motion support.
 
-## Current implementation contracts (1.1.0)
+## Current implementation contracts (1.2.0)
 
 - Workflow/model refresh reconciles option catalogues in place when graph/control
   structure is unchanged. Preserve select/button DOM identity, handlers, drafts,
@@ -161,6 +161,27 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   immediate-VRAM-cleanup patch. The existing idle-only `/free` request remains;
   server-side processing timing is outside this app's guarantee.
 
+- Ordinary background-tab visibility retains the existing SSE stream for sampling
+  title progress and completed results; pagehide/offline/logout still cancel and
+  resume safely. Never add a second poller or resubmit work on return. Older full
+  state responses may hydrate missing details only for matching instance/job/
+  prompt/status/image count, preserving newer summaries and recovery epochs.
+  Browser titles use validated shared sampling feedback and reset outside sampling.
+
+- Batch Count is an app-level repeat count (1..20 under the existing total queue
+  limit). Explicit `batch_count` requests render mapped batch inputs as 1 for each
+  separate prompt; legacy/internal requests without it keep saved batch semantics.
+  Preserve every child's durable UUID/seed, owner/scope, uncertain POST journal,
+  safe group cancellation and no-resubmission behavior. UI follows the current
+  run within its batch, preserving drafts and earlier results/failure diagnostics.
+
+- Desktop has a compact hidden-folder switch beside the brand, off by default
+  and persisted in browser storage. `include_hidden=0` filters dot-prefixed
+  relative folder components before the Gallery limit, including Favourites and
+  Compare. Phone/API defaults remain unfiltered; Wastebin lists all entries.
+  Preserve bounded visible-page references, per-client filtering/revisions, stale
+  response/selection guards and open collections on presentation changes.
+
 ## Data and safety contracts
 
 - Act on the explicitly selected image and version. Ignore stale async responses
@@ -179,10 +200,11 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   identity, symlink, ownership and output-scope guards and bounded NFS workers.
   Failed deletion stays in Wastebin with its error.
 - Preserve Host/Origin checks, authentication and CSP. Library sharing includes
-  bin listing/thumbnails, restore and confirmed permanent deletion. Preserve each
-  bin record's original owner for source-ownership and legacy-worker checks.
+  initial virtual Delete, bin listing/thumbnails, restore and confirmed permanent
+  deletion for every admitted browser, independent of image-settings sharing.
+  Preserve each bin record's recorded owner for legacy-worker validation.
   Live jobs, cancellation, prompt history and optional settings reuse remain
-  browser-specific. Sharing does not change initial image Delete permissions.
+  browser-specific. Delete does not require the generating browser; keep metadata/job privacy separate.
   Never commit credentials or private prompts.
 - Keep blocking filesystem/NFS/GPU work off Qt and HTTP event loops. Preserve
   atomic metadata writes and corruption safeguards. Do not disturb user settings

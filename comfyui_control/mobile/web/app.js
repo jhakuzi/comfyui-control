@@ -1,5 +1,6 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
+const baseTitle = document.title;
 const activeStatuses = new Set([
   "submitting",
   "queued",
@@ -19,6 +20,7 @@ let state = { jobs: [], online: false },
 let submitting = false;
 let galleryRevision = "", galleryPromise = null, galleryTimer = null, galleryEpoch = 0;
 let galleryMutation = 0;
+let galleryShowHidden = readStore("gallery-show-hidden", false) === true;
 let galleryBulk = null;
 const imageConfirmation = new ComfyImageConfirmation();
 let mappingDraft = new Map(),
@@ -107,6 +109,7 @@ async function api(path, options = {}) {
   return body;
 }
 function showLogin() {
+  document.title = baseTitle;
   imageConfirmation.cancel();
   galleryBulk?.reset();
   galleryLibrary.close();
@@ -193,9 +196,20 @@ function selectTab(name) {
   else stopGallerySync();
 }
 function currentJob() {
+  // Jobs are creation-ordered and already restricted to this browser session.
+  // An older tab's remembered ID must not pin results after newer work arrives.
+  // "new" remains an explicit unsent draft, including settings-reuse flows.
   return selectedJob === "new"
     ? null
-    : state.jobs.find((item) => item.id === selectedJob) || state.jobs.at(-1);
+    : batchJob(state.jobs.at(-1));
+}
+function batchJob(job) {
+  if (!job?.batch_id) return job;
+  const members = state.jobs.filter((item) => item.batch_id === job.batch_id);
+  return members.find((item) => item.status === "running") ||
+    members.find((item) => activeStatuses.has(item.status)) ||
+    members.find((item) => item.status === "failed") ||
+    members.slice().reverse().find((item) => item.images?.length) || members.at(-1);
 }
 function syncJobMetrics(active) {
   const header = $("header-generation"),
@@ -257,7 +271,7 @@ function renderGenerationStats(job) {
   $("stat-gpu").textContent = numeric(hardware.utilization) ? Math.round(hardware.utilization) + "%" : "--";
 }
 function updateGenerate() {
-  const job = state.jobs.find((item) => item.id === selectedJob);
+  const job = currentJob();
   $("generate").disabled =
     busy ||
     !connected ||
@@ -269,6 +283,8 @@ function updateGenerate() {
   const feedback = generateFeedback.update({ jobs: state.jobs, selectedJob: job,
     busy, submitting, pending: !!pendingSubmission, connected, online: state.online, recovering });
   ComfyGenerateFeedback.paint($("generate"), $("generate-label"), feedback);
+  document.title = feedback.kind === "determinate"
+    ? `${Math.floor(feedback.progress * 100)}% · ${baseTitle}` : baseTitle;
   clearTimeout(generateFeedbackTimer);
   if (generateFeedback.feedback) {
     // One local redraw clears terminal feedback. No requests or new listeners.
@@ -343,7 +359,6 @@ async function loadSavedWorkflows() {
         await choosePreset("");
       }
     }
-    $("empty-presets").hidden = !!names.length || !!picker.querySelector('[data-reused-workflow]');
     $("workflow-source-note").hidden = !!names.length;
     $("workflow-source-note").textContent =
       "Save a workflow in ComfyUI’s workflows directory to select it here.";
@@ -545,10 +560,11 @@ function configurePromptToggle(input, wrap, toggle, editorKey, label) {
   return () => toggle.removeEventListener("click", click);
 }
 function control(field, container, hideLabel = false) {
+  if (field.role === "batch") field = { ...field, label: "Batch Count", kind: "int", options: null, min: 1, max: 20, step: 1 };
   const wrap = node("div", undefined, "control");
   if ((field.kind === "text" && !field.options) || ["seed", "lora_model"].includes(field.role))
     wrap.classList.add("wide");
-  const label = node("label", field.label);
+  const label = node("label", field.role === "batch" ? "Batch Count" : field.label);
   if (hideLabel) label.classList.add("visually-hidden");
   const inputId = "control-" + field.key;
   label.htmlFor = inputId;
@@ -781,7 +797,7 @@ const roleNames = {
   steps: "Steps",
   cfg: "CFG",
   seed: "Seed",
-  batch: "Batch size",
+  batch: "Batch Count",
   advanced: "Other advanced control",
 };
 function renderMappings() {
@@ -872,12 +888,19 @@ function requestId() {
 async function generate(event) {
   event.preventDefault();
   if (busy || !preset || !connected || recovering) return;
+  const batchField = preset.fields.find((field) => field.role === "batch");
+  const count = batchField ? Number(draft[batchField.key] ?? batchField.default) : 1;
+  if (!pendingSubmission && (!Number.isInteger(count) || count < 1 || count > 20)) {
+    notice("Batch Count must be a whole number from 1 to 20.");
+    return;
+  }
   const body = pendingSubmission || {
     request_id: requestId(),
     preset: preset.id,
     revision: preset.revision,
     values: draft,
     random_seed: randomSeed,
+    batch_count: count,
     disabled_loras: [...disabledLoras],
   };
   try { await submitGeneration(body); } catch { /* Existing notice explains the failure. */ }
@@ -890,10 +913,12 @@ async function submitGeneration(body) {
   writeStore("pending", pendingSubmission);
   try {
     const job = body.action ? await imageFeatureAPI.retry() : await api("/api/generate", {
+      timeoutMs: body.batch_count > 1 ? 60000 : 8000,
       method: "POST",
       body: JSON.stringify(body),
     });
-    if (job.prompt_history_notice) notice(job.prompt_history_notice);
+    if (job.batch_notice) notice(job.batch_notice);
+    else if (job.prompt_history_notice) notice(job.prompt_history_notice);
     pendingSubmission = null;
     writeStore("pending", null);
     selectedJob = job.id;
@@ -923,17 +948,31 @@ function refreshFullState() {
   if (fullStatePending) return;
   fullStateAgain = false;
   fullStatePending = true;
+  const epoch = recoveryEpoch;
   api("/api/state")
-    .then(applyState)
-    .catch(connectionFailure)
+    .then((value) => { if (epoch === recoveryEpoch) applyState(value); })
+    .catch((error) => { if (epoch === recoveryEpoch) connectionFailure(error); })
     .finally(() => {
+      if (epoch !== recoveryEpoch) return;
       fullStatePending = false;
       if (fullStateAgain) refreshFullState();
     });
 }
 function applyState(value) {
-  if (value.instance === state.instance && value.version < state.version)
-    return;
+  if (value.instance === state.instance && value.version < state.version) {
+    // Frequent progress/telemetry summaries can overtake a full response. Keep
+    // the newest live state, but accept missing details for the same job/version.
+    if (!value.partial && state.partial) {
+      const details = new Map(value.jobs.map((job) => [job.id, job]));
+      value = { ...state, partial: false, jobs: state.jobs.map((job) => {
+        const full = details.get(job.id);
+        return (!job.preset || (job.images || []).length !== job.image_count) &&
+          full && full.status === job.status && full.prompt_id === job.prompt_id &&
+          full.images?.length === job.image_count
+          ? { ...full, ...job, images: full.images } : job;
+      }) };
+    } else return;
+  }
   if (value.instance !== state.instance && value.partial) {
     refreshFullState();
     return;
@@ -1014,6 +1053,7 @@ function applyState(value) {
                 ? `Preparing another stage or saving results · ${job.preset_name}`
                 : `Preparing the workflow; models may take a while to load · ${job.preset_name}`
               : job.preset_name);
+    if (job.batch_id) $("job-detail").textContent = `Run ${job.batch_index} of ${job.batch_count} · ` + $("job-detail").textContent;
     $("progress").hidden = !["submitting", "queued", "running", "cancelling"].includes(job.status);
     $("progress").setAttribute("aria-label", $("job-title").textContent);
     if (job.status === "running" && job.progress) {
@@ -1117,6 +1157,30 @@ function renderImages(container, items, choose = null) {
     if (container.children[index] !== button) container.insertBefore(button, container.children[index] || null);
   });
 }
+function galleryVisibilityQuery() {
+  return wideLayout.matches && !galleryShowHidden ? "&include_hidden=0" : "";
+}
+function refreshGalleryVisibility(preserveCollection = false) {
+  galleryRevision = "";
+  stopGallerySync();
+  imageConfirmation.cancel();
+  galleryBulk?.reset();
+  if (preserveCollection && galleryLibrary.dialog.open) {
+    if (galleryLibrary.mode === "favourites") void galleryLibrary.refresh();
+  } else galleryLibrary.close();
+  if (galleryVisibilityQuery()) {
+    const oldGallery = gallery;
+    gallery = gallery.filter((item) => !String(item.subfolder || "").split("/").some((part) => part.startsWith(".")));
+    if ($("image-dialog").open && viewerItems === oldGallery) $("image-dialog").close();
+  }
+  renderImages($("gallery-grid"), gallery);
+  comparison.gallery(comparisonGallery());
+  galleryBulk?.gallery(gallery);
+  $("gallery-empty").hidden = !!gallery.length;
+  renderPreviewComparisonGallery();
+  syncSelectedImageActions();
+  void loadGallery();
+}
 function stopGallerySync() {
   clearTimeout(galleryTimer);
   galleryEpoch++;
@@ -1132,7 +1196,7 @@ function loadGallery(force = false) {
   $("refresh-gallery").disabled = true;
   galleryPromise = (async () => {
     try {
-      const result = await api(`/api/gallery?since=${encodeURIComponent(galleryRevision)}${force ? "&refresh=1" : ""}`);
+      const result = await api(`/api/gallery?since=${encodeURIComponent(galleryRevision)}${force ? "&refresh=1" : ""}${galleryVisibilityQuery()}`);
       if (epoch !== galleryEpoch) return;
       if (mutation !== galleryMutation) { refreshAgain = true; return; }
       galleryRevision = result.revision;
@@ -1583,6 +1647,7 @@ new ResizeObserver(() => {
   document.documentElement.style.setProperty("--generation-dock-height", `${height}px`);
 }).observe($("generation-dock"));
 wideLayout.addEventListener("change", () => {
+  refreshGalleryVisibility(true);
   imageConfirmation.cancel();
   galleryBulk?.reset();
   imageWorkflowDialogs?.close();
@@ -1653,7 +1718,9 @@ $("cancel").addEventListener(
     if (
       !selectedJob ||
       !confirm(
-        "Cancel this job? Running work is interrupted only when your ComfyUI supports safe per-job cancellation.",
+        currentJob()?.batch_id
+          ? "Cancel the remaining runs in this batch? Running work is interrupted only when ComfyUI supports safe per-job cancellation."
+          : "Cancel this job? Running work is interrupted only when your ComfyUI supports safe per-job cancellation.",
       )
     )
       return;
@@ -1797,7 +1864,16 @@ $("logout").addEventListener(
   }),
 );
 document.addEventListener("visibilitychange", () => {
-  document.hidden ? pauseConnection() : foreground();
+  if (document.hidden) {
+    // Keep the existing event stream for tab-title progress and completion.
+    // Real page suspension/navigation still cancels through pagehide.
+    imageConfirmation.cancel();
+    galleryBulk?.reset();
+    galleryLibrary.close();
+    saveDraft();
+    saveUI();
+    stopGallerySync();
+  } else foreground();
 });
 window.addEventListener("pagehide", pauseConnection);
 window.addEventListener("pageshow", foreground);
@@ -1831,8 +1907,11 @@ $("import-name").addEventListener("input", saveUI);
 if ("serviceWorker" in navigator && window.isSecureContext)
   navigator.serviceWorker.register("/sw.js").catch(() => {});
 function connectionFailure(error) {
-  if (document.hidden || !$("login").hidden) return;
   connected = false;
+  if (document.hidden || !$("login").hidden) {
+    updateGenerate();
+    return;
+  }
   $("offline").hidden = false;
   $("connection").textContent = "Reconnecting…";
   $("connection").classList.remove("online");
@@ -1844,6 +1923,11 @@ const imageDetails = new ImageDetails({ api });
 let cleaningVRAM = false;
 let selectedImageActions = null, imageWorkflowDialogs = null, imageActionSignature = "";
 const desktopImages = new ComfyDesktopImagePresentation({ media: wideLayout,
+  showHidden: () => galleryShowHidden, changeHidden: (enabled) => {
+    galleryShowHidden = enabled;
+    writeStore("gallery-show-hidden", enabled);
+    refreshGalleryVisibility();
+  },
   actions: $("selected-image-actions"), preview: $("preview-reuse-actions"),
   viewer: $("reuse-image").parentElement, reuse: $("same-seed"), variation: $("variation"), images: $("job-images"),
   compare: guarded(comparePreviewImage),
@@ -1870,7 +1954,7 @@ const galleryLibrary = new ComfyGalleryLibrary({ renderImages, openImage,
   load: async (mode) => {
     if (!connected || recovering || document.hidden || $("workspace").hidden)
       throw new Error("Reconnect before refreshing this collection.");
-    if (mode === "favourites") return (await api("/api/gallery?favourites=1&refresh=1")).filter((item) => item.kept);
+    if (mode === "favourites") return (await api(`/api/gallery?favourites=1&refresh=1${galleryVisibilityQuery()}`)).filter((item) => item.kept);
     const entries = await imageFeatureAPI.wastebin();
     return entries.map((entry) => ({ ...entry, id: entry.token, url: entry.thumbnail, thumbnail: null }));
   } });

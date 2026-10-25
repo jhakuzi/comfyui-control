@@ -1,5 +1,161 @@
 # Session handoff — 2026-10-24
 
+## Authorized 1.2.0 release / hidden-folder Gallery switch — 2026-10-25
+
+User requested the Desktop header switch and explicitly authorized push, main
+merge and COPR publication after successful tests. This includes the pending
+shared-delete, preview recovery, tab-percentage, Batch Count and text changes
+since 1.1.0. Version is 1.2.0-1. Earlier no-publication notes are historical.
+
+Desktop's placement adapter creates a small folder/switch control directly beside
+the original brand, with existing dark/yellow styling, keyboard switch semantics,
+accessible name and browser-persisted setting (off by default). Phone restores the
+original brand placement and has no switch. Shared Gallery logic supplies the
+per-request filter; neither presentation adapter nor the switch mutates files.
+
+`include_hidden=0` excludes dot-prefixed relative folder components before the
+recent limit. Favourites/Compare follow the view; Wastebin remains complete. API
+and Phone defaults include all folders. Bounded scan/cache retention backfills the
+visible recent page even if newer hidden images fill the ordinary page. Existing
+output, symlink, exact-version and permission safeguards remain. Late responses
+are guarded; filter changes reconcile selection; resize keeps collections open.
+
+Verification: 517 pytest tests passed, including new local/network hidden-folder,
+recent-page backfill and independent-client revision tests. Gallery switch checks
+passed in Chromium/WebKit/Firefox; preview recovery, Batch Count and collections
+regressions passed in Chromium/WebKit. Additional narrow-header/live-metrics
+checks passed in all three browsers; screenshots were visually reviewed. ZIP
+contents match the tested source, source RPM built and diff check passed. No real GPU or user output changes.
+
+
+## Returning-tab preview selection fix — 2026-10-25
+
+User confirmed Ctrl+Shift+R still showed the previous result. Reproduced the bug
+in Firefox with two Comfy Control tabs sharing a browser session: the second tab
+retained the first completed job ID while a later job finished in the first tab.
+Returning/focusing the stale tab kept displaying old.png and could persist that
+old selection again. The previous missing-detail response fix did not address
+this independent selection bug. The pre-fix regression failed with old.png where
+new.png was expected.
+
+`currentJob()` now derives the current run from the latest creation-ordered job
+in the server's already browser-private state; a stale remembered ID cannot pin
+Preview & results to an earlier generation. The explicit "new" draft sentinel
+is preserved, and batchJob still follows active runs, then terminal diagnostics/
+results within the newest batch. No job submission, prompt settings or server
+privacy rules change. The browser regression now opens a second same-session tab,
+returns to it after generation and checks the newest preview again after reload.
+Shell cache bumped; user testing checkout must fast-forward and app restart/page
+reload are needed. Verification: 512 pytest tests passed. Background-return and
+batch checks passed in Chromium/WebKit/Firefox for Desktop and Phone; Desktop
+submission transitions passed in Chromium/WebKit (eight script runs). Additional
+three-engine runs explicitly force the older saved job ID before reloading and
+verify the newest preview. Draft preservation and exact submission counts remain
+covered. `git diff --check` passed. No release publication is part of this fix.
+
+
+## Remove workflow import hint — 2026-10-25
+
+Removed the requested API-format import onboarding paragraph from the shared
+workflow picker and its obsolete visibility assignment. Cache bumped; the frozen
+presentation check normalizes only this explicitly authorized removal.
+
+
+## Firefox tab-title verification / testing checkout update — 2026-10-25
+
+The user reported no sampling percentage in Firefox. Read-only inspection showed
+`/home/jhaku/Downloads/Testing/comfyui-control-integration-testing` was still at
+`7e53df5` (1.1.0), which has no document.title percentage code. The published RPM
+also predates this feature. No Firefox-specific runtime patch was needed.
+Both background_results_browser and batch_count_browser now accept Firefox;
+both passed in isolated Playwright Firefox 157 on Desktop (1440x1000) and Phone
+(390x844). Covered 25%/65% hidden-tab titles, reset, completed preview recovery,
+run progression, fixed/random seeds, drafts and cancellation. These are fixtures,
+not the user's Firefox profile or real GPU inference. Update the clean testing
+checkout by fast-forward only; user must restart that app and reload the WebUI.
+No GitHub push or release is included.
+
+
+## Batch Count behavior — 2026-10-25
+
+The user explicitly confirmed Batch Count means repeated separate workflow runs,
+with a new random seed per run or the exact fixed seed for every run. The shared
+Desktop/Phone batch-role input is now an app-level count (1..20, retaining the
+existing global 20-unfinished-job limit). It submits `batch_count` alongside the
+existing UUID journal request. Mapped workflow batch inputs become 1 in each
+independent prompt; other graph nodes/wiring/values stay unchanged. Older clients
+and internal image workflows without `batch_count` retain their saved behavior.
+
+Backend admission/validation reserves every run UUID and exact seed durably before
+the first POST. Root UUID retries/restarts never submit any child again. Rejected
+or uncertain submissions stop the remaining runs, preserve accepted work, mark
+unsent runs cancelled and expose a partial-submission notice. A cancelled in-flight
+POST stays unknown. Durable unsent markers distinguish never-sent runs on restart.
+Changed output scope stops further submission. No resume automatically sends work.
+
+Jobs carry batch ID/index/count and the shared UI follows the active run, then the
+last available result (retaining failure diagnostics). Generate stays disabled
+through remaining runs; run count/drafts persist on reload. Cancel stops unsent
+runs, removes this owner's queued prompts first, and uses only the existing safe
+per-job interruption for running work. Other browsers' prompts are not cancelled.
+Fixed seed can reuse ComfyUI's cached result, as the existing hint explains.
+
+The shared label and new suggested mapping label read Batch Count. Shell cache
+is bumped. Verification: all 512 pytest tests passed, including new independent-run,
+seed, concurrent retry, queue admission, partial acceptance/rejection, crash journal,
+owner-isolated cancellation and safe-interruption failure checks. Eight browser
+script runs passed in Chromium/WebKit: Batch Count and background recovery on
+Desktop/Phone, shared Generate progress and Desktop submission transitions.
+`git diff --check` passed. No real inference was used.
+No version bump, push, merge or release is included in this change.
+
+## Background results and browser-tab sampling progress — 2026-10-25
+
+On `testing/shared-image-delete`, the user also requested a stale Preview & results
+fix after tab switches and a percentage in the browser tab during sampling.
+Full state responses can be overtaken by frequent partial SSE updates. Previously
+all older responses were discarded, including the only completed-image details,
+so the Desktop fallback could continue showing the previous completed image.
+Now a same-instance older full response may fill missing details only for matching
+job ID, prompt ID, status and image count, retaining all newer summary fields.
+Full-state request callbacks are guarded by the recovery epoch across suspension.
+
+Ordinary visibility changes save drafts/UI and stop Gallery synchronization but
+retain the existing SSE stream, allowing background sampling progress and terminal
+results. Pagehide, offline/logout and real connection failures retain cancellation/
+resume behavior. Browser suspension is still recovered using state/resume; there
+is no new polling or prompt resubmission. The tab title uses the shared Generate
+feedback's validated sampling fraction (`65% · original title`), clearing the
+percentage for processing/loading, terminal states and connection loss. Login
+also restores the original title. Service worker cache is bumped.
+
+Verification: 496 pytest tests passed. Six browser-script runs passed in Chromium
+and WebKit: the new background/completion-race check (Desktop and Phone), Desktop
+submission/preview transitions, and shared Generate progress (Desktop and Phone).
+Draft preservation, background 25%/65% titles, completion-title reset, simulated
+BFCache resume and exactly two intended submissions are covered. No real GPU or
+physical browser suspension was used. No release/push is included in this change.
+
+
+
+## Shared Delete permission — 2026-10-25
+
+The user requested deletion from any browser and removal of the generating-browser
+restriction message. `testing/shared-image-delete` changes the shared backend
+capability and mutation checks, so Desktop/Phone single and bulk Delete work for
+all clients admitted by WebUI access rules. Image-settings sharing is independent.
+Permanent deletion also no longer depends on private source-browser metadata;
+legacy bin records retain their recorded owner for worker validation. Confirmed
+virtual deletion still only marks the bin; permanent deletion retains explicit
+token confirmation, current output scope and all filesystem identity safeguards.
+Authentication, Host/Origin, job/cancellation and prompt/metadata privacy remain.
+Verification: all 496 pytest tests passed, including cross-browser HTTP deletion,
+authentication/Origin rejection, private job/metadata boundaries, local/network
+output, confirmation/stale-version checks and permanent-delete identity guards.
+`git diff --check` passed. No frontend assets changed.
+No version bump or release publication is part of this change.
+
+
 ## Authorized 1.1.0 release — 2026-10-25
 
 The user confirmed the installer works in a Fedora VM and authorized the final

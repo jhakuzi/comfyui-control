@@ -131,7 +131,7 @@ def suggested_mappings(graph, info=None):
         "steps": ("steps", "Steps"), "cfg": ("cfg", "CFG"), "seed": ("seed", "Seed"),
         "guidance": ("cfg", "Guidance"),
         "noise_seed": ("seed", "Seed"), "width": ("width", "Width"), "height": ("height", "Height"),
-        "batch_size": ("batch", "Batch size"), "lora_name": ("lora_model", "LoRA"),
+        "batch_size": ("batch", "Batch Count"), "lora_name": ("lora_model", "LoRA"),
         "strength_model": ("lora_strength", "Model strength"), "strength_clip": ("lora_strength", "CLIP strength"),
     }
     resolution = {"megapixel": ("resolution_mp", "Megapixels"), "megapixels": ("resolution_mp", "Megapixels"),

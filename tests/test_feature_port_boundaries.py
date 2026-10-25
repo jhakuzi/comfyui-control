@@ -41,6 +41,8 @@ def test_existing_main_assets_ui_settings_and_versions_are_unchanged():
         assert (file.name in (web / 'sw.js').read_text()) is enabled
     # Strip only the authorized additions; retain the original Phone markup.
     original = (web / 'index.html').read_text()
+    # Restore only the explicitly removed onboarding hint for the frozen baseline.
+    original = original.replace('              <p id="comfy-offline"', '              <p id="empty-presets" class="hint">\n                Import an API-format workflow below to get started.\n              </p>\n' + '              <p id="comfy-offline"', 1)
     for asset in ACTIVE_ASSETS:
         tag = f'<link rel="stylesheet" href="/{asset}" />' if asset.endswith('.css') else f'<script src="/{asset}" defer></script>'
         original = original.replace('    ' + tag + '\n', '')
@@ -49,7 +51,7 @@ def test_existing_main_assets_ui_settings_and_versions_are_unchanged():
         '<div class="actions" id="preview-reuse-actions">', '<div class="actions">').replace(
         '<span id="generate-label" data-generate-label>✦ Generate</span>', '<span aria-hidden="true">✦</span> Generate')
     assert hashlib.sha256(original.encode()).hexdigest() == BASELINE['files']['comfyui_control/mobile/web/index.html']
-    original_sw = (web / 'sw.js').read_text().replace('comfy-control-desktop-viewer-keys-1', 'comfy-control-mobile-1.0.1')
+    original_sw = (web / 'sw.js').read_text().replace('comfy-control-hidden-folder-toggle-1', 'comfy-control-mobile-1.0.1')
     for asset in ACTIVE_ASSETS:
         original_sw = original_sw.replace(f'  "/{asset}",\n', '')
     assert hashlib.sha256(original_sw.encode()).hexdigest() == BASELINE['files']['comfyui_control/mobile/web/sw.js']

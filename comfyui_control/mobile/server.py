@@ -213,8 +213,11 @@ class MobileHTTP:
         return json_response(self.service.public_job(await self.service.cancel(request.match_info["id"], owner=request[OWNER])))
 
     async def gallery(self, request):
+        if request.query.get('include_hidden', '1') not in {'0', '1'}:
+            raise ValueError('include_hidden must be 0 or 1.')
         images = await self.service.gallery(owner=request[OWNER], force=request.query.get('refresh') == '1',
-                                           favourites=request.query.get('favourites') == '1')
+                                           favourites=request.query.get('favourites') == '1',
+                                           include_hidden=request.query.get('include_hidden', '1') == '1')
         if 'since' not in request.query:
             return json_response(images)
         revision = hashlib.sha256(json.dumps(images, sort_keys=True).encode()).hexdigest()

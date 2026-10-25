@@ -190,3 +190,21 @@ Open the regular ComfyUI WebUI at least once, load each installed workflow and u
 ComfyUI Manager to install missing custom nodes; restart ComfyUI when prompted.
 Models and referenced input images must also be available. The installer copies
 JSONs only. See [bundled workflow details](BUNDLED_WORKFLOWS.md).
+
+## Batch Count in Desktop and Phone generation settings
+
+Batch Count queues separate workflow runs. For example, **4** queues four prompts
+with mapped workflow batch inputs set to **1**, rather than one four-image batch.
+The count is from 1 to 20, within the app's existing limit of 20 unfinished jobs.
+Other workflow settings and connections are preserved.
+
+Random seed mode draws a fresh seed for each run. Fixed seed mode keeps the exact
+chosen seed for every run; ComfyUI may reuse cached results for identical inputs.
+The status shows **Run 2 of 4**, follows the current run and shows the latest result.
+All saved images are available in Gallery. Unsent edits and the count survive reload.
+
+Cancel stops the remaining batch runs. Pending prompts are removed first; running
+work is interrupted only when ComfyUI supports safe per-job cancellation. Other
+clients' work is left alone. A rejected or uncertain submission stops further
+runs and reports the issue. Reconnect/retry checks the existing UUID journal and
+never blindly queues the batch again.
