@@ -168,6 +168,13 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   prompt/status/image count, preserving newer summaries and recovery epochs.
   Browser titles use validated shared sampling feedback and reset outside sampling.
 
+- Batch Count is an app-level repeat count (1..20 under the existing total queue
+  limit). Explicit `batch_count` requests render mapped batch inputs as 1 for each
+  separate prompt; legacy/internal requests without it keep saved batch semantics.
+  Preserve every child's durable UUID/seed, owner/scope, uncertain POST journal,
+  safe group cancellation and no-resubmission behavior. UI follows the current
+  run within its batch, preserving drafts and earlier results/failure diagnostics.
+
 ## Data and safety contracts
 
 - Act on the explicitly selected image and version. Ignore stale async responses

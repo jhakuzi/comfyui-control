@@ -1,5 +1,38 @@
 # Session handoff — 2026-10-24
 
+## Batch Count behavior — 2026-10-25
+
+The user explicitly confirmed Batch Count means repeated separate workflow runs,
+with a new random seed per run or the exact fixed seed for every run. The shared
+Desktop/Phone batch-role input is now an app-level count (1..20, retaining the
+existing global 20-unfinished-job limit). It submits `batch_count` alongside the
+existing UUID journal request. Mapped workflow batch inputs become 1 in each
+independent prompt; other graph nodes/wiring/values stay unchanged. Older clients
+and internal image workflows without `batch_count` retain their saved behavior.
+
+Backend admission/validation reserves every run UUID and exact seed durably before
+the first POST. Root UUID retries/restarts never submit any child again. Rejected
+or uncertain submissions stop the remaining runs, preserve accepted work, mark
+unsent runs cancelled and expose a partial-submission notice. A cancelled in-flight
+POST stays unknown. Durable unsent markers distinguish never-sent runs on restart.
+Changed output scope stops further submission. No resume automatically sends work.
+
+Jobs carry batch ID/index/count and the shared UI follows the active run, then the
+last available result (retaining failure diagnostics). Generate stays disabled
+through remaining runs; run count/drafts persist on reload. Cancel stops unsent
+runs, removes this owner's queued prompts first, and uses only the existing safe
+per-job interruption for running work. Other browsers' prompts are not cancelled.
+Fixed seed can reuse ComfyUI's cached result, as the existing hint explains.
+
+The shared label and new suggested mapping label read Batch Count. Shell cache
+is bumped. Verification: all 512 pytest tests passed, including new independent-run,
+seed, concurrent retry, queue admission, partial acceptance/rejection, crash journal,
+owner-isolated cancellation and safe-interruption failure checks. Eight browser
+script runs passed in Chromium/WebKit: Batch Count and background recovery on
+Desktop/Phone, shared Generate progress and Desktop submission transitions.
+`git diff --check` passed. No real inference was used.
+No version bump, push, merge or release is included in this change.
+
 ## Background results and browser-tab sampling progress — 2026-10-25
 
 On `testing/shared-image-delete`, the user also requested a stale Preview & results
