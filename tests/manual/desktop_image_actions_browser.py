@@ -436,11 +436,11 @@ async def main(engine, output):
             await expect(heart).to_have_attribute('aria-pressed','true')
             await page.unroute(f'**/api/images/{second}/actions',fail)
             # Delete cancellation and confirmation use the existing Wastebin.
-            page.once('dialog',lambda dialog:dialog.dismiss())
             await delete.click()
+            await page.locator('#cancel-image-confirm').click()
             assert not service.image_library.deleted
-            page.once('dialog',lambda dialog:dialog.accept())
             await delete.click()
+            await page.locator('#accept-image-confirm').click()
             await until(lambda:bool(service.image_library.deleted))
             await expect(page.locator('#image-caption')).to_have_text('first.png')
             assert all((images/name).read_bytes()==data for name,data in originals.items())

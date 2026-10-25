@@ -62,7 +62,7 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   bump the shell cache when shipping changed assets. Never cache private APIs or
   images. Preserve reduced-motion support.
 
-## Current implementation contracts (1.0.5)
+## Current implementation contracts (1.1.0)
 
 - Workflow/model refresh reconciles option catalogues in place when graph/control
   structure is unchanged. Preserve select/button DOM identity, handlers, drafts,
@@ -117,6 +117,36 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   existing permanent-delete API. New entries stay out of that snapshot; failures
   stay in the bin with errors. Disable duplicate actions while clearing. An uncertain
   response requires Refresh, never automatic resubmission.
+- Desktop Gallery splits Select two images beside a multi-image Select mode.
+  Bulk actions live in a right-click/Shift+F10 menu on selected thumbnails;
+  selection count/help remain hidden and feedback overlays preserve grid position. Preserve keyboard
+  navigation, viewport bounds and dismissal on lifecycle/selection changes.
+  Reuse the existing per-image action route and controller reconciliation; retain
+  exact-version snapshots, permissions, partial failures and uncertain-result
+  handling. No bulk selection persists. Compare and bulk selection are mutually
+  exclusive; leaving Gallery or changing presentation clears bulk selection and
+  stops further batch requests. Phone keeps its two-button comparison row and has
+  a pictographic Select icon next to Refresh. Use the same selection/runner/menu;
+  a 550ms hold on a selected Phone thumbnail opens it. Preserve movement, scroll,
+  pointer cancellation/multitouch/lifecycle guards and suppress the release click.
+  Keep 48px Phone targets and existing 8px gaps while compacting vertical spacing.
+- The normal Desktop Gallery image viewer uses Left/Right for navigation,
+  Backspace for the existing confirmed single Delete and Space for the current
+  image/version in the shared bulk selection. Retain selections while browsing;
+  right-click uses the same bulk menu within the modal top layer. Exclude typing,
+  nested dialogs/menus, repeats and pending actions from shortcuts. Phone remains
+  unaffected. Restore menu/feedback nodes when the viewer closes.
+- `feature_image_confirm.js` supplies the shared in-app confirmation dialog for
+  single/bulk Delete and Clear Bin. Keep Cancel/Escape, initial Cancel focus,
+  snapshot/stale guards and separate virtual/permanent deletion wording.
+- Confirmed Clear Bin may complete a missing original when the saved root/parent
+  identities match. For an NFS remount that only renumbered st_dev, metadata-only
+  cleanup may accept matching inode IDs for the full parent chain on a currently
+  mounted NFS root, without nested device changes; recheck directories and mount.
+  This exception must never unlink an existing file or relax its full fingerprint
+  check. Missing/replaced storage, parents, symlinks, ownership and permission
+  failures remain guarded. No listing silently removes missing-file markers.
+  Preview failures show filenames and storage guidance.
 - Both Desktop Preview and enlarged viewer use Compare instead of New variation.
   One second-image picker reuses the shared gallery renderer/loader and existing
   comparison dialog. Keep drafts/selection on cancel, ignore late responses, exclude
@@ -158,6 +188,26 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   atomic metadata writes and corruption safeguards. Do not disturb user settings
   or unrelated mounts; do not start competing app instances against one config.
 
+## Bundled workflow installer
+
+- `bundled_workflows.py` is the standard-library-only inspect/copy worker;
+  `workflow_widgets.py` is the optional native dialog. The main app offers it after
+  existing-folder selection and successful fresh setup, and has a permanent button
+  beside Settings. Do not prompt repeatedly on startup or start ComfyUI during copying.
+- `workflow_webui.py` checks API readiness asynchronously. Its explicit button may
+  offer one controller-managed start after confirmation, then wait for readiness
+  before opening the browser. Never duplicate a starting/running process; stop
+  pending opening on cancellation, failure, changed installations or timeout.
+- Target exactly `<selected ComfyUI>/user/default/workflows`. Preserve bundled JSON
+  bytes. Default to skipping existing files; replacement requires a reviewed exact
+  file identity and confirmation of those names. Keep symlink/root/directory checks,
+  atomic writes, per-file errors, bounded workers and uncertain-result handling.
+- Show the one-time regular ComfyUI/Manager setup notice and an explicit Open ComfyUI
+  WebUI button using the configured backend address. Never install nodes/models,
+  execute workflows or modify other installations as part of copying files.
+- Use disposable installations in `tests/test_bundled_workflows.py` for verification;
+  do not test installation/replacement on the user's real ComfyUI folder.
+
 ## Local setup and verification
 
 Run from the checkout root; use this checkout's environment, not paths from a
@@ -181,6 +231,7 @@ For WebUI changes, install optional Playwright and its browsers:
 .venv/bin/python tests/manual/phone_image_actions_browser.py --browser chromium --output /tmp/control-phone-actions-check
 .venv/bin/python tests/manual/gallery_collections_browser.py --browser chromium --output /tmp/control-gallery-library-check
 .venv/bin/python tests/manual/gallery_library_updates_browser.py --browser chromium --output /tmp/control-shared-library-check
+.venv/bin/python tests/manual/phone_gallery_bulk_browser.py --browser chromium --output /tmp/control-phone-gallery-check
 git diff --check
 ```
 

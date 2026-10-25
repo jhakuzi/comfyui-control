@@ -149,8 +149,8 @@ async def main(engine, output):
             clears = []
             phone.on('request', lambda request: clears.append(request.post_data_json)
                      if request.url.endswith('/api/trash/empty') else None)
-            phone.once('dialog', lambda dialog: dialog.dismiss())
             await clear.click()
+            await phone.locator('#cancel-image-confirm').click()
             assert not clears and (images / 'a.png').exists() and (images / 'b.png').exists()
             original_io = service.network_io
             async def partial_failure(operation, data, **kwargs):
@@ -159,12 +159,11 @@ async def main(engine, output):
                 return await original_io(operation, data, **kwargs)
             service.network_io = partial_failure
             later = []
-            async def confirm_with_new_entry(dialog):
-                assert '2 images' in dialog.message and 'cannot be undone' in dialog.message
-                later.append(await mark_deleted('later.png'))
-                await dialog.accept()
-            phone.once('dialog', confirm_with_new_entry)
             await clear.click()
+            await expect(phone.locator('#image-confirm-message')).to_contain_text('2 images')
+            await expect(phone.locator('#image-confirm-message')).to_contain_text('cannot be undone')
+            later.append(await mark_deleted('later.png'))
+            await phone.locator('#accept-image-confirm').click()
             status = phone.locator('#gallery-library-dialog [role="status"]')
             await expect(status).to_contain_text('Fixture read-only storage')
             await expect(phone.locator('#gallery-library-dialog .image-grid > button')).to_have_count(2)
@@ -185,8 +184,8 @@ async def main(engine, output):
                 await clear_release.wait()
                 await route.continue_()
             await desktop.route('**/api/trash/empty', hold_clear)
-            desktop.once('dialog', lambda dialog: dialog.accept())
             await desktop.locator('#clear-gallery-bin').click()
+            await desktop.locator('#accept-image-confirm').click()
             await asyncio.wait_for(clear_started.wait(), 5)
             await expect(desktop.locator('#clear-gallery-bin')).to_be_disabled()
             await expect(desktop.locator('#refresh-gallery-library')).to_be_disabled()
@@ -213,8 +212,8 @@ async def main(engine, output):
                 assert response.ok
                 await route.abort('failed')
             await desktop.route('**/api/trash/empty', lose_reply)
-            desktop.once('dialog', lambda dialog: dialog.accept())
             await desktop.locator('#clear-gallery-bin').click()
+            await desktop.locator('#accept-image-confirm').click()
             await expect(desktop.locator('#gallery-library-dialog [role="status"]')).to_contain_text('Use Refresh to check Wastebin')
             assert len(lost_attempts) == 1 and not (images / 'uncertain.png').exists()
             await desktop.unroute('**/api/trash/empty', lose_reply)

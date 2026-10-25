@@ -221,7 +221,83 @@ def test_permanent_delete_requires_confirmation_and_preserves_other_files(tmp_pa
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize('failure', ['replacement', 'symlink', 'parent', 'root', 'missing'])
+@pytest.mark.parametrize('network', [False, True])
+def test_clear_bin_completes_confirmed_missing_original_without_unlinking_replacements(tmp_path, network):
+    async def scenario():
+        output = tmp_path / 'out'
+        path = output / 'nested' / 'gone.png'
+        picture(path)
+        picture(output / 'unselected.png')
+        untouched = (output / 'unselected.png').read_bytes()
+        service = MobileService(tmp_path / 'data', MobileSettings(), output)
+        service.network_output = network
+        token = await delete_image(service, 'gone.png')
+        path.unlink()  # Removed outside the app, or an earlier unlink lost its reply.
+        assert len(await service.image_trash(BOB)) == 1
+        result = await service.delete_permanently(BOB, dict(confirm=True, tokens=[token]))
+        assert result['results'] == [dict(token=token, deleted=True)]
+        assert await service.image_trash(ALICE) == []
+        picture(path)  # A future file at the same name is outside this tombstone.
+        with pytest.raises(ValueError):
+            await service.delete_permanently(ALICE, dict(confirm=True, tokens=[token]))
+        assert path.is_file() and (output / 'unselected.png').read_bytes() == untouched
+        reopened = MobileService(tmp_path / 'data', MobileSettings(), output)
+        assert await reopened.image_trash(BOB) == []
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('kind', ['nfs', 'nfs4'])
+@pytest.mark.parametrize('subfolder', ['', 'nested'])
+def test_missing_original_after_nfs_device_renumber_only_completes_metadata(tmp_path, monkeypatch, kind, subfolder):
+    from comfyui_control import network_output
+    root = tmp_path / 'out'
+    path = root / subfolder / 'gone.png'
+    picture(path)
+    descriptor = dict(filename=path.name, subfolder=subfolder, type='output', modified=str(path.stat().st_mtime_ns))
+    identity = virtual_image(root, 'identify', dict(image=descriptor))
+    for directory in identity['directories']:
+        directory[0] += 1  # Saved st_dev from before an NFS remount.
+    identity['file'][0] += 1
+    path.unlink()
+    monkeypatch.setattr(network_output, 'mount_record', lambda where: (kind, 'fixture:/output'))
+    monkeypatch.setattr(network_output.os, 'unlink', lambda *a, **k: pytest.fail('Missing-file cleanup must never unlink'))
+    assert virtual_image(root, 'delete', dict(image=descriptor, identity=identity)) == dict(ok=True, missing=True)
+    with pytest.raises(FileNotFoundError):
+        virtual_image(root, 'wastebin-read', dict(image=descriptor, identity=identity))
+
+
+@pytest.mark.parametrize('failure', ['unmounted', 'autofs', 'local', 'parent-inode', 'root-inode',
+                                     'nested-device', 'bad-identity', 'changed-mount', 'existing-file'])
+def test_nfs_missing_cleanup_keeps_storage_and_existing_file_guards(tmp_path, monkeypatch, failure):
+    from comfyui_control import network_output
+    root = tmp_path / 'out'
+    path = root / 'nested' / 'one.png'
+    picture(path)
+    descriptor = dict(filename=path.name, subfolder='nested', type='output', modified=str(path.stat().st_mtime_ns))
+    identity = virtual_image(root, 'identify', dict(image=descriptor))
+    for directory in identity['directories']:
+        directory[0] += 1
+    identity['file'][0] += 1
+    if failure != 'existing-file':
+        path.unlink()
+    kind = {'unmounted': None, 'autofs': ('autofs', 'systemd-1'), 'local': ('ext4', '/dev/fixture')}.get(
+        failure, ('nfs4', 'fixture:/output'))
+    if failure == 'parent-inode': identity['directories'][-1][1] += 1
+    if failure == 'root-inode': identity['directories'][0][1] += 1
+    if failure == 'nested-device': identity['directories'][-1][0] += 1
+    if failure == 'bad-identity': identity['directories'] = [['invalid']]
+    calls = []
+    def mounted(where):
+        calls.append(where)
+        return ('nfs4', 'different:/export') if failure == 'changed-mount' and len(calls) > 1 else kind
+    monkeypatch.setattr(network_output, 'mount_record', mounted)
+    monkeypatch.setattr(network_output.os, 'unlink', lambda *a, **k: pytest.fail('Must not unlink a changed file/location'))
+    with pytest.raises(ValueError, match='changed'):
+        virtual_image(root, 'delete', dict(image=descriptor, identity=identity))
+    if failure == 'existing-file': assert path.is_file()
+
+
+@pytest.mark.parametrize('failure', ['replacement', 'symlink', 'parent', 'root', 'missing-parent', 'missing-root'])
 def test_permanent_delete_rejects_changed_files_or_locations(tmp_path, failure):
     async def scenario():
         output = tmp_path / 'out'
@@ -245,12 +321,15 @@ def test_permanent_delete_rejects_changed_files_or_locations(tmp_path, failure):
         elif failure == 'root':
             output.rename(tmp_path / 'unmounted')
             picture(path)
-        else:
+        elif failure == 'missing-parent':
             path.unlink()
+            path.parent.rmdir()
+        else:
+            output.rename(tmp_path / 'missing-root')
         result = await service.delete_permanently(ALICE, {'confirm': True}, token)
         assert result['results'][0]['error']
         assert (tmp_path / 'outside.png').is_file()
-        if failure != 'missing':
+        if failure not in {'missing-parent', 'missing-root'}:
             assert path.exists()
         reopened = MobileService(tmp_path / 'data', MobileSettings(), output)
         entries = await reopened.image_trash(ALICE)

@@ -1,5 +1,250 @@
 # Session handoff — 2026-10-24
 
+## Authorized 1.1.0 release — 2026-10-25
+
+The user confirmed the installer works in a Fedora VM and authorized the final
+start-before-open addition, GitHub testing-branch push, main merge and COPR build.
+This supersedes earlier testing-only restrictions. Version is 1.1.0-1.
+
+`workflow_webui.py` uses Qt asynchronous networking to check a bounded
+`/system_stats` response. Ready servers open directly, including externally
+started servers. Unavailable endpoints with an idle controller offer one explicit
+start through the existing controller. Starting/running/restarting processes are
+only waited for. A stopped/crashed startup, changed selected installation, wrong
+API response or timeout never triggers a duplicate start or late browser opening.
+Closing cancels the pending opening, while an explicitly started server continues.
+All start tests use HTTP/controller fixtures; no real ComfyUI server was launched.
+
+The release also includes all reviewed Gallery/Phone/viewer changes and bundled
+workflow installation since 1.0.5. Stable download ZIP/source RPM are refreshed;
+Verification: 493 pytest tests passed, including native readiness/start fixtures;
+six Gallery browser runs passed (viewer shortcuts, Phone bulk actions and shared
+collections, each in Chromium and WebKit). ZIP contents match the new module and
+all three bundled workflow JSONs. Source RPM built successfully; diff check passed.
+GitHub/COPR result links will be recorded after publication.
+
+## Optional native workflow installer — 2026-10-25
+
+The implementation is on `testing/desktop-gallery-bulk`, ready for the user's
+single visual/functional review. Version remains 1.0.5; no merge/push/release/COPR
+operation is authorized by this implementation request.
+
+The native desktop app has Install bundled workflows beside Settings, preserving
+the existing three-row control area and terminal height. The same optional dialog
+is offered after existing-folder selection, a changed Settings installation path,
+or successful fresh Comfy CLI setup. It is offered at most once per selected path
+per app session; ordinary startup does not prompt. Manual access always remains.
+
+The compact dialog lists all three workflows selected by default, displays
+`<selected ComfyUI>/user/default/workflows`, skips existing files by default,
+requires filename confirmation for replacements, and reports installed/skipped/
+failed results. It includes the agreed one-time regular ComfyUI/Manager setup
+notice and Open ComfyUI WebUI button using the configured regular backend URL.
+No custom nodes/models are installed and no workflow or ComfyUI server is executed.
+
+`bundled_workflows.py` performs inspect/install in an isolated BackgroundProcess
+worker, leaving Qt responsive on slow storage. Inspection is read-only/cancellable;
+copying is bounded and duplicate actions are disabled. Check the selected root,
+no-follow parent directories, reviewed file identities and recheck before atomic
+writes. Newly appeared or changed files cannot be silently replaced. Partial
+errors are reported; a timeout requires Refresh, without automatic write retry.
+Cancelled/closed dialogs release workers. Installer tests use temporary fake
+ComfyUI roots only; no real user workflows have been installed or replaced.
+
+Verification: 476 pytest tests passed, with final native installer/setup/UI/monitor
+and protected-boundary checks also passing after dialog sizing/cleanup refinements.
+The dialog and successful three-file result were rendered and inspected using a
+disposable installation. The user's requested final manual review remains pending.
+
+The new native app hash is updated in the protected baseline for this authorized
+feature; other frozen files/versions remain unchanged. The bundled JSONs and their
+packaging rules remain unchanged. See `docs/BUNDLED_WORKFLOWS.md` and USAGE.md.
+
+## Bundled workflows copied — 2026-10-25
+
+The user authorized copying VeryComfy, OfficialComfy-SeedVR_Upscaler and
+VeryComfy_Qwen21_Turbo_EDIT_ONLY from their configured ComfyUI installation.
+The correct source is `user/default/workflows`, not `user/workflows`. Three saved
+editor JSONs are copied byte-for-byte to `comfyui_control/assets/workflows/`.
+Credential-pattern checks found no flags; no nodes/links/prompts/editor state were
+rewritten. Wheel package data and the app ZIP builder now include these JSONs;
+the source RPM builder already includes package files. Only the pyproject package
+asset declaration's protected hash changed; app version remains 1.0.5.
+
+The future installer must use `<ComfyUI installation>/user/default/workflows` for
+existing/fresh installs, preserve existing files and ask before replacement. Inform
+users to open regular ComfyUI once, load each workflow and install missing custom
+nodes via ComfyUI Manager. Include an Open ComfyUI WebUI action. See
+`docs/BUNDLED_WORKFLOWS.md`. This change stages assets and packaging only; that
+optional desktop install UI remains pending. Verified byte-for-byte inclusion of
+all three files in a scratch wheel, app ZIP and source RPM; three focused
+presentation/package-boundary checks passed. Stable download artifacts were not
+replaced. No source installation was modified,
+no workflow was executed and no custom nodes/models were installed.
+
+## Desktop Gallery viewer keys and selection — 2026-10-25
+
+The normal Desktop Gallery image viewer supports Left/Right using its existing
+wrapping previous/next navigation. Backspace calls the existing single-image
+Delete action with its in-app confirmation; Space toggles the current saved
+image/version in the shared Gallery bulk selection. Selections accumulate while
+browsing, show a yellow outline, and remain marked in the Gallery after closing.
+No second selection map, backend API or write runner was created.
+
+Right-click the image to use the same Favourite selected/Delete selected menu. If
+nothing is selected, the current image is selected first. The menu node moves
+into the viewer's modal top layer while open, then restores to body on dismissal.
+Bulk feedback moves with the viewer to remain visible without shifting layout.
+Input/contenteditable and nested dialog/menu focus are excluded from shortcuts;
+Space/Backspace repeat events and in-flight/confirming actions are guarded. Phone
+and generation-preview behavior are unchanged. Cache: `comfy-control-desktop-viewer-keys-1`.
+
+Verification: 453 pytest tests and twelve Chromium/WebKit browser script/engine
+checks passed (new viewer keys, Desktop bulk, Phone bulk, Desktop/Phone actions,
+collection previews). The new fixture checks navigation/wrap, selection toggles
+and accumulation, modal menu navigation/dismissal, favourite batches, Backspace
+cancel/confirmation, typing, batch Delete, preserved originals/drafts and Phone
+breakpoint behavior. Test deletion acts only on generated fixtures.
+
+## Phone Gallery selection and compact layout — 2026-10-25
+
+Phone removes MADE BY YOU, retains Your gallery with a compact heading, and reduces
+vertical gaps between tabs/header/comparison/grid. Four 48px icon controls retain
+8px gaps: Refresh, pictographic Select, Wastebin and Favourites. Narrow screens
+wrap the heading without shrinking touch targets. Desktop keeps its current row
+and text Select button; the existing placement adapter moves the same Select node
+between presentations.
+
+`feature_gallery_bulk.js` now serves both presentations with one selection map,
+action runner, permission/version/snapshot guards and in-app Delete confirmation.
+Phone taps select multiple images; holding a selected image for 550ms opens the
+same Favourite selected/Delete selected menu. Pointer movement >10px, pointer
+cancellation/up, multitouch, scroll, resize and lifecycle/mode changes cancel a
+pending hold. Suppress the release click so a held selection is not toggled off.
+Native callouts/text selection are disabled only inside Gallery selection mode;
+ordinary image viewing/saving remains available outside that mode. Menus and
+feedback overlays do not shift the grid. No new backend routes or polling.
+
+Verification: 453 pytest tests passed. Ten browser script/engine checks passed in
+Chromium/WebKit: new Phone Gallery fixture, Desktop bulk, Phone/Desktop actions,
+and collection previews. Phone fixture covers 320/390/430/768/844px layouts,
+48px targets/8px gaps, icon order, compact vertical bounds, hold cancellation,
+release suppression, bulk favourite/delete/cancel, unchanged originals, Compare,
+drafts and presentation round trips. Chromium uses a native held touch contact;
+WebKit verifies PointerEvents and real taps. Physical iPhone hold behavior remains
+for user testing. Shell cache is `comfy-control-phone-gallery-bulk-1`.
+
+## Single-row Desktop Gallery toolbar — 2026-10-25
+
+Desktop now places the existing Refresh/Wastebin/Favourites tool group immediately
+to the right of a narrower Compare button, alongside both selection buttons. The
+empty old heading row is hidden. `presentation_desktop.js` moves the original tool
+nodes using a comment anchor and restores their heading placement on Phone;
+no listeners, buttons or requests are duplicated. Layout lives in scoped Desktop
+CSS. Shell cache is `comfy-control-desktop-gallery-bulk-5`.
+
+The bulk fixture checks all six controls share one row at 1440×1000 and 1000×600,
+48px icon targets, no overflow, exact node identity and Phone/Desktop round trips.
+Both bulk and collection fixtures pass in Chromium/WebKit, with all three focused
+presentation/asset checks. No backend, release or main changes.
+
+## Missing Bin originals after NFS remount — 2026-10-25
+
+Read-only diagnosis confirmed the running app uses the updated Downloads testing
+checkout. The affected Bin records saved NFS device 111; the mounted output now
+reports device 96, with the same root/Edited directory inode IDs. Checked originals
+were absent. The first missing-leaf fix rejected that device mismatch and surfaced
+raw ENOENT, so it did not cover the user's actual remount case.
+
+The missing-leaf branch of `network_output.virtual_image` now accepts a device-only
+renumber on a currently mounted NFS/NFS4 root if all saved parent inode IDs match
+and both saved/current chains stay on their respective single devices. Recheck
+the current directory chain and mount before returning metadata-only completion.
+No unlink occurs on this branch. Existing files still require their complete
+saved identity; absent/changed mounts, parents, permissions and symlinks retain
+the entry. Invalid missing-file locations now produce a useful identity-change
+message rather than just ENOENT. Confirmation, scope, ownership and tombstones
+remain enforced by the existing service.
+
+Tests reproduce saved-device/current-device differences for NFS/NFS4, root/nested
+files, unmounted/autofs/local roots, changed parent/root inode IDs, nested devices,
+malformed identities, a mount changing during validation and existing-file guards.
+All 453 pytest tests passed, including the 13 new NFS-remount cases.
+All deletion tests use fixture files. No real user Bin entries were cleared.
+The worker is launched fresh per operation, so the running testing app picks up
+this worker-only fix after its checkout is updated; no frontend cache bump is needed.
+
+## Desktop Gallery text cleanup — 2026-10-25
+
+Desktop-scoped CSS hides MADE BY YOU, Your gallery and the introductory Gallery
+paragraph while retaining the top-right collection tools. The bulk selected-count
+and right-click hint are hidden. Bulk feedback is positioned as an overlay, so
+entering/leaving selection or showing results/errors cannot move the image grid.
+Phone headings/layout remain unchanged. No HTML, application logic or backend
+changes were required. Shell cache is `comfy-control-desktop-gallery-bulk-4`.
+
+Verified the exact Gallery grid Y position before selection, after multi-selection
+and after bulk success in Chromium/WebKit. Both full bulk fixtures and the three
+presentation/asset-boundary checks passed. Changes remain on the local testing
+branch; restart/reload instructions from the preceding work still apply.
+
+## Desktop selection context menu follow-up — 2026-10-25
+
+The user requested replacing the permanent Favourite selected/Delete selected
+buttons with a right-click menu. The same bulk action handlers now live in a
+Desktop-only menu on selected Gallery thumbnails; the count and a short hint stay
+above the grid. Unselected images and Phone retain their native context menus.
+The custom menu applies to the entire current selection, stays within viewport
+bounds and supports Shift+F10/ContextMenu, arrows, Home/End, Escape and Tab.
+Outside clicks, scrolling, resize, selection pruning and lifecycle resets dismiss
+it. Delete still uses the existing in-app confirmation and exact-version snapshot.
+No backend changes or action semantics were added. Shell cache is
+`comfy-control-desktop-gallery-bulk-3`.
+
+Verification: 440 pytest tests passed; the bulk real-API browser fixture passed
+in Chromium and WebKit, including right-click/keyboard focus and dismissal,
+viewport-edge positioning, no toolbar buttons, bulk actions/partial failures,
+unknown replies, stale versions, Compare, Phone and preserved drafts.
+
+## Desktop Gallery and Bin follow-up — 2026-10-25
+
+New local branch `testing/desktop-gallery-bulk` starts from main `59fe52f` after
+1.0.5. This addition is for testing; no new merge, release or COPR build is part
+of this request.
+
+Desktop splits the old Select two images footprint into that button and Select,
+with Compare retaining the other half. Select supports more than two images,
+checkmarks/count, Favourite selected and Delete selected. Compare selection is
+mutually exclusive. Existing image-action POSTs run serially with exact selected
+versions, current permissions, explicit keep:true and one confirmed Delete
+snapshot. Confirmed results reconcile through `imageActionChanged`; failures stay
+selected. Uncertain replies stop the batch without automatic retry. Navigation,
+authentication, backgrounding and leaving Desktop stop further batch requests.
+Refresh prunes removed/replaced versions. Drafts/jobs remain in the controller;
+selection is transient and never persisted. Phone's Gallery layout/Compare remains
+unchanged.
+
+One shared themed alertdialog replaces browser confirm for single Delete, bulk
+Delete and Clear Bin on both presentations. Cancel/Escape sends nothing; focus
+starts on Cancel; stale selections/dialogs cannot authorize later actions. New
+assets are allowlisted and shell cache is `comfy-control-desktop-gallery-bulk-2`.
+
+The user's Clear Bin error was reproduced with an original removed outside the
+app. Explicit clearing can now finish an already-missing leaf only after matching
+and rechecking the saved root/parent identity chain. No replacement is unlinked;
+missing/changed mounts or parents, permissions, symlinks and ownership still fail
+closed. Tombstones prevent replay. Unavailable Bin previews show the filename
+and explanatory copy; images absent from storage cannot have a preview rebuilt.
+No real user files or Bin entries were removed during this work.
+
+Verification: 440 pytest tests and ten browser script/engine checks passed in
+Chromium/WebKit (new bulk/missing-file fixture, shared-library updates, Desktop
+and Phone image actions, collection previews). Tests cover >2 selection, idempotent
+favourites, cancellation, partial permission failures, duplicate guards, changed
+versions, lost replies, navigation, drafts, Phone layout and confirmed missing-file
+cleanup. Use `tests/manual/desktop_gallery_bulk_browser.py` for the new fixture.
+Restart the testing app for the backend fix and reload both WebUI pages.
+
 ## Authorized 1.0.5 release
 
 The user authorized pushing the testing branch, merging to main and building COPR.

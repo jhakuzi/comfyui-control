@@ -411,3 +411,93 @@
   height: var(--desktop-editor-height, 90px);
   box-shadow: 0 16px 36px #0009;
 }
+
+/* Keep selection, Compare and collection tools in one Desktop row. */
+:where(html[data-presentation="desktop"]) #gallery-page > .comparison-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr) auto;
+}
+:where(html[data-presentation="desktop"]) #gallery-page > .comparison-actions button {
+  min-width: 0;
+}
+:where(html[data-presentation="desktop"]) #gallery-page > .comparison-actions > .gallery-library-tools {
+  margin-left: 0;
+}
+:where(html[data-presentation="desktop"]) .gallery-bulk-actions {
+  display: contents;
+}
+:where(html[data-presentation="desktop"]) :is(.gallery-bulk-count, .gallery-bulk-help) {
+  display: none;
+}
+:where(html[data-presentation="desktop"]) .gallery-bulk-status {
+  position: fixed;
+  z-index: 10;
+  bottom: calc(12px + var(--generation-dock-height) + env(safe-area-inset-bottom));
+  left: 20px;
+  right: 20px;
+  max-width: 704px;
+  margin: auto;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px #0009;
+}
+:where(html[data-presentation="desktop"]) .gallery-bulk-status:empty {
+  display: none;
+}
+:where(html[data-presentation="desktop"]) #gallery-grid > .gallery-bulk-selected {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+}
+:where(html[data-presentation="desktop"]) #gallery-grid > .gallery-bulk-selected::after {
+  content: "✓";
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: var(--accent);
+  color: var(--accent-text);
+  border-radius: 8px;
+  padding: 4px 12px;
+  font-weight: 700;
+}
+
+:where(html[data-presentation="desktop"]) #gallery-selection-menu {
+  position: fixed;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 240px;
+  max-width: calc(100vw - 16px);
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px #0009;
+}
+:where(html[data-presentation="desktop"]) #gallery-selection-menu button {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+/* Keep the Gallery tools, without the introductory title and prose. */
+:where(html[data-presentation="desktop"]) #gallery-page > .heading > div:first-child,
+:where(html[data-presentation="desktop"]) #gallery-page > .heading + .hint {
+  display: none;
+}
+:where(html[data-presentation="desktop"]) #gallery-page > .heading {
+  display: none;
+}
+
+:where(html[data-presentation="desktop"]) .gallery-select-icon {
+  display: none;
+}
+
+:where(html[data-presentation="desktop"]) #full-image.viewer-image-selected {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+}

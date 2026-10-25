@@ -233,3 +233,94 @@
   border-radius: 50%;
   pointer-events: none;
 }
+
+/* Compact Gallery header; preserve the existing 8px button gaps and 48px targets. */
+:where(html[data-presentation="mobile"]) #workspace[data-page="gallery"] .tabs {
+  margin-bottom: 12px;
+}
+:where(html[data-presentation="mobile"]) #gallery-page > .heading {
+  gap: 8px;
+  margin-bottom: 8px;
+}
+:where(html[data-presentation="mobile"]) #gallery-page > .heading .eyebrow {
+  display: none;
+}
+:where(html[data-presentation="mobile"]) #gallery-page h1 {
+  font-size: 1.25rem;
+  line-height: 1.2;
+  margin: 0;
+}
+:where(html[data-presentation="mobile"]) #gallery-page > .comparison-actions {
+  margin-top: 0;
+  margin-bottom: 8px;
+  padding: 0;
+}
+:where(html[data-presentation="mobile"]) .gallery-select-label {
+  display: none;
+}
+:where(html[data-presentation="mobile"]) #select-gallery-images[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+:where(html[data-presentation="mobile"]) .gallery-bulk-actions {
+  display: contents;
+}
+:where(html[data-presentation="mobile"]) :is(.gallery-bulk-count, .gallery-bulk-help) {
+  display: none;
+}
+:where(html[data-presentation="mobile"]) .gallery-bulk-status {
+  position: fixed;
+  z-index: 10;
+  bottom: calc(12px + var(--generation-dock-height) + env(safe-area-inset-bottom));
+  left: 12px;
+  right: 12px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+:where(html[data-presentation="mobile"]) .gallery-bulk-status:empty {
+  display: none;
+}
+:where(html[data-presentation="mobile"]) #gallery-grid > .gallery-bulk-selected {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+}
+:where(html[data-presentation="mobile"]) #gallery-grid > .gallery-bulk-selected::after {
+  content: "✓";
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  border-radius: 8px;
+  padding: 4px 12px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 700;
+}
+:where(html[data-presentation="mobile"]) #gallery-grid.gallery-multi-select,
+:where(html[data-presentation="mobile"]) #gallery-grid.gallery-multi-select * {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+:where(html[data-presentation="mobile"]) #gallery-selection-menu {
+  position: fixed;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 240px;
+  max-width: calc(100vw - 16px);
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px #0009;
+}
+:where(html[data-presentation="mobile"]) #gallery-selection-menu button {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  text-align: left;
+}

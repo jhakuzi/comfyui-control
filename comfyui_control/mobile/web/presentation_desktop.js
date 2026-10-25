@@ -374,6 +374,24 @@ window.ComfyDesktopImagePresentation = class DesktopImagePresentation {
     this.sizeSections();
   }
 
+  arrangeGalleryTools() {
+    this.galleryTools ||= document.querySelector("#gallery-page .gallery-library-tools");
+    if (!this.galleryTools) return; // The shared library creates these after this adapter.
+    if (!this.galleryToolsAnchor) {
+      this.galleryToolsAnchor = document.createComment("Original Gallery tools placement");
+      this.galleryTools.before(this.galleryToolsAnchor);
+    }
+    const destination = this.active ? document.querySelector("#gallery-page > .comparison-actions")
+      : this.galleryToolsAnchor.parentElement;
+    if (this.galleryTools.parentElement !== destination) {
+      if (this.active) destination.append(this.galleryTools);
+      else this.galleryToolsAnchor.after(this.galleryTools);
+    }
+    const select = document.getElementById("select-gallery-images");
+    const beforeSelect = this.active ? document.getElementById("select-compare") : this.galleryRefresh;
+    if (select && select.previousElementSibling !== beforeSelect) beforeSelect.after(select);
+  }
+
   render({ viewing = false, previewing = true, selected = false, pending = false, imageId, canCleanup = false, reconnecting = false } = {}) {
     document.documentElement.dataset.presentation = this.active ? "desktop" : "mobile";
     if (this.comparing && ((!previewing && !viewing) || !selected || this.comparePicker.dataset.imageId !== imageId))
@@ -386,6 +404,7 @@ window.ComfyDesktopImagePresentation = class DesktopImagePresentation {
       ? !selected || pending : document.getElementById("reuse-image").disabled;
     this.offlineNotice.hidden = !this.active || !reconnecting;
     this.layout(previewing);
+    this.arrangeGalleryTools();
     for (const button of this.cleanupButtons) button.disabled = !canCleanup;
     const label = this.active ? "Reuse settings" : this.originalLabel;
     if (this.reuse.textContent !== label) this.reuse.textContent = label;

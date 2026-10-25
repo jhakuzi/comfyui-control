@@ -1,6 +1,10 @@
 # Shared Gallery library
 
 Desktop and Phone share Refresh, Wastebin (bin) and Favourites (heart) controls.
+Desktop places them to the right of Compare in one row with the selection buttons;
+Phone retains their Gallery heading placement, adding a pictographic Select
+button immediately after Refresh. Phone hides MADE BY YOU and compacts vertical
+spacing while preserving 48px targets and 8px button gaps.
 They have accessible names and 48px touch targets, wrapping together on narrow
 screens. Devices connected to the same controller and configured output folder
 see the same heart marks and bin contents, including existing marks/deletions.
@@ -32,7 +36,7 @@ so another device returning to an earlier server state still reconciles correctl
 ## Clear Bin
 
 Clear Bin appears only in Wastebin and is disabled while empty/loading/clearing.
-It captures the displayed token list before asking for confirmation, including the
+It captures the displayed token list before showing an in-app confirmation, including the
 image count and the fact that original files will be removed permanently. Cancel
 sends no request. Confirmation calls the existing `POST /api/trash/empty` with
 `confirm: true` and that exact token snapshot. Images binned later are not added.
@@ -48,6 +52,67 @@ Duplicate Clear/Refresh actions are disabled while deletion runs. A lost or inva
 response shows guidance to Refresh and is never automatically resubmitted. Close
 dismisses the view; an already-confirmed deletion continues. Opening/previewing a
 collection never restores or removes files. No restore control was added.
+
+## Gallery bulk selection
+
+Select two images and Select share the former selection-button width, while Compare
+keeps the other half. Select enables any number of visible Gallery images with a
+checkmarks. Right-click a selected thumbnail to open Favourite selected
+and Delete selected for the whole selection. These actions no longer occupy a
+permanent button row. Desktop hides its Gallery heading/introductory copy and the
+selection count/hint; feedback overlays the page to avoid shifting the grid.
+Phone headings/layout remain unchanged. Shift+F10 opens the same menu from a focused selection; use
+arrows/Home/End, Escape or Tab to navigate/dismiss it. Outside clicks, scroll,
+resize and stale selections also dismiss it. Favourite selected explicitly adds every selection to Favourites
+without toggling existing hearts off. Delete selected asks once and moves only the
+captured image versions to Wastebin; original files remain in place.
+
+Bulk and Compare selection are mutually exclusive. Requests use the existing image
+action API serially and reconcile through the controller. Permission/stale errors
+stay selected and report their reason. A lost response stops further requests and
+requires Gallery reconciliation before retry; there is no automatic write retry.
+Leaving Gallery/Desktop, authentication changes or backgrounding clears selection
+and stops further batch requests. Refresh drops removed/replaced versions. Phone keeps its existing comparison row and normal image opening behavior outside
+selection mode. Tap its Select icon, then tap images to select them. Hold a selected
+image for 550ms to open the same bulk menu. Moving/scrolling, pointer cancellation,
+multitouch, resize and lifecycle changes cancel the hold; its release cannot
+accidentally deselect the image. Native image callouts are retained outside selection
+mode. Both presentations share action execution, validation and confirmation.
+
+## Desktop Gallery viewer keyboard controls
+
+When viewing an image from the Desktop Gallery, Left/Right browse previous/next
+using the same wrapping behavior as the arrow buttons. Backspace invokes confirmed
+Delete for the current image. Space toggles the current image in the shared bulk
+selection, showing a yellow outline; navigate and repeat to accumulate images.
+Closing the viewer retains these selections in the Gallery.
+
+Right-click the displayed image for Favourite selected/Delete selected. With no
+selection, the current image is selected first. This is the same menu and action
+runner as the Gallery grid. The menu and feedback appear above/inside the modal;
+Delete retains the exact selected snapshot and confirmation. Typing, nested
+forms/dialogs/menus and pending actions do not trigger shortcuts. Phone and
+normal generation-preview controls are unchanged.
+
+## Confirmations and unavailable originals
+
+Delete, bulk Delete and Clear Bin use one themed in-app alertdialog. Cancel is
+focused initially; Cancel/Escape sends no write. Confirmations are bound to the
+captured image versions or Bin tokens, and stale views cannot authorize an action.
+
+A Bin preview depends on its original file. If unavailable, the tile shows its
+filename and a preview-unavailable label with storage guidance. On explicitly
+confirmed Clear Bin, an already-missing original can complete its tombstone only
+if the configured root and every saved parent directory still match and are
+rechecked. An NFS remount can change the Linux device number while preserving
+inode IDs. For an already-missing leaf only, matching inode IDs throughout the
+saved parent chain on a currently mounted NFS/NFS4 root can complete the record;
+nested device changes are rejected and the current directories/mount are rechecked.
+Nothing is unlinked for that entry. Existing files retain the full original
+fingerprint check, including the saved device ID. Missing/changed storage or parents,
+symlinks, replacements, ownership and permission failures remain in the Bin.
+Identity-mismatch errors now explain why a missing-file record was retained.
+Listing/previewing does not silently prune records.
 
 ## Data and shared implementation
 
@@ -71,7 +136,7 @@ collection never restores or removes files. No restore control was added.
   Private grids clear on sign-in; late responses cannot repaint a different view.
   Thumbnails retain decoding, fallback, loading rings and reduced-motion behavior.
 - Public assets remain allowlisted. Shell cache is
-  `comfy-control-mobile-gallery-library-3`; APIs/images remain uncached.
+  `comfy-control-desktop-viewer-keys-1`; APIs/images remain uncached.
 
 Restart the app for the Python library change, then reload Desktop and Phone.
 Sharing applies to the same controller/output, independently of whether a device

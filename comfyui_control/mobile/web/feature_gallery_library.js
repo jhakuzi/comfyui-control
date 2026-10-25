@@ -3,8 +3,8 @@
 /* A transient collection view. Image selection, actions, gallery transport and
    generation state stay in the existing controller and shared renderer. */
 window.ComfyGalleryLibrary = class GalleryLibrary {
-  constructor({ load, renderImages, openImage, empty }) {
-    Object.assign(this, { load, renderImages, openImage, empty });
+  constructor({ load, renderImages, openImage, empty, confirmAction }) {
+    Object.assign(this, { load, renderImages, openImage, empty, confirmAction });
     this.epoch = 0;
     this.items = [];
     const refresh = document.getElementById("refresh-gallery");
@@ -111,7 +111,7 @@ window.ComfyGalleryLibrary = class GalleryLibrary {
   }
 
   syncControls() {
-    const busy = !!this.loading || !!this.clearing;
+    const busy = !!this.loading || !!this.clearing || !!this.confirming;
     this.grid.inert = busy;
     this.refreshButton.disabled = busy;
     this.clearButton.hidden = this.mode !== "wastebin";
@@ -121,10 +121,20 @@ window.ComfyGalleryLibrary = class GalleryLibrary {
   }
 
   async clearBin() {
-    if (this.mode !== "wastebin" || this.loading || this.clearing || !this.items.length) return;
+    if (this.mode !== "wastebin" || this.loading || this.clearing || this.confirming || !this.items.length) return;
     // Snapshot before confirmation. Newly binned images are never added to it.
     const tokens = this.items.map((item) => item.token);
-    if (!confirm(`Permanently delete ${tokens.length} image${tokens.length === 1 ? "" : "s"} from Wastebin? This removes the original files and cannot be undone.`)) return;
+    const beforeConfirm = this.epoch;
+    this.confirming = true;
+    this.syncControls();
+    let confirmed;
+    try {
+      confirmed = await this.confirmAction({ title: "Clear Wastebin?", accept: "Delete permanently",
+        message: `Permanently delete ${tokens.length} image${tokens.length === 1 ? "" : "s"} from Wastebin? This removes the original files and cannot be undone. Entries whose originals are already gone will also be cleared.`,
+        current: () => this.dialog.open && this.mode === "wastebin" && this.epoch === beforeConfirm,
+      });
+    } finally { this.confirming = false; this.syncControls(); }
+    if (!confirmed || !this.dialog.open || this.epoch !== beforeConfirm) return;
     const epoch = ++this.epoch;
     this.clearing = true;
     this.status.textContent = "Deleting images…";
@@ -162,6 +172,11 @@ window.ComfyGalleryLibrary = class GalleryLibrary {
       if (index >= 0) this.items.splice(index, 1);
     } else if (index < 0) this.items.unshift({ ...item, kept: true });
     this.render();
+  }
+
+  thumbnailUnavailable() {
+    if (this.dialog.open && this.mode === "wastebin" && !this.loading && !this.clearing && !this.status.textContent)
+      this.status.textContent = "Some previews are unavailable. Originals may be missing or storage offline. Clear Bin also clears entries whose originals are confirmed missing; storage errors remain in the bin.";
   }
 
   render() {
