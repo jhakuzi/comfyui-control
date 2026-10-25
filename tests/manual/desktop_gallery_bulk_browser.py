@@ -66,6 +66,11 @@ async def main(engine, output):
             boxes = [await page.locator('#' + id).bounding_box() for id in ['select-compare', 'select-gallery-images', 'compare-images']]
             assert boxes[0]['x'] < boxes[1]['x'] < boxes[2]['x']
             assert abs(boxes[0]['width'] - boxes[1]['width']) < 1 and abs(boxes[2]['width'] - 2 * boxes[0]['width']) < 1
+            await expect(page.locator('#gallery-page h1')).to_be_hidden()
+            await expect(page.locator('#gallery-page .eyebrow')).to_be_hidden()
+            await expect(page.locator('#gallery-page > .heading + .hint')).to_be_hidden()
+            await expect(page.locator('#refresh-gallery')).to_be_visible()
+            grid_top = (await page.locator('#gallery-grid').bounding_box())['y']
             # Comparison still selects exactly A/B; entering bulk ends compare mode.
             await page.locator('#select-compare').click()
             await tile('a.png').click()
@@ -73,6 +78,9 @@ async def main(engine, output):
             await expect(page.locator('#compare-images')).to_be_enabled()
             await choose('a.png', 'b.png', 'c.png')
             await expect(page.locator('.gallery-bulk-count')).to_have_text('3 selected')
+            await expect(page.locator('.gallery-bulk-count')).to_be_hidden()
+            await expect(page.locator('.gallery-bulk-help')).to_be_hidden()
+            assert (await page.locator('#gallery-grid').bounding_box())['y'] == grid_top
             assert await page.locator('.comparison-selected').count() == 0
             await expect(page.locator('#compare-images')).to_be_disabled()
             await expect(page.locator('#image-dialog')).to_be_hidden()
@@ -102,9 +110,12 @@ async def main(engine, output):
             await expect(menu).to_be_hidden()
             assert not posts
             await selection.click(button='right')
-            await page.locator('.gallery-bulk-count').click()
+            await page.locator('#gallery-page > .heading').click(position=dict(x=5,y=5))
             await expect(menu).to_be_hidden()
             await expect(page.locator('.gallery-bulk-count')).to_have_text('3 selected')
+            await expect(page.locator('.gallery-bulk-count')).to_be_hidden()
+            await expect(page.locator('.gallery-bulk-help')).to_be_hidden()
+            assert (await page.locator('#gallery-grid').bounding_box())['y'] == grid_top
             # Near the viewport edge, keep every menu item reachable.
             await page.evaluate('''() => {
                 const button = document.querySelector('#gallery-grid .gallery-bulk-selected');
@@ -135,6 +146,7 @@ async def main(engine, output):
             await expect(page.locator('.gallery-bulk-status')).to_contain_text('3 images added to Favourites')
             await page.unroute('**/api/images/*/actions', hold)
             assert len(posts) == 3 and all(p['keep'] is True for p in posts)
+            assert (await page.locator('#gallery-grid').bounding_box())['y'] == grid_top
             assert await page.locator('#gallery-grid .gallery-image-heart').count() == 3
             # Re-favouriting is an explicit true, never a toggle that removes a heart.
             await choose('a.png', 'd.png')
@@ -205,6 +217,7 @@ async def main(engine, output):
             # Phone has original two-button comparison row, no bulk UI; in-app Delete.
             await page.set_viewport_size(dict(width=390, height=844))
             await expect(select).to_be_hidden()
+            await expect(page.locator('#gallery-page h1')).to_be_visible()
             await expect(menu).to_be_hidden()
             await expect(page.locator('.gallery-bulk-actions')).to_be_hidden()
             await page.locator('#refresh-gallery').click()

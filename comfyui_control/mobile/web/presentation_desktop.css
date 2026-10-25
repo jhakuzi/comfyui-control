@@ -421,17 +421,24 @@
   min-width: 0;
 }
 :where(html[data-presentation="desktop"]) .gallery-bulk-actions {
-  align-items: center;
-  margin-top: 0;
-  margin-bottom: 16px;
+  display: contents;
 }
-:where(html[data-presentation="desktop"]) .gallery-bulk-count {
-  flex: 0 0 auto;
-  color: var(--muted);
+:where(html[data-presentation="desktop"]) :is(.gallery-bulk-count, .gallery-bulk-help) {
+  display: none;
 }
 :where(html[data-presentation="desktop"]) .gallery-bulk-status {
-  flex-basis: 100%;
-  margin: 0;
+  position: fixed;
+  z-index: 10;
+  bottom: calc(12px + var(--generation-dock-height) + env(safe-area-inset-bottom));
+  left: 20px;
+  right: 20px;
+  max-width: 704px;
+  margin: auto;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px #0009;
 }
 :where(html[data-presentation="desktop"]) .gallery-bulk-status:empty {
   display: none;
@@ -452,9 +459,6 @@
   font-weight: 700;
 }
 
-:where(html[data-presentation="desktop"]) .gallery-bulk-help {
-  margin: 0;
-}
 :where(html[data-presentation="desktop"]) #gallery-selection-menu {
   position: fixed;
   z-index: 20;
@@ -475,4 +479,13 @@
   padding: 10px 12px;
   justify-content: flex-start;
   text-align: left;
+}
+
+/* Keep the Gallery tools, without the introductory title and prose. */
+:where(html[data-presentation="desktop"]) #gallery-page > .heading > div:first-child,
+:where(html[data-presentation="desktop"]) #gallery-page > .heading + .hint {
+  display: none;
+}
+:where(html[data-presentation="desktop"]) #gallery-page > .heading {
+  justify-content: flex-end;
 }

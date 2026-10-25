@@ -1,5 +1,19 @@
 # Session handoff — 2026-10-24
 
+## Desktop Gallery text cleanup — 2026-10-25
+
+Desktop-scoped CSS hides MADE BY YOU, Your gallery and the introductory Gallery
+paragraph while retaining the top-right collection tools. The bulk selected-count
+and right-click hint are hidden. Bulk feedback is positioned as an overlay, so
+entering/leaving selection or showing results/errors cannot move the image grid.
+Phone headings/layout remain unchanged. No HTML, application logic or backend
+changes were required. Shell cache is `comfy-control-desktop-gallery-bulk-4`.
+
+Verified the exact Gallery grid Y position before selection, after multi-selection
+and after bulk success in Chromium/WebKit. Both full bulk fixtures and the three
+presentation/asset-boundary checks passed. Changes remain on the local testing
+branch; restart/reload instructions from the preceding work still apply.
+
 ## Desktop selection context menu follow-up — 2026-10-25
 
 The user requested replacing the permanent Favourite selected/Delete selected
