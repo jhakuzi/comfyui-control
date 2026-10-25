@@ -3,8 +3,26 @@
 /* Placement only. Shared image controls work in both presentations; wide-layout
    arrangement is reversible. Requests and workflows stay in shared components. */
 window.ComfyDesktopImagePresentation = class DesktopImagePresentation {
-  constructor({ media, actions, preview, viewer, reuse, variation, images, cleanup, promptToggle, compare }) {
+  constructor({ media, actions, preview, viewer, reuse, variation, images, cleanup, promptToggle, compare, showHidden = () => false, changeHidden = () => {} }) {
     Object.assign(this, { media, actions, preview, viewer, reuse, variation, images });
+    this.showHidden = showHidden;
+    this.brand = document.querySelector('.masthead .brand');
+    this.brandAnchor = document.createComment('Original header brand placement');
+    this.brand.before(this.brandAnchor);
+    this.brandControls = document.createElement('div');
+    this.brandControls.id = 'desktop-brand-controls';
+    this.brandControls.dataset.desktopSlot = '';
+    this.brandControls.hidden = true;
+    this.brand.before(this.brandControls);
+    this.hiddenToggle = document.createElement('button');
+    this.hiddenToggle.id = 'desktop-hidden-folders';
+    this.hiddenToggle.type = 'button';
+    this.hiddenToggle.setAttribute('role', 'switch');
+    this.hiddenToggle.setAttribute('aria-label', 'Show images in hidden folders');
+    this.hiddenToggle.title = 'Show images in folders whose name starts with a dot';
+    this.hiddenToggle.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V5h6l2 2h10v13H3V7Z"/><circle cx="12" cy="14" r="1"/></svg><span class="hidden-folder-track" aria-hidden="true"></span>';
+    this.hiddenToggle.addEventListener('click', () => changeHidden(!this.showHidden()));
+    this.brandControls.append(this.hiddenToggle);
     this.cleanup = cleanup;
     this.promptToggle = promptToggle;
     this.negativeEditors = new Map();
@@ -394,6 +412,12 @@ window.ComfyDesktopImagePresentation = class DesktopImagePresentation {
 
   render({ viewing = false, previewing = true, selected = false, pending = false, imageId, canCleanup = false, reconnecting = false } = {}) {
     document.documentElement.dataset.presentation = this.active ? "desktop" : "mobile";
+    this.brandControls.hidden = !this.active;
+    if (this.active) {
+      if (this.brand.parentElement !== this.brandControls) this.brandControls.prepend(this.brand);
+    } else if (this.brand.previousSibling !== this.brandAnchor) this.brandAnchor.after(this.brand);
+    this.hiddenToggle.hidden = document.getElementById('workspace').hidden;
+    this.hiddenToggle.setAttribute('aria-checked', String(this.showHidden()));
     if (this.comparing && ((!previewing && !viewing) || !selected || this.comparePicker.dataset.imageId !== imageId))
       this.comparePicker.close();
     const variationLabel = this.active ? "Compare" : this.originalVariationLabel;

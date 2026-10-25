@@ -698,7 +698,7 @@ class MobileService:
         self.unavailable_images.add(identifier)
         self.gallery_time = 0
 
-    async def gallery(self, owner=None, force=False, favourites=False):
+    async def gallery(self, owner=None, force=False, favourites=False, include_hidden=True):
         requested = time.monotonic()
         async with self.gallery_lock:
             if (force and self.gallery_time < requested) or not self.gallery_time or time.monotonic() - self.gallery_time >= 2:
@@ -710,6 +710,7 @@ class MobileService:
                      self.jobs.get(item.get('job'), {}).get('owner') == owner else None}
                     for item in ordered if item['id'] not in self.unavailable_images
                     and not self.image_library.deleted_image(self.output_scope, item)
+                    and (include_hidden or not any(part.startswith('.') for part in Path(item.get('subfolder', '')).parts))
                     and (not favourites or self.image_library.contains_shared(item))][:2000 if favourites else 200]
 
     async def scan_gallery(self):
@@ -766,7 +767,7 @@ class MobileService:
             if self.local_comfy and item['type'] == 'output' and identifier in references and identifier not in valid:
                 self.images.pop(identifier, None)
                 self.unavailable_images.add(identifier)
-        discovered = 0
+        discovered = visible_discovered = 0
         # Keep older hearted versions discoverable across restarts and ordinary
         # recent-gallery scans. IDs already include output scope; response marks
         # and permissions remain browser-specific. The existing scan stays bounded.
@@ -778,9 +779,12 @@ class MobileService:
             identifier = hashlib.sha256((scope + ':output:' + str(path)).encode()).hexdigest()[:32]
             if (identifier, modified) in deleted:
                 continue
-            if discovered >= 200 and (identifier, modified) not in kept_versions:
+            visible = not any(part.startswith('.') for part in path.parent.parts)
+            if discovered >= 200 and (not visible or visible_discovered >= 200) and (identifier, modified) not in kept_versions:
                 continue
             discovered += 1
+            if visible:
+                visible_discovered += 1
             ref = self.image_ref({"filename": path.name, "subfolder": str(path.parent) if path.parent != Path(".") else "", "type": "output"})
             if ref:
                 valid[ref['id']] = (created, modified)
@@ -798,8 +802,12 @@ class MobileService:
             return item.get("created", self.jobs.get(item.get("job"), {}).get("created", 0))
         ordered = sorted(self.images.values(), key=created, reverse=True)
         self.images = {item["id"]: item for item in ordered if not self.image_library.deleted_image(scope, item)}
+        # Keep an independently bounded visible page when newer hidden images
+        # fill the normal recent window. Visibility remains a per-request filter.
+        visible_ids = {item['id'] for item in [item for item in ordered
+                       if not any(part.startswith('.') for part in Path(item.get('subfolder', '')).parts)][:200]}
         self.images = {identifier: item for index, (identifier, item) in enumerate(self.images.items())
-                       if index < 500 or (identifier, item.get('modified')) in kept_versions}
+                       if index < 500 or identifier in visible_ids or (identifier, item.get('modified')) in kept_versions}
         known = set(self.images) | {item.get('id') for job in self.current_jobs() for item in job.get('images', [])}
         self.unavailable_images.intersection_update(known)
         self.gallery_time = time.monotonic()

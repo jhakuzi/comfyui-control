@@ -20,6 +20,7 @@ let state = { jobs: [], online: false },
 let submitting = false;
 let galleryRevision = "", galleryPromise = null, galleryTimer = null, galleryEpoch = 0;
 let galleryMutation = 0;
+let galleryShowHidden = readStore("gallery-show-hidden", false) === true;
 let galleryBulk = null;
 const imageConfirmation = new ComfyImageConfirmation();
 let mappingDraft = new Map(),
@@ -1156,6 +1157,30 @@ function renderImages(container, items, choose = null) {
     if (container.children[index] !== button) container.insertBefore(button, container.children[index] || null);
   });
 }
+function galleryVisibilityQuery() {
+  return wideLayout.matches && !galleryShowHidden ? "&include_hidden=0" : "";
+}
+function refreshGalleryVisibility(preserveCollection = false) {
+  galleryRevision = "";
+  stopGallerySync();
+  imageConfirmation.cancel();
+  galleryBulk?.reset();
+  if (preserveCollection && galleryLibrary.dialog.open) {
+    if (galleryLibrary.mode === "favourites") void galleryLibrary.refresh();
+  } else galleryLibrary.close();
+  if (galleryVisibilityQuery()) {
+    const oldGallery = gallery;
+    gallery = gallery.filter((item) => !String(item.subfolder || "").split("/").some((part) => part.startsWith(".")));
+    if ($("image-dialog").open && viewerItems === oldGallery) $("image-dialog").close();
+  }
+  renderImages($("gallery-grid"), gallery);
+  comparison.gallery(comparisonGallery());
+  galleryBulk?.gallery(gallery);
+  $("gallery-empty").hidden = !!gallery.length;
+  renderPreviewComparisonGallery();
+  syncSelectedImageActions();
+  void loadGallery();
+}
 function stopGallerySync() {
   clearTimeout(galleryTimer);
   galleryEpoch++;
@@ -1171,7 +1196,7 @@ function loadGallery(force = false) {
   $("refresh-gallery").disabled = true;
   galleryPromise = (async () => {
     try {
-      const result = await api(`/api/gallery?since=${encodeURIComponent(galleryRevision)}${force ? "&refresh=1" : ""}`);
+      const result = await api(`/api/gallery?since=${encodeURIComponent(galleryRevision)}${force ? "&refresh=1" : ""}${galleryVisibilityQuery()}`);
       if (epoch !== galleryEpoch) return;
       if (mutation !== galleryMutation) { refreshAgain = true; return; }
       galleryRevision = result.revision;
@@ -1622,6 +1647,7 @@ new ResizeObserver(() => {
   document.documentElement.style.setProperty("--generation-dock-height", `${height}px`);
 }).observe($("generation-dock"));
 wideLayout.addEventListener("change", () => {
+  refreshGalleryVisibility(true);
   imageConfirmation.cancel();
   galleryBulk?.reset();
   imageWorkflowDialogs?.close();
@@ -1897,6 +1923,11 @@ const imageDetails = new ImageDetails({ api });
 let cleaningVRAM = false;
 let selectedImageActions = null, imageWorkflowDialogs = null, imageActionSignature = "";
 const desktopImages = new ComfyDesktopImagePresentation({ media: wideLayout,
+  showHidden: () => galleryShowHidden, changeHidden: (enabled) => {
+    galleryShowHidden = enabled;
+    writeStore("gallery-show-hidden", enabled);
+    refreshGalleryVisibility();
+  },
   actions: $("selected-image-actions"), preview: $("preview-reuse-actions"),
   viewer: $("reuse-image").parentElement, reuse: $("same-seed"), variation: $("variation"), images: $("job-images"),
   compare: guarded(comparePreviewImage),
@@ -1923,7 +1954,7 @@ const galleryLibrary = new ComfyGalleryLibrary({ renderImages, openImage,
   load: async (mode) => {
     if (!connected || recovering || document.hidden || $("workspace").hidden)
       throw new Error("Reconnect before refreshing this collection.");
-    if (mode === "favourites") return (await api("/api/gallery?favourites=1&refresh=1")).filter((item) => item.kept);
+    if (mode === "favourites") return (await api(`/api/gallery?favourites=1&refresh=1${galleryVisibilityQuery()}`)).filter((item) => item.kept);
     const entries = await imageFeatureAPI.wastebin();
     return entries.map((entry) => ({ ...entry, id: entry.token, url: entry.thumbnail, thumbnail: null }));
   } });

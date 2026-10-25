@@ -1,5 +1,33 @@
 # Session handoff — 2026-10-24
 
+## Authorized 1.2.0 release / hidden-folder Gallery switch — 2026-10-25
+
+User requested the Desktop header switch and explicitly authorized push, main
+merge and COPR publication after successful tests. This includes the pending
+shared-delete, preview recovery, tab-percentage, Batch Count and text changes
+since 1.1.0. Version is 1.2.0-1. Earlier no-publication notes are historical.
+
+Desktop's placement adapter creates a small folder/switch control directly beside
+the original brand, with existing dark/yellow styling, keyboard switch semantics,
+accessible name and browser-persisted setting (off by default). Phone restores the
+original brand placement and has no switch. Shared Gallery logic supplies the
+per-request filter; neither presentation adapter nor the switch mutates files.
+
+`include_hidden=0` excludes dot-prefixed relative folder components before the
+recent limit. Favourites/Compare follow the view; Wastebin remains complete. API
+and Phone defaults include all folders. Bounded scan/cache retention backfills the
+visible recent page even if newer hidden images fill the ordinary page. Existing
+output, symlink, exact-version and permission safeguards remain. Late responses
+are guarded; filter changes reconcile selection; resize keeps collections open.
+
+Verification: 517 pytest tests passed, including new local/network hidden-folder,
+recent-page backfill and independent-client revision tests. Gallery switch checks
+passed in Chromium/WebKit/Firefox; preview recovery, Batch Count and collections
+regressions passed in Chromium/WebKit. Additional narrow-header/live-metrics
+checks passed in all three browsers; screenshots were visually reviewed. ZIP
+contents match the tested source, source RPM built and diff check passed. No real GPU or user output changes.
+
+
 ## Returning-tab preview selection fix — 2026-10-25
 
 User confirmed Ctrl+Shift+R still showed the previous result. Reproduced the bug

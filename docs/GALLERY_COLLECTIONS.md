@@ -170,3 +170,22 @@ confirmation, corruption and local/network exact-file safety.
 These are real application HTTP/filesystem fixtures without real GPU inference,
 physical Phone or NAS/VPN hardware verification. Permanent-deletion tests act only
 on their generated fixture images.
+
+## Desktop hidden-folder switch
+
+The small switch beside **comfy control** starts off and remembers the browser
+preference. On includes images in dot-prefixed folders; off hides any image with
+a dot-prefixed folder component relative to the configured output root, including
+nested folders. A dot in the middle of a folder name or a dot-prefixed image
+filename alone does not hide that image.
+
+Gallery, Favourites and comparison follow the preference. Wastebin retains every
+entry so deleted files can always be reviewed. Phone retains the original header
+and unfiltered Gallery. Changing presentation preserves open collections and
+refreshes Favourites as needed. Filtering changes neither permissions nor files.
+
+The request parameter `include_hidden=0` filters before the 200-image recent
+limit; default/1 includes all folders. The bounded scan retains a separate visible
+page so newer hidden files cannot crowd out visible files within the scan window.
+Returned revisions reflect the selected view; an old response cannot repaint a
+newer switch setting. Selection is reconciled when visible images change.

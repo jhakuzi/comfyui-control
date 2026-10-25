@@ -62,7 +62,7 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   bump the shell cache when shipping changed assets. Never cache private APIs or
   images. Preserve reduced-motion support.
 
-## Current implementation contracts (1.1.0)
+## Current implementation contracts (1.2.0)
 
 - Workflow/model refresh reconciles option catalogues in place when graph/control
   structure is unchanged. Preserve select/button DOM identity, handlers, drafts,
@@ -174,6 +174,13 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   Preserve every child's durable UUID/seed, owner/scope, uncertain POST journal,
   safe group cancellation and no-resubmission behavior. UI follows the current
   run within its batch, preserving drafts and earlier results/failure diagnostics.
+
+- Desktop has a compact hidden-folder switch beside the brand, off by default
+  and persisted in browser storage. `include_hidden=0` filters dot-prefixed
+  relative folder components before the Gallery limit, including Favourites and
+  Compare. Phone/API defaults remain unfiltered; Wastebin lists all entries.
+  Preserve bounded visible-page references, per-client filtering/revisions, stale
+  response/selection guards and open collections on presentation changes.
 
 ## Data and safety contracts
 

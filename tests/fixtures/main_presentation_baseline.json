@@ -1,7 +1,7 @@
 {
   "revision": "7e500d94cfceca46bee60bacd4c2f408c2d606f4",
   "files": {
-    "comfyui_control/__init__.py": "04be9d81b4b2e93c2aaab42bda15777c7a5713c9ca71d26bb443c4cfa976010c",
+    "comfyui_control/__init__.py": "f3b7a20eaa1b641801a8711ec20b368f63f62163892a5fb242da3f66bfc9865b",
     "comfyui_control/__main__.py": "a67c172046323b0efcafe92cb83abc266d5dd4bc931d9312cde1b7bed50643db",
     "comfyui_control/app.py": "172fa35414b42116a5216ff9398de65ffb356562845644d16ba9be086dce64b0",
     "comfyui_control/assets/comfyui-control.png": "04d1fd214eb4c5fb204c40ae65308c432b0a328fb590ced48473b98b8b03c64c",
@@ -37,7 +37,7 @@
     "comfyui_control/script_flags.py": "6c3c524b5150063026473a867abc04fd67c15e56080a7c0a2e94ab93ae557fd0",
     "comfyui_control/setup.py": "da035bb261882305cd6de55e43fa64e2766dc7bc9e4b91a0b4a7a3b07d0ed2c8",
     "comfyui_control/update_widgets.py": "ebb901b8cea0b1b301fb5339bf7294c0390f135c35af9a93c6453fa81ff01c5d",
-    "packaging/comfyui-control.spec": "1961a580623e33a352962d533cf8d30f577cbade97a5e5932770dd88fd572253",
-    "pyproject.toml": "0358b4ee1404b50f9960466e711f95db013ba0578ede3d8ec9cc9765a4ac30ba"
+    "packaging/comfyui-control.spec": "f99e3d8f64f22bfa3b4bc511b1fb24e27aab0529c1bdd16196b6df8342fbdb23",
+    "pyproject.toml": "550f2d89dc6c0f493033bf5b4b38be2aebd92302fec3c193f9060308fcfda588"
   }
 }

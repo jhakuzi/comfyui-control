@@ -501,3 +501,56 @@
   outline: 3px solid var(--accent);
   outline-offset: -3px;
 }
+
+/* Compact Desktop-only hidden-folder preference beside the original brand. */
+:where(html[data-presentation="desktop"]) #desktop-brand-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+:where(html[data-presentation="desktop"]) #desktop-hidden-folders {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 6px 8px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+:where(html[data-presentation="desktop"]) #desktop-hidden-folders svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+:where(html[data-presentation="desktop"]) .hidden-folder-track {
+  width: 28px;
+  height: 16px;
+  border-radius: 20px;
+  background: var(--line);
+  padding: 2px;
+  box-sizing: border-box;
+}
+:where(html[data-presentation="desktop"]) .hidden-folder-track::before {
+  content: "";
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+:where(html[data-presentation="desktop"]) #desktop-hidden-folders[aria-checked="true"] {
+  color: var(--accent);
+}
+:where(html[data-presentation="desktop"]) #desktop-hidden-folders[aria-checked="true"] .hidden-folder-track {
+  background: var(--accent);
+}
+:where(html[data-presentation="desktop"]) #desktop-hidden-folders[aria-checked="true"] .hidden-folder-track::before {
+  background: var(--bg);
+  transform: translateX(12px);
+}
