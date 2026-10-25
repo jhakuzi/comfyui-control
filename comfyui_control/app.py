@@ -21,6 +21,7 @@ from .script_flags import inspect_script
 from .flag_widgets import LaunchFlags, LaunchScriptDialog
 from .setup import InstallDialog, WelcomeDialog
 from .update_widgets import UpdateDialog
+from .workflow_widgets import WorkflowInstallDialog
 from . import __version__
 from .mobile.runtime import MobileRuntime
 from .mobile.settings import MobileSettings
@@ -406,6 +407,8 @@ class MainWindow(QMainWindow):
         self.resize(920, 740)
         self.setMinimumSize(580, 400)
         self._closing = False
+        self.workflow_dialog = None
+        self._workflow_offers = set()
         self._tray_quit_requested = False
         self.tray = QSystemTrayIcon(self.windowIcon(), self)
         self.tray_menu = QMenu(self)
@@ -457,7 +460,7 @@ class MainWindow(QMainWindow):
         self.create_script_button.clicked.connect(self._create_script)
         header.addWidget(self.create_script_button, 1, 1)
         self.change_folder = QPushButton("Change folder")
-        self.change_folder.clicked.connect(self._choose_folder)
+        self.change_folder.clicked.connect(self._choose_and_offer_folder)
         header.addWidget(self.change_folder, 1, 2)
         for button in (self.setup_button, self.create_script_button, self.change_folder):
             button.setMinimumHeight(30)
@@ -552,7 +555,11 @@ class MainWindow(QMainWindow):
         self.config_button = self._button("Settings", "configure", self._settings)
         right.addWidget(self.output_button)
         right.addWidget(self.models_button)
-        right.addWidget(self.config_button)
+        self.workflows_button = self._button("Install bundled workflows", "document-import", self._install_workflows)
+        settings_actions = QHBoxLayout()
+        settings_actions.addWidget(self.config_button, 1)
+        settings_actions.addWidget(self.workflows_button, 2)
+        right.addLayout(settings_actions)
         controls.addLayout(left, 1)
         controls.addSpacing(20)
         controls.addLayout(right, 1)
@@ -664,6 +671,7 @@ class MainWindow(QMainWindow):
             return
         if choice.choice == "existing" and self._choose_folder():
             self._settings()
+            self._offer_workflows()
         elif choice.choice == "install":
             dialog = InstallDialog(self, application_style=self.controller.config.application_style,
                                    close_behavior=self.controller.config.close_behavior)
@@ -671,6 +679,35 @@ class MainWindow(QMainWindow):
                 self._set_config(dialog.result_config)
                 self.log.append_output(f"\nComfy CLI setup complete: {dialog.result_config.comfy_dir}\n")
                 self._settings()
+                self._offer_workflows()
+
+    def _choose_and_offer_folder(self):
+        if self._choose_folder():
+            self._offer_workflows()
+
+    def _offer_workflows(self):
+        directory = self.controller.config.comfy_dir
+        if not directory or directory in self._workflow_offers or self._closing:
+            return
+        self._install_workflows()
+
+    def _install_workflows(self):
+        config = self.controller.config
+        if not config.comfy_dir or self._closing or self.controller.state == 'updating':
+            return
+        if self.workflow_dialog is not None and self.workflow_dialog.isVisible():
+            self.workflow_dialog.raise_()
+            self.workflow_dialog.activateWindow()
+            return
+        self._workflow_offers.add(config.comfy_dir)
+        dialog = self.workflow_dialog = WorkflowInstallDialog(config.directory, self.mobile.settings.comfy_url, self)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        dialog.finished.connect(lambda _result: self._workflow_closed(dialog))
+        dialog.open()
+
+    def _workflow_closed(self, dialog):
+        if self.workflow_dialog is dialog:
+            self.workflow_dialog = None
 
     def _choose_folder(self):
         path = QFileDialog.getExistingDirectory(self, "Select ComfyUI folder (containing main.py)", str(self.controller.config.directory))
@@ -788,6 +825,8 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(self, "Style unavailable", "This style could not be loaded. Choose System default or another available style.")
             if dialog.setup_mount_requested:
                 QTimer.singleShot(0, lambda: None if self._closing else self._setup_network_mount())
+            if config.comfy_dir != current.comfy_dir:
+                self._offer_workflows()
 
     def _start_stop(self):
         if self.controller.state in {'stopped','crashed'}:
@@ -824,6 +863,7 @@ class MainWindow(QMainWindow):
         self.setup_button.setEnabled(idle and not self._closing and not mount_busy)
         self.output_button.setEnabled(configured and not self._closing and not mount_busy)
         self.models_button.setEnabled(configured and not self._closing)
+        self.workflows_button.setEnabled(configured and not self._closing and state != 'updating')
         self.cancel_recovery.setVisible(state == 'restarting')
         self.crash_notice.setVisible(bool(self.crash_summary.text()) or state == 'restarting')
         if self._closing and idle:

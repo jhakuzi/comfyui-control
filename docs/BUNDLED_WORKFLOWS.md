@@ -14,7 +14,7 @@ weights, custom-node code and referenced input images are not bundled.
 
 ## Installation target
 
-The desktop workflow installer must copy these files into:
+The optional desktop workflow installer copies these files into:
 
 ```
 <selected ComfyUI installation>/user/default/workflows/
@@ -26,8 +26,29 @@ ComfyUI setup. The shorter `user/workflows` path is incorrect for this setup.
 Do not copy them into the controller's own settings/preset folders. Preserve
 existing workflows and ask before replacing matching filenames.
 
-This commit adds the bundled files and package inclusion only. The optional
-desktop installation offer and Open ComfyUI WebUI button are still to be implemented.
+## Using the desktop installer
+
+Click **Install bundled workflows** beside Settings in the native desktop app.
+The same dialog is offered after choosing an existing ComfyUI installation or
+completing fresh Comfy CLI setup. Cancelling does not install anything. The app
+does not repeatedly prompt at startup; the permanent button remains available.
+
+Select the workflows (all three start selected), review the displayed destination,
+and click **Install selected**. Existing files are skipped by default and identical
+files are reported as up to date. To replace a different existing workflow, select
+**Replace existing workflows** and confirm the listed filenames. A file changed
+since review is preserved; refresh and review it again before replacing it.
+
+Results list installed, skipped and failed files. **Refresh** checks the current
+folder again; **Open ComfyUI WebUI** uses the configured ComfyUI endpoint (the
+regular backend address from Mobile WebUI settings, not the controller's Phone
+page). Start ComfyUI first if needed. No browser is opened automatically.
+
+File checks/copying run in a bounded isolated worker. The installer uses temporary
+files, no-follow directory/file checks and atomic writes. Unknown filenames,
+symlinks and changed installation/directory identities cannot redirect a copy.
+Partial failures preserve successful copies and report individual errors. A timeout
+requires a refresh and never automatically resubmits installation.
 
 ## User-facing setup notice
 

@@ -1,5 +1,42 @@
 # Session handoff — 2026-10-24
 
+## Optional native workflow installer — 2026-10-25
+
+The implementation is on `testing/desktop-gallery-bulk`, ready for the user's
+single visual/functional review. Version remains 1.0.5; no merge/push/release/COPR
+operation is authorized by this implementation request.
+
+The native desktop app has Install bundled workflows beside Settings, preserving
+the existing three-row control area and terminal height. The same optional dialog
+is offered after existing-folder selection, a changed Settings installation path,
+or successful fresh Comfy CLI setup. It is offered at most once per selected path
+per app session; ordinary startup does not prompt. Manual access always remains.
+
+The compact dialog lists all three workflows selected by default, displays
+`<selected ComfyUI>/user/default/workflows`, skips existing files by default,
+requires filename confirmation for replacements, and reports installed/skipped/
+failed results. It includes the agreed one-time regular ComfyUI/Manager setup
+notice and Open ComfyUI WebUI button using the configured regular backend URL.
+No custom nodes/models are installed and no workflow or ComfyUI server is executed.
+
+`bundled_workflows.py` performs inspect/install in an isolated BackgroundProcess
+worker, leaving Qt responsive on slow storage. Inspection is read-only/cancellable;
+copying is bounded and duplicate actions are disabled. Check the selected root,
+no-follow parent directories, reviewed file identities and recheck before atomic
+writes. Newly appeared or changed files cannot be silently replaced. Partial
+errors are reported; a timeout requires Refresh, without automatic write retry.
+Cancelled/closed dialogs release workers. Installer tests use temporary fake
+ComfyUI roots only; no real user workflows have been installed or replaced.
+
+Verification: 476 pytest tests passed, with final native installer/setup/UI/monitor
+and protected-boundary checks also passing after dialog sizing/cleanup refinements.
+The dialog and successful three-file result were rendered and inspected using a
+disposable installation. The user's requested final manual review remains pending.
+
+The new native app hash is updated in the protected baseline for this authorized
+feature; other frozen files/versions remain unchanged. The bundled JSONs and their
+packaging rules remain unchanged. See `docs/BUNDLED_WORKFLOWS.md` and USAGE.md.
+
 ## Bundled workflows copied — 2026-10-25
 
 The user authorized copying VeryComfy, OfficialComfy-SeedVR_Upscaler and

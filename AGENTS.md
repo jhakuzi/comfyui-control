@@ -188,6 +188,22 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   atomic metadata writes and corruption safeguards. Do not disturb user settings
   or unrelated mounts; do not start competing app instances against one config.
 
+## Bundled workflow installer
+
+- `bundled_workflows.py` is the standard-library-only inspect/copy worker;
+  `workflow_widgets.py` is the optional native dialog. The main app offers it after
+  existing-folder selection and successful fresh setup, and has a permanent button
+  beside Settings. Do not prompt repeatedly on startup or start ComfyUI automatically.
+- Target exactly `<selected ComfyUI>/user/default/workflows`. Preserve bundled JSON
+  bytes. Default to skipping existing files; replacement requires a reviewed exact
+  file identity and confirmation of those names. Keep symlink/root/directory checks,
+  atomic writes, per-file errors, bounded workers and uncertain-result handling.
+- Show the one-time regular ComfyUI/Manager setup notice and an explicit Open ComfyUI
+  WebUI button using the configured backend address. Never install nodes/models,
+  execute workflows or modify other installations as part of copying files.
+- Use disposable installations in `tests/test_bundled_workflows.py` for verification;
+  do not test installation/replacement on the user's real ComfyUI folder.
+
 ## Local setup and verification
 
 Run from the checkout root; use this checkout's environment, not paths from a

@@ -3,7 +3,7 @@
   "files": {
     "comfyui_control/__init__.py": "95f6e770a42990d5b72b9fbe571a9e3ac5a324691cf95215bb661e906d3d52b2",
     "comfyui_control/__main__.py": "a67c172046323b0efcafe92cb83abc266d5dd4bc931d9312cde1b7bed50643db",
-    "comfyui_control/app.py": "2fc6e54535946b113ff4d499bb0b0248f3ab8ce46e5f6a4c00bb386797ad1785",
+    "comfyui_control/app.py": "782f9c1cfa3b24762c61f06646040f36f4419bbc6f0ff1be1cfefc007f6daeef",
     "comfyui_control/assets/comfyui-control.png": "04d1fd214eb4c5fb204c40ae65308c432b0a328fb590ced48473b98b8b03c64c",
     "comfyui_control/background_process.py": "27ba124a20ba0dc058ea04c0d3d85d8c924011b93a205e961f44b6aec690e058",
     "comfyui_control/cli.py": "8040436c21ccd5f3b4c05ccd4f83c542d20e845cf256da8918a4ed7c2eb245ff",

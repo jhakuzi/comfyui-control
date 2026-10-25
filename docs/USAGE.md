@@ -176,3 +176,17 @@ For a default per-user install, remove `~/.local/share/comfyui-control`, `~/.loc
 
 For an RPM install: `sudo dnf remove comfyui-control`.
 
+
+## Install bundled workflows
+
+The native desktop **Install bundled workflows** button beside Settings opens an
+optional installer for VeryComfy, SeedVR Upscaler and Qwen Edit. It is also offered
+after selecting an existing installation or completing fresh setup. Review the
+selected files and destination `<ComfyUI>/user/default/workflows`, then choose
+**Install selected**. Existing files are skipped unless replacement is explicitly
+selected and confirmed. Results show installed, skipped and failed files.
+
+Open the regular ComfyUI WebUI at least once, load each installed workflow and use
+ComfyUI Manager to install missing custom nodes; restart ComfyUI when prompted.
+Models and referenced input images must also be available. The installer copies
+JSONs only. See [bundled workflow details](BUNDLED_WORKFLOWS.md).
