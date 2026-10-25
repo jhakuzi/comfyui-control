@@ -451,3 +451,28 @@
   padding: 4px 12px;
   font-weight: 700;
 }
+
+:where(html[data-presentation="desktop"]) .gallery-bulk-help {
+  margin: 0;
+}
+:where(html[data-presentation="desktop"]) #gallery-selection-menu {
+  position: fixed;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 240px;
+  max-width: calc(100vw - 16px);
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px #0009;
+}
+:where(html[data-presentation="desktop"]) #gallery-selection-menu button {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  justify-content: flex-start;
+  text-align: left;
+}

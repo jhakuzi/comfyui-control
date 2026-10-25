@@ -53,7 +53,11 @@ collection never restores or removes files. No restore control was added.
 
 Select two images and Select share the former selection-button width, while Compare
 keeps the other half. Select enables any number of visible Gallery images with a
-checkmark and count. Favourite selected explicitly adds every selection to Favourites
+checkmark and count. Right-click a selected thumbnail to open Favourite selected
+and Delete selected for the whole selection. These actions no longer occupy a
+permanent button row. Shift+F10 opens the same menu from a focused selection; use
+arrows/Home/End, Escape or Tab to navigate/dismiss it. Outside clicks, scroll,
+resize and stale selections also dismiss it. Favourite selected explicitly adds every selection to Favourites
 without toggling existing hearts off. Delete selected asks once and moves only the
 captured image versions to Wastebin; original files remain in place.
 
@@ -101,7 +105,7 @@ Listing/previewing does not silently prune records.
   Private grids clear on sign-in; late responses cannot repaint a different view.
   Thumbnails retain decoding, fallback, loading rings and reduced-motion behavior.
 - Public assets remain allowlisted. Shell cache is
-  `comfy-control-desktop-gallery-bulk-2`; APIs/images remain uncached.
+  `comfy-control-desktop-gallery-bulk-3`; APIs/images remain uncached.
 
 Restart the app for the Python library change, then reload Desktop and Phone.
 Sharing applies to the same controller/output, independently of whether a device

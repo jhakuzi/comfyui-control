@@ -118,6 +118,9 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   stay in the bin with errors. Disable duplicate actions while clearing. An uncertain
   response requires Refresh, never automatic resubmission.
 - Desktop Gallery splits Select two images beside a multi-image Select mode.
+  Bulk actions live in a right-click/Shift+F10 menu on selected thumbnails; keep
+  the count above the grid without permanent action buttons. Preserve keyboard
+  navigation, viewport bounds and dismissal on lifecycle/selection changes.
   Reuse the existing per-image action route and controller reconciliation; retain
   exact-version snapshots, permissions, partial failures and uncertain-result
   handling. No bulk selection persists. Compare and bulk selection are mutually

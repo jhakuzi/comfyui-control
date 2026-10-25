@@ -34,20 +34,62 @@ window.ComfyGalleryBulk = class GalleryBulk {
     this.controls.dataset.desktopSlot = "";
     this.controls.setAttribute("role", "group");
     this.controls.setAttribute("aria-label", "Selected image actions");
-    this.controls.innerHTML = '<span class="gallery-bulk-count" aria-live="polite"></span><button id="favourite-gallery-selected" type="button">Favourite selected</button><button id="delete-gallery-selected" type="button" class="danger">Delete selected</button><p class="hint gallery-bulk-status" role="status"></p>';
+    this.controls.innerHTML = '<span class="gallery-bulk-count" aria-live="polite"></span><span class="hint gallery-bulk-help">Right-click a selected image for actions.</span><p class="hint gallery-bulk-status" role="status"></p>';
     this.selectCompare.parentElement.after(this.controls);
     this.count = this.controls.querySelector("span");
     this.status = this.controls.querySelector("p");
-    this.keepButton = this.controls.querySelector("#favourite-gallery-selected");
-    this.deleteButton = this.controls.querySelector("#delete-gallery-selected");
-    this.keepButton.addEventListener("click", () => this.perform("keep"));
-    this.deleteButton.addEventListener("click", () => this.perform("delete"));
+    this.menu = document.createElement("div");
+    this.menu.id = "gallery-selection-menu";
+    this.menu.hidden = true;
+    this.menu.setAttribute("role", "menu");
+    this.menu.setAttribute("aria-label", "Selected image actions");
+    this.menu.innerHTML = '<button id="favourite-gallery-selected" type="button" role="menuitem" tabindex="-1">Favourite selected</button><button id="delete-gallery-selected" type="button" role="menuitem" tabindex="-1" class="danger">Delete selected</button>';
+    document.body.append(this.menu);
+    this.keepButton = this.menu.querySelector("#favourite-gallery-selected");
+    this.deleteButton = this.menu.querySelector("#delete-gallery-selected");
+    this.keepButton.addEventListener("click", () => { this.closeMenu(true); this.perform("keep"); });
+    this.deleteButton.addEventListener("click", () => { this.closeMenu(true); this.perform("delete"); });
+    grid.addEventListener("contextmenu", (event) => {
+      const button = event.target.closest("button[data-image-id]");
+      if (!button || !this.canOpenMenu(button)) return;
+      event.preventDefault();
+      this.openMenu(button, event.clientX, event.clientY);
+    });
+    grid.addEventListener("keydown", (event) => {
+      if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+      const button = event.target.closest("button[data-image-id]");
+      if (!button || !this.canOpenMenu(button)) return;
+      event.preventDefault();
+      const rect = button.getBoundingClientRect();
+      this.openMenu(button, rect.left + 8, rect.top + 8);
+    });
+    this.menu.addEventListener("contextmenu", (event) => event.preventDefault());
+    this.menu.addEventListener("keydown", (event) => {
+      const buttons = [this.keepButton, this.deleteButton];
+      if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+        event.preventDefault();
+        const index = buttons.indexOf(document.activeElement);
+        buttons[event.key === "Home" ? 0 : event.key === "End" ? 1 : (index + (event.key === "ArrowUp" ? -1 : 1) + buttons.length) % buttons.length].focus();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        this.closeMenu(true);
+      } else if (event.key === "Tab") this.closeMenu(true);
+    });
+    document.addEventListener("pointerdown", (event) => {
+      if (!this.menu.contains(event.target)) this.closeMenu();
+    }, true);
+    document.addEventListener("scroll", (event) => {
+      if (!this.menu.contains(event.target)) this.closeMenu(true);
+    }, true);
+    window.addEventListener("resize", () => this.closeMenu(true));
     this.selectCompare.addEventListener("click", () => this.reset(), true);
     this.compareButton.addEventListener("click", () => this.reset(), true);
     this.render();
   }
 
   reset() {
+    this.closeMenu();
     this.epoch++;
     this.selecting = false;
     this.selected.clear();
@@ -60,7 +102,10 @@ window.ComfyGalleryBulk = class GalleryBulk {
     for (const [id, selected] of this.selected) {
       const current = items.find((item) => item.id === id && item.modified === selected.modified);
       if (current) this.selected.set(id, { ...current });
-      else this.selected.delete(id);
+      else {
+        this.selected.delete(id);
+        this.closeMenu(true);
+      }
     }
     this.render();
   }
@@ -76,6 +121,29 @@ window.ComfyGalleryBulk = class GalleryBulk {
     return true;
   }
 
+  canOpenMenu(button) {
+    return this.selecting && !this.pending && !this.confirming && this.canAct() &&
+      this.grid.contains(button) && this.selected.has(button.dataset.imageId);
+  }
+
+  openMenu(button, x, y) {
+    if (!this.canOpenMenu(button)) return;
+    this.menuAnchor = button;
+    this.menu.hidden = false;
+    this.menu.style.left = this.menu.style.top = "0px";
+    const rect = this.menu.getBoundingClientRect();
+    this.menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - rect.width - 8))}px`;
+    this.menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - rect.height - 8))}px`;
+    this.keepButton.focus({ preventScroll: true });
+  }
+
+  closeMenu(restoreFocus = false) {
+    if (!this.menu || this.menu.hidden) return;
+    this.menu.hidden = true;
+    if (restoreFocus && this.menuAnchor?.isConnected) this.menuAnchor.focus({ preventScroll: true });
+    this.menuAnchor = null;
+  }
+
   render() {
     this.toggle.hidden = !this.media.matches;
     this.toggle.textContent = this.selecting ? "Done selecting" : "Select";
@@ -85,6 +153,8 @@ window.ComfyGalleryBulk = class GalleryBulk {
     this.controls.setAttribute("aria-busy", String(this.pending));
     this.count.textContent = `${this.selected.size} selected`;
     this.keepButton.disabled = this.deleteButton.disabled = this.pending || !this.selected.size || !this.canAct();
+    this.menu.setAttribute("aria-label", `Actions for ${this.selected.size} selected images`);
+    if (!this.selecting || this.pending || this.confirming || !this.selected.size || !this.canAct()) this.closeMenu();
     this.selectCompare.disabled = this.pending;
     this.compareButton.disabled = this.pending || this.selecting || this.comparison.selected.length !== 2;
     for (const button of this.grid.querySelectorAll("button[data-image-id]")) {
@@ -92,6 +162,15 @@ window.ComfyGalleryBulk = class GalleryBulk {
       button.classList.toggle("gallery-bulk-selected", selected);
       if (this.selecting) button.setAttribute("aria-pressed", String(selected));
       else if (!this.comparison.selecting) button.removeAttribute("aria-pressed");
+      if (selected) {
+        button.setAttribute("aria-haspopup", "menu");
+        button.setAttribute("aria-controls", this.menu.id);
+        button.setAttribute("aria-keyshortcuts", "Shift+F10");
+      } else {
+        button.removeAttribute("aria-haspopup");
+        button.removeAttribute("aria-controls");
+        button.removeAttribute("aria-keyshortcuts");
+      }
     }
   }
 

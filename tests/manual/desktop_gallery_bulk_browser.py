@@ -59,6 +59,10 @@ async def main(engine, output):
                     await select.click()
                 for name in names:
                     await tile(name).click()
+            async def bulk_action(action):
+                await page.locator('#gallery-grid .gallery-bulk-selected').first.click(button='right')
+                await expect(page.locator('#gallery-selection-menu')).to_be_visible()
+                await page.locator('#' + ('favourite-gallery-selected' if action == 'keep' else 'delete-gallery-selected')).click()
             boxes = [await page.locator('#' + id).bounding_box() for id in ['select-compare', 'select-gallery-images', 'compare-images']]
             assert boxes[0]['x'] < boxes[1]['x'] < boxes[2]['x']
             assert abs(boxes[0]['width'] - boxes[1]['width']) < 1 and abs(boxes[2]['width'] - 2 * boxes[0]['width']) < 1
@@ -72,6 +76,48 @@ async def main(engine, output):
             assert await page.locator('.comparison-selected').count() == 0
             await expect(page.locator('#compare-images')).to_be_disabled()
             await expect(page.locator('#image-dialog')).to_be_hidden()
+            # Actions are in a context menu, never permanent buttons above the grid.
+            menu = page.locator('#gallery-selection-menu')
+            assert await page.locator('.gallery-bulk-actions button').count() == 0
+            await expect(menu).to_be_hidden()
+            selection = page.locator('#gallery-grid .gallery-bulk-selected').first
+            await selection.click(button='right')
+            await expect(menu).to_be_visible()
+            await expect(page.locator('#favourite-gallery-selected')).to_be_focused()
+            await page.keyboard.press('ArrowDown')
+            await expect(page.locator('#delete-gallery-selected')).to_be_focused()
+            await page.keyboard.press('ArrowUp')
+            await expect(page.locator('#favourite-gallery-selected')).to_be_focused()
+            await page.keyboard.press('Escape')
+            await expect(menu).to_be_hidden()
+            await expect(selection).to_be_focused()
+            assert not posts
+            await selection.press('Shift+F10')
+            await expect(menu).to_be_visible()
+            await page.keyboard.press('End')
+            await expect(page.locator('#delete-gallery-selected')).to_be_focused()
+            await page.keyboard.press('Home')
+            await expect(page.locator('#favourite-gallery-selected')).to_be_focused()
+            await page.keyboard.press('Tab')
+            await expect(menu).to_be_hidden()
+            assert not posts
+            await selection.click(button='right')
+            await page.locator('.gallery-bulk-count').click()
+            await expect(menu).to_be_hidden()
+            await expect(page.locator('.gallery-bulk-count')).to_have_text('3 selected')
+            # Near the viewport edge, keep every menu item reachable.
+            await page.evaluate('''() => {
+                const button = document.querySelector('#gallery-grid .gallery-bulk-selected');
+                button.dispatchEvent(new MouseEvent('contextmenu', {bubbles:true,cancelable:true,
+                    clientX:innerWidth-2,clientY:innerHeight-2}));
+            }''')
+            await expect(menu).to_be_visible()
+            bounds = await menu.bounding_box()
+            assert bounds['x'] >= 0 and bounds['x'] + bounds['width'] <= 1440
+            assert bounds['y'] >= 0 and bounds['y'] + bounds['height'] <= 1000
+            await page.screenshot(path=str(output / 'desktop-selection-context-menu.png'))
+            await page.evaluate('window.dispatchEvent(new Event("resize"))')
+            await expect(menu).to_be_hidden()
             # Hold a response: one request, no duplicate operation, fixed snapshot.
             first_started, release = asyncio.Event(), asyncio.Event()
             async def hold(route):
@@ -80,7 +126,7 @@ async def main(engine, output):
                     await release.wait()
                 await route.continue_()
             await page.route('**/api/images/*/actions', hold)
-            await page.locator('#favourite-gallery-selected').click()
+            await bulk_action('keep')
             await asyncio.wait_for(first_started.wait(), 5)
             await expect(page.locator('#delete-gallery-selected')).to_be_disabled()
             await page.evaluate('galleryBulk.perform("keep")')
@@ -92,12 +138,12 @@ async def main(engine, output):
             assert await page.locator('#gallery-grid .gallery-image-heart').count() == 3
             # Re-favouriting is an explicit true, never a toggle that removes a heart.
             await choose('a.png', 'd.png')
-            await page.locator('#favourite-gallery-selected').click()
+            await bulk_action('keep')
             await expect(page.locator('.gallery-bulk-status')).to_contain_text('2 images added to Favourites')
             assert len(posts) == 5 and await tile('a.png').locator('.gallery-image-heart').count() == 1
             await choose('a.png', 'b.png', 'c.png')
             await page.screenshot(path=str(output / 'desktop-multi-selection.png'))
-            await page.locator('#delete-gallery-selected').click()
+            await bulk_action('delete')
             await expect(page.locator('#image-confirm-dialog')).to_be_visible()
             await expect(page.locator('#image-confirm-message')).to_contain_text('3 selected images')
             assert await page.evaluate('document.activeElement.id') == 'cancel-image-confirm'
@@ -111,14 +157,14 @@ async def main(engine, output):
                     await route.continue_()
             b = next(item for item in service.images.values() if item['filename'] == 'b.png')
             await page.route(f'**/api/images/{b["id"]}/actions', deny_b)
-            await page.locator('#delete-gallery-selected').click()
+            await bulk_action('delete')
             await page.locator('#accept-image-confirm').click()
             await expect(page.locator('.gallery-bulk-status')).to_contain_text('Fixture image permission denied')
             await expect(page.locator('.gallery-bulk-count')).to_have_text('1 selected')
             await expect(tile('b.png')).to_have_attribute('aria-pressed', 'true')
             assert all((images / name).read_bytes() == value for name, value in originals.items())
             await page.unroute(f'**/api/images/{b["id"]}/actions', deny_b)
-            await page.locator('#delete-gallery-selected').click()
+            await bulk_action('delete')
             await page.locator('#accept-image-confirm').click()
             await expect(page.locator('.gallery-bulk-status')).to_contain_text('1 image moved to Wastebin')
             # Replaced versions must be explicitly selected again after refresh.
@@ -159,6 +205,7 @@ async def main(engine, output):
             # Phone has original two-button comparison row, no bulk UI; in-app Delete.
             await page.set_viewport_size(dict(width=390, height=844))
             await expect(select).to_be_hidden()
+            await expect(menu).to_be_hidden()
             await expect(page.locator('.gallery-bulk-actions')).to_be_hidden()
             await page.locator('#refresh-gallery').click()
             await tile('phone.png').click()
@@ -186,14 +233,14 @@ async def main(engine, output):
                 else:
                     await route.continue_()
             await page.route('**/api/images/*/actions', lost_reply)
-            await page.locator('#favourite-gallery-selected').click()
+            await bulk_action('keep')
             await expect(page.locator('.gallery-bulk-status')).to_contain_text('Refresh Gallery to check')
             assert len(attempts) == 1
             await page.unroute('**/api/images/*/actions', lost_reply)
             await page.locator('#refresh-gallery').click()
             await expect(tile('lost-one.png').locator('.gallery-image-heart')).to_have_count(1)
             await expect(page.locator('.gallery-bulk-count')).to_have_text('2 selected')
-            await page.locator('#favourite-gallery-selected').click()
+            await bulk_action('keep')
             await expect(page.locator('.gallery-bulk-status')).to_contain_text('2 images added to Favourites')
             # Navigating away while the first confirmed POST is in flight stops
             # remaining batch requests; returning reads the committed server state.
@@ -207,7 +254,7 @@ async def main(engine, output):
                     await navigation_release.wait()
                 await route.continue_()
             await page.route('**/api/images/*/actions', hold_navigation)
-            await page.locator('#delete-gallery-selected').click()
+            await bulk_action('delete')
             await page.locator('#accept-image-confirm').click()
             await asyncio.wait_for(navigation_started.wait(), 5)
             await page.locator('#create-tab').click()

@@ -1,5 +1,23 @@
 # Session handoff — 2026-10-24
 
+## Desktop selection context menu follow-up — 2026-10-25
+
+The user requested replacing the permanent Favourite selected/Delete selected
+buttons with a right-click menu. The same bulk action handlers now live in a
+Desktop-only menu on selected Gallery thumbnails; the count and a short hint stay
+above the grid. Unselected images and Phone retain their native context menus.
+The custom menu applies to the entire current selection, stays within viewport
+bounds and supports Shift+F10/ContextMenu, arrows, Home/End, Escape and Tab.
+Outside clicks, scrolling, resize, selection pruning and lifecycle resets dismiss
+it. Delete still uses the existing in-app confirmation and exact-version snapshot.
+No backend changes or action semantics were added. Shell cache is
+`comfy-control-desktop-gallery-bulk-3`.
+
+Verification: 440 pytest tests passed; the bulk real-API browser fixture passed
+in Chromium and WebKit, including right-click/keyboard focus and dismissal,
+viewport-edge positioning, no toolbar buttons, bulk actions/partial failures,
+unknown replies, stale versions, Compare, Phone and preserved drafts.
+
 ## Desktop Gallery and Bin follow-up — 2026-10-25
 
 New local branch `testing/desktop-gallery-bulk` starts from main `59fe52f` after
