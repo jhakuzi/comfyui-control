@@ -38,6 +38,6 @@
     "comfyui_control/setup.py": "da035bb261882305cd6de55e43fa64e2766dc7bc9e4b91a0b4a7a3b07d0ed2c8",
     "comfyui_control/update_widgets.py": "ebb901b8cea0b1b301fb5339bf7294c0390f135c35af9a93c6453fa81ff01c5d",
     "packaging/comfyui-control.spec": "c538c5e9dc673455b307d168a47f3261b168368499f1515cad1953e2d3d84451",
-    "pyproject.toml": "65e5beca0bddd6db7edc0a1f7b240f7ab8c4d2401df29bf3a8a92bb50cc64d5f"
+    "pyproject.toml": "a708e609f13175a0bdcaaa985eba5c141f1ae85f82f31c4353a330cf0f3a6a32"
   }
 }

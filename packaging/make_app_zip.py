@@ -26,6 +26,8 @@ def main():
             files[path.relative_to(root).as_posix()] = path
     for path in (root / "comfyui_control/assets").glob("*.png"):
         files[path.relative_to(root).as_posix()] = path
+    for path in (root / "comfyui_control/assets/workflows").glob("*.json"):
+        files[path.relative_to(root).as_posix()] = path
     for path in (root / "comfyui_control/mobile/web").glob("*"):
         if path.is_file():
             files[path.relative_to(root).as_posix()] = path

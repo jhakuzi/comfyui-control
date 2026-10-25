@@ -17,7 +17,7 @@ comfyui-control = "comfyui_control.cli:main"
 include = ["comfyui_control*"]
 
 [tool.setuptools.package-data]
-comfyui_control = ["assets/*.png"]
+comfyui_control = ["assets/*.png", "assets/workflows/*.json"]
 "comfyui_control.mobile" = ["web/*"]
 
 [tool.pytest.ini_options]

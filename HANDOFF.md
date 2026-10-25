@@ -1,5 +1,27 @@
 # Session handoff — 2026-10-24
 
+## Bundled workflows copied — 2026-10-25
+
+The user authorized copying VeryComfy, OfficialComfy-SeedVR_Upscaler and
+VeryComfy_Qwen21_Turbo_EDIT_ONLY from their configured ComfyUI installation.
+The correct source is `user/default/workflows`, not `user/workflows`. Three saved
+editor JSONs are copied byte-for-byte to `comfyui_control/assets/workflows/`.
+Credential-pattern checks found no flags; no nodes/links/prompts/editor state were
+rewritten. Wheel package data and the app ZIP builder now include these JSONs;
+the source RPM builder already includes package files. Only the pyproject package
+asset declaration's protected hash changed; app version remains 1.0.5.
+
+The future installer must use `<ComfyUI installation>/user/default/workflows` for
+existing/fresh installs, preserve existing files and ask before replacement. Inform
+users to open regular ComfyUI once, load each workflow and install missing custom
+nodes via ComfyUI Manager. Include an Open ComfyUI WebUI action. See
+`docs/BUNDLED_WORKFLOWS.md`. This change stages assets and packaging only; that
+optional desktop install UI remains pending. Verified byte-for-byte inclusion of
+all three files in a scratch wheel, app ZIP and source RPM; three focused
+presentation/package-boundary checks passed. Stable download artifacts were not
+replaced. No source installation was modified,
+no workflow was executed and no custom nodes/models were installed.
+
 ## Desktop Gallery viewer keys and selection — 2026-10-25
 
 The normal Desktop Gallery image viewer supports Left/Right using its existing
