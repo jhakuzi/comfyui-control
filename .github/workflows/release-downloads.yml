@@ -1,6 +1,9 @@
 name: Publish release downloads
 
 on:
+  push:
+    branches: [main]
+    paths: ['docs/releases/publish.json']
   workflow_dispatch:
     inputs:
       tag:
@@ -17,7 +20,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-downloads-${{ inputs.tag }}
+  group: release-downloads-${{ inputs.tag || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -30,6 +33,22 @@ jobs:
       RELEASE_TAG: ${{ inputs.tag }}
       BUILD_RUN_ID: ${{ inputs.build_run }}
     steps:
+      - name: Read reviewed publication request
+        if: github.event_name == 'push'
+        run: |
+          python3 - <<'PYCODE'
+          import base64, json, os, re, subprocess
+          repo, sha = os.environ['GH_REPO'], os.environ['GITHUB_SHA']
+          response = json.loads(subprocess.check_output([
+              'gh', 'api', f'repos/{repo}/contents/docs/releases/publish.json?ref={sha}']))
+          request = json.loads(base64.b64decode(response['content']))
+          tag, run = request['tag'], str(request['build_run'])
+          if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+(?:rc[1-9][0-9]*)?', tag) or not run.isdecimal():
+              raise SystemExit('Invalid reviewed publication request.')
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write(f'RELEASE_TAG={tag}\nBUILD_RUN_ID={run}\n')
+          PYCODE
+
       - name: Verify successful release build and matching tag
         run: |
           python3 - <<'PY'
@@ -59,7 +78,24 @@ jobs:
               raise SystemExit('The build commit does not match this release tag.')
           if packaging and api(f"compare/{ref['sha']}...{run['head_sha']}")['status'] not in ('ahead', 'identical'):
               raise SystemExit('The packaging build must descend from the release tag.')
-          subprocess.run(['gh', 'release', 'view', tag], check=True)
+          # Create a draft only after the tag and successful COPR run are verified.
+          existing = subprocess.run(['gh', 'release', 'view', tag], stdout=subprocess.DEVNULL)
+          if existing.returncode:
+              import base64
+              notes = api(f'contents/docs/releases/{tag.removeprefix("v")}.md?ref={tag}')
+              from pathlib import Path
+              path = Path('release-notes.md')
+              path.write_text(base64.b64decode(notes['content']).decode('utf-8') +
+                  '\n## Install or update\n\nFedora COPR:\n\n```bash\n'
+                  'sudo dnf copr enable jhakuzi/comfyui-control\n'
+                  'sudo dnf install --refresh comfyui-control\n'
+                  '# Already installed:\n'
+                  'sudo dnf upgrade --refresh comfyui-control\n```\n\n'
+                  'For ZIP installation, extract `comfyui-control.zip` and run '
+                  '`bash install.sh` as your normal user. Restart the app and reload WebUI pages.\n')
+              subprocess.run(['gh', 'release', 'create', tag, '--verify-tag', '--draft',
+                              '--title', f'ComfyUI Control {tag.removeprefix("v")}',
+                              '--notes-file', str(path)], check=True)
           PY
 
       - name: Download verified build artifacts
