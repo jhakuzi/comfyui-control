@@ -700,10 +700,19 @@ class MainWindow(QMainWindow):
             self.workflow_dialog.activateWindow()
             return
         self._workflow_offers.add(config.comfy_dir)
-        dialog = self.workflow_dialog = WorkflowInstallDialog(config.directory, self.mobile.settings.comfy_url, self)
+        directory = config.comfy_dir
+        dialog = self.workflow_dialog = WorkflowInstallDialog(config.directory, self.mobile.settings.comfy_url, self,
+            server_state=lambda: self.controller.state if not self._closing and self.controller.config.comfy_dir == directory else 'unavailable',
+            start_server=lambda: self._start_workflow_server(directory))
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         dialog.finished.connect(lambda _result: self._workflow_closed(dialog))
         dialog.open()
+
+    def _start_workflow_server(self, directory):
+        if self._closing or self.controller.config.comfy_dir != directory or self.controller.state not in {'stopped', 'crashed'}:
+            return False
+        self.controller.start()
+        return self.controller.state in {'starting', 'running', 'restarting'}
 
     def _workflow_closed(self, dialog):
         if self.workflow_dialog is dialog:

@@ -1,5 +1,5 @@
 Name:           comfyui-control
-Version:        1.0.5
+Version:        1.1.0
 Release:        1%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
@@ -62,6 +62,12 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Sun Oct 25 2026 ComfyUI Control contributors - 1.1.0-1
+- Add Desktop/Phone Gallery bulk actions and Desktop viewer keyboard shortcuts.
+- Handle missing Wastebin originals safely after NFS remounts.
+- Bundle three workflows with an optional native installer and Manager setup notice.
+- Offer to start ComfyUI and wait for API readiness before opening its WebUI.
+
 * Sat Oct 24 2026 ComfyUI Control contributors - 1.0.5-1
 - Modernize Phone controls, results and image viewer using shared WebUI components.
 - Share Favourites and Wastebin across devices and add confirmed Clear Bin.

@@ -1,8 +1,8 @@
 # Fedora RPM and COPR
 
-Version **1.0.5** modernizes Phone controls and shares Gallery Favourites/Wastebin.
-RPM version `1.0.5-1` upgrades previous releases normally.
-See the [release notes](../docs/releases/1.0.5.md). Development versions remain
+Version **1.1.0** adds Gallery bulk actions and the bundled workflow installer.
+RPM version `1.1.0-1` upgrades previous releases normally.
+See the [release notes](../docs/releases/1.1.0.md). Development versions remain
 blocked from COPR; stable releases and explicitly numbered RCs can be published.
 
 ## App ZIP download

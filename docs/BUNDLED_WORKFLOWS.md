@@ -40,9 +40,15 @@ files are reported as up to date. To replace a different existing workflow, sele
 since review is preserved; refresh and review it again before replacing it.
 
 Results list installed, skipped and failed files. **Refresh** checks the current
-folder again; **Open ComfyUI WebUI** uses the configured ComfyUI endpoint (the
-regular backend address from Mobile WebUI settings, not the controller's Phone
-page). Start ComfyUI first if needed. No browser is opened automatically.
+folder again. **Start / open ComfyUI WebUI** checks the configured regular ComfyUI
+endpoint from Mobile WebUI settings (not the controller's Phone page). A valid
+ready API response opens the browser immediately. If the server is stopped, it
+asks before starting the selected installation through the existing controller.
+It then waits up to two minutes for API readiness, with no duplicate start.
+Already-starting/running processes are waited for instead of restarted. Startup
+failure, changed installations and timeouts show feedback without opening a
+browser. Closing the dialog cancels pending browser opening; it does not stop a
+server you explicitly started. Copying files never starts the server.
 
 File checks/copying run in a bounded isolated worker. The installer uses temporary
 files, no-follow directory/file checks and atomic writes. Unknown filenames,

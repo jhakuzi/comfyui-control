@@ -1,5 +1,28 @@
 # Session handoff — 2026-10-24
 
+## Authorized 1.1.0 release — 2026-10-25
+
+The user confirmed the installer works in a Fedora VM and authorized the final
+start-before-open addition, GitHub testing-branch push, main merge and COPR build.
+This supersedes earlier testing-only restrictions. Version is 1.1.0-1.
+
+`workflow_webui.py` uses Qt asynchronous networking to check a bounded
+`/system_stats` response. Ready servers open directly, including externally
+started servers. Unavailable endpoints with an idle controller offer one explicit
+start through the existing controller. Starting/running/restarting processes are
+only waited for. A stopped/crashed startup, changed selected installation, wrong
+API response or timeout never triggers a duplicate start or late browser opening.
+Closing cancels the pending opening, while an explicitly started server continues.
+All start tests use HTTP/controller fixtures; no real ComfyUI server was launched.
+
+The release also includes all reviewed Gallery/Phone/viewer changes and bundled
+workflow installation since 1.0.5. Stable download ZIP/source RPM are refreshed;
+Verification: 493 pytest tests passed, including native readiness/start fixtures;
+six Gallery browser runs passed (viewer shortcuts, Phone bulk actions and shared
+collections, each in Chromium and WebKit). ZIP contents match the new module and
+all three bundled workflow JSONs. Source RPM built successfully; diff check passed.
+GitHub/COPR result links will be recorded after publication.
+
 ## Optional native workflow installer — 2026-10-25
 
 The implementation is on `testing/desktop-gallery-bulk`, ready for the user's

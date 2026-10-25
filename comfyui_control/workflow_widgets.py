@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QCheckBox, QDialog, QDialogButtonBox, QLabel, QMes
 
 from .background_process import BackgroundProcess
 from .bundled_workflows import RELATIVE_TARGET, WORKFLOWS
+from .workflow_webui import WorkflowWebUI
 
 SETUP_NOTICE = ('Open the regular ComfyUI WebUI at least once and load each installed workflow. '
                 'Use ComfyUI Manager to install its missing custom nodes, then restart ComfyUI when prompted. '
@@ -16,7 +17,7 @@ SETUP_NOTICE = ('Open the regular ComfyUI WebUI at least once and load each inst
 
 
 class WorkflowInstallDialog(QDialog):
-    def __init__(self, directory, comfy_url, parent=None):
+    def __init__(self, directory, comfy_url, parent=None, *, server_state=lambda: 'stopped', start_server=None):
         super().__init__(parent)
         self.directory, self.comfy_url = Path(directory), comfy_url
         self.review = None
@@ -67,11 +68,15 @@ class WorkflowInstallDialog(QDialog):
         self.results.setMaximumHeight(130)
         self.results.hide()
         layout.addWidget(self.results)
-        self.open_webui = QPushButton('Open ComfyUI WebUI')
-        self.open_webui.setToolTip('Start ComfyUI first if it is not running. ' + comfy_url)
+        self.open_webui = QPushButton('Start / open ComfyUI WebUI')
+        self.open_webui.setToolTip('Checks ComfyUI, offers to start it if stopped, and waits for readiness before opening. ' + comfy_url)
         self.open_webui.clicked.connect(self._open_webui)
         self.open_webui.hide()
         layout.addWidget(self.open_webui)
+        self.webui = WorkflowWebUI(comfy_url, state=server_state, start=start_server,
+            confirm=self._confirm_start, open_url=lambda url: QDesktopServices.openUrl(url), parent=self)
+        self.webui.status.connect(self.status.setText)
+        self.webui.busy_changed.connect(self._webui_busy)
         layout.addStretch(1)
         self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
         self.cancel = self.buttons.button(QDialogButtonBox.StandardButton.Cancel)
@@ -89,10 +94,11 @@ class WorkflowInstallDialog(QDialog):
 
     def _controls(self):
         if not hasattr(self, 'copy'): return
-        busy = self.job is not None
+        busy = self.job is not None or self.webui.busy
+        self.open_webui.setEnabled(not busy)
         self.copy.setEnabled(not busy and self.review is not None and any(c.isChecked() for c in self.choices.values()))
         self.refresh.setEnabled(not busy)
-        self.cancel.setEnabled(not busy or self.operation == 'inspect')
+        self.cancel.setEnabled(self.job is None or self.operation == 'inspect')
         self.replace.setEnabled(not busy)
         for choice in self.choices.values(): choice.setEnabled(not busy)
 
@@ -171,10 +177,19 @@ class WorkflowInstallDialog(QDialog):
             if result != QMessageBox.StandardButton.Yes: return
         self._request('install', dict(names=names, replace=replace, review=self.review))
 
+    def _webui_busy(self, busy):
+        self.open_webui.setText('Checking / waiting for ComfyUI…' if busy else 'Start / open ComfyUI WebUI')
+        self._controls()
+
+    def _confirm_start(self):
+        return QMessageBox.question(self, 'Start ComfyUI server?',
+            'ComfyUI is not running at the configured address. Start the selected ComfyUI server, '
+            'wait until it is ready, and then open its WebUI?',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel) == QMessageBox.StandardButton.Yes
+
     def _open_webui(self):
-        url = QUrl(self.comfy_url)
-        if url.scheme() not in ('http', 'https') or not url.host() or not QDesktopServices.openUrl(url):
-            QMessageBox.warning(self, 'Could not open ComfyUI', 'Open the regular ComfyUI WebUI in your browser. Check its address in Mobile WebUI settings.')
+        self.webui.open()
 
     def reject(self):
         if self.job is None or self.operation == 'inspect':
@@ -182,6 +197,7 @@ class WorkflowInstallDialog(QDialog):
             super().reject()
 
     def _cleanup(self):
+        self.webui.cancel()
         self.poll.stop()
         if self.job is not None: self.job.cancel(); self.job = None
         self._worker_holder.pop('job', None)

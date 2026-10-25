@@ -153,9 +153,10 @@ def test_dialog_cancel_and_selected_install_with_webui_notice(app, root):
     wait_dialog(dialog)
     assert '1 installed' in dialog.status.text()
     assert not dialog.open_webui.isHidden()
-    with patch('comfyui_control.workflow_widgets.QDesktopServices.openUrl', return_value=True) as opened:
+    with patch.object(dialog.webui, 'open') as opened:
         dialog._open_webui()
-        opened.assert_called_once_with(QUrl('http://127.0.0.1:8290'))
+        opened.assert_called_once()
+        assert dialog.webui.url == QUrl('http://127.0.0.1:8290')
     assert len(list((root / workflows.RELATIVE_TARGET).glob('*.json'))) == 1
 
 
@@ -246,3 +247,18 @@ def test_inspection_cancel_does_not_create_workflow_directory(app, root):
         worker.return_value.cancel.assert_called_once()
         assert dialog.job is None
     assert not (root / 'user').exists()
+
+
+def test_start_from_workflow_dialog_uses_controller_and_selected_installation(app, root):
+    window = MainWindow(Config(comfy_dir=str(root)))
+    with patch.object(window.controller, 'start') as start:
+        assert not window._start_workflow_server(str(root / 'other'))
+        start.assert_not_called()
+        def started(): window.controller.state = 'starting'
+        start.side_effect = started
+        assert window._start_workflow_server(str(root))
+        start.assert_called_once()
+        assert not window._start_workflow_server(str(root))
+        start.assert_called_once()
+    window.controller.state = 'stopped'
+    window.close()

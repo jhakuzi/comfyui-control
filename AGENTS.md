@@ -62,7 +62,7 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   bump the shell cache when shipping changed assets. Never cache private APIs or
   images. Preserve reduced-motion support.
 
-## Current implementation contracts (1.0.5)
+## Current implementation contracts (1.1.0)
 
 - Workflow/model refresh reconciles option catalogues in place when graph/control
   structure is unchanged. Preserve select/button DOM identity, handlers, drafts,
@@ -193,7 +193,11 @@ Paths below are under `comfyui_control/` unless stated otherwise:
 - `bundled_workflows.py` is the standard-library-only inspect/copy worker;
   `workflow_widgets.py` is the optional native dialog. The main app offers it after
   existing-folder selection and successful fresh setup, and has a permanent button
-  beside Settings. Do not prompt repeatedly on startup or start ComfyUI automatically.
+  beside Settings. Do not prompt repeatedly on startup or start ComfyUI during copying.
+- `workflow_webui.py` checks API readiness asynchronously. Its explicit button may
+  offer one controller-managed start after confirmation, then wait for readiness
+  before opening the browser. Never duplicate a starting/running process; stop
+  pending opening on cancellation, failure, changed installations or timeout.
 - Target exactly `<selected ComfyUI>/user/default/workflows`. Preserve bundled JSON
   bytes. Default to skipping existing files; replacement requires a reviewed exact
   file identity and confirmation of those names. Keep symlink/root/directory checks,
