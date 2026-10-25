@@ -63,6 +63,23 @@ async def main(engine, output):
                 await page.locator('#gallery-grid .gallery-bulk-selected').first.click(button='right')
                 await expect(page.locator('#gallery-selection-menu')).to_be_visible()
                 await page.locator('#' + ('favourite-gallery-selected' if action == 'keep' else 'delete-gallery-selected')).click()
+            # The same icon nodes sit beside Compare at wide/minimum Desktop
+            # widths, and restore their original Phone heading without duplication.
+            await page.evaluate('window.originalGalleryTools = document.querySelector("#gallery-page .gallery-library-tools")')
+            for width, height in [(1440, 1000), (1000, 600), (390, 844), (1440, 1000)]:
+                await page.set_viewport_size(dict(width=width, height=height))
+                desktop = width >= 1000 and height >= 600
+                parent = '.comparison-actions' if desktop else '.heading'
+                await expect(page.locator(f'#gallery-page > {parent} > .gallery-library-tools')).to_be_visible()
+                assert await page.evaluate('originalGalleryTools === document.querySelector("#gallery-page .gallery-library-tools")')
+                assert await page.locator('#gallery-page .gallery-library-tools').count() == 1
+                if desktop:
+                    ids = ['select-compare', 'select-gallery-images', 'compare-images', 'refresh-gallery', 'gallery-wastebin', 'gallery-favourites']
+                    row = [await page.locator('#'+id).bounding_box() for id in ids]
+                    assert max(b['y'] for b in row) - min(b['y'] for b in row) <= 1
+                    assert all(a['x']+a['width'] <= b['x'] for a,b in zip(row,row[1:]))
+                    assert row[-1]['x'] + row[-1]['width'] <= width
+                    for icon in row[-3:]: assert icon['width'] >= 48 and icon['height'] >= 48
             boxes = [await page.locator('#' + id).bounding_box() for id in ['select-compare', 'select-gallery-images', 'compare-images']]
             assert boxes[0]['x'] < boxes[1]['x'] < boxes[2]['x']
             assert abs(boxes[0]['width'] - boxes[1]['width']) < 1 and abs(boxes[2]['width'] - 2 * boxes[0]['width']) < 1
@@ -70,6 +87,7 @@ async def main(engine, output):
             await expect(page.locator('#gallery-page .eyebrow')).to_be_hidden()
             await expect(page.locator('#gallery-page > .heading + .hint')).to_be_hidden()
             await expect(page.locator('#refresh-gallery')).to_be_visible()
+            await page.screenshot(path=str(output / 'desktop-gallery-single-toolbar.png'))
             grid_top = (await page.locator('#gallery-grid').bounding_box())['y']
             # Comparison still selects exactly A/B; entering bulk ends compare mode.
             await page.locator('#select-compare').click()
@@ -110,7 +128,7 @@ async def main(engine, output):
             await expect(menu).to_be_hidden()
             assert not posts
             await selection.click(button='right')
-            await page.locator('#gallery-page > .heading').click(position=dict(x=5,y=5))
+            await page.locator('.tabs').click(position=dict(x=5,y=5))
             await expect(menu).to_be_hidden()
             await expect(page.locator('.gallery-bulk-count')).to_have_text('3 selected')
             await expect(page.locator('.gallery-bulk-count')).to_be_hidden()

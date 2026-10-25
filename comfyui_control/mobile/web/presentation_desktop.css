@@ -412,13 +412,16 @@
   box-shadow: 0 16px 36px #0009;
 }
 
-/* Split the original selection half; Compare keeps the other half. */
+/* Keep selection, Compare and collection tools in one Desktop row. */
 :where(html[data-presentation="desktop"]) #gallery-page > .comparison-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr) auto;
 }
 :where(html[data-presentation="desktop"]) #gallery-page > .comparison-actions button {
   min-width: 0;
+}
+:where(html[data-presentation="desktop"]) #gallery-page > .comparison-actions > .gallery-library-tools {
+  margin-left: 0;
 }
 :where(html[data-presentation="desktop"]) .gallery-bulk-actions {
   display: contents;
@@ -487,5 +490,5 @@
   display: none;
 }
 :where(html[data-presentation="desktop"]) #gallery-page > .heading {
-  justify-content: flex-end;
+  display: none;
 }

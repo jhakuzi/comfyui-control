@@ -1,5 +1,19 @@
 # Session handoff — 2026-10-24
 
+## Single-row Desktop Gallery toolbar — 2026-10-25
+
+Desktop now places the existing Refresh/Wastebin/Favourites tool group immediately
+to the right of a narrower Compare button, alongside both selection buttons. The
+empty old heading row is hidden. `presentation_desktop.js` moves the original tool
+nodes using a comment anchor and restores their heading placement on Phone;
+no listeners, buttons or requests are duplicated. Layout lives in scoped Desktop
+CSS. Shell cache is `comfy-control-desktop-gallery-bulk-5`.
+
+The bulk fixture checks all six controls share one row at 1440×1000 and 1000×600,
+48px icon targets, no overflow, exact node identity and Phone/Desktop round trips.
+Both bulk and collection fixtures pass in Chromium/WebKit, with all three focused
+presentation/asset checks. No backend, release or main changes.
+
 ## Missing Bin originals after NFS remount — 2026-10-25
 
 Read-only diagnosis confirmed the running app uses the updated Downloads testing

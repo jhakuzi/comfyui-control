@@ -1,6 +1,8 @@
 # Shared Gallery library
 
 Desktop and Phone share Refresh, Wastebin (bin) and Favourites (heart) controls.
+Desktop places them to the right of Compare in one row with the selection buttons;
+Phone retains their original Gallery heading placement.
 They have accessible names and 48px touch targets, wrapping together on narrow
 screens. Devices connected to the same controller and configured output folder
 see the same heart marks and bin contents, including existing marks/deletions.
@@ -113,7 +115,7 @@ Listing/previewing does not silently prune records.
   Private grids clear on sign-in; late responses cannot repaint a different view.
   Thumbnails retain decoding, fallback, loading rings and reduced-motion behavior.
 - Public assets remain allowlisted. Shell cache is
-  `comfy-control-desktop-gallery-bulk-4`; APIs/images remain uncached.
+  `comfy-control-desktop-gallery-bulk-5`; APIs/images remain uncached.
 
 Restart the app for the Python library change, then reload Desktop and Phone.
 Sharing applies to the same controller/output, independently of whether a device

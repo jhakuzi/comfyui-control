@@ -128,7 +128,7 @@ async def main(engine, output):
             for width, height in [(1440, 1000), (390, 844), (320, 568), (844, 390), (768, 1024)]:
                 await page.set_viewport_size(dict(width=width, height=height))
                 assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
-                buttons = page.locator('#gallery-page > .heading .gallery-library-tools > button')
+                buttons = page.locator('#gallery-page .gallery-library-tools > button')
                 assert await buttons.evaluate_all('els => els.map(el => el.id)') == ['refresh-gallery', 'gallery-wastebin', 'gallery-favourites']
                 for button in await buttons.all():
                     box = await button.bounding_box()
