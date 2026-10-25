@@ -1,5 +1,12 @@
 # Session handoff — 2026-10-24
 
+## Remove workflow import hint — 2026-10-25
+
+Removed the requested API-format import onboarding paragraph from the shared
+workflow picker and its obsolete visibility assignment. Cache bumped; the frozen
+presentation check normalizes only this explicitly authorized removal.
+
+
 ## Firefox tab-title verification / testing checkout update — 2026-10-25
 
 The user reported no sampling percentage in Firefox. Read-only inspection showed

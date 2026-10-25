@@ -355,7 +355,6 @@ async function loadSavedWorkflows() {
         await choosePreset("");
       }
     }
-    $("empty-presets").hidden = !!names.length || !!picker.querySelector('[data-reused-workflow]');
     $("workflow-source-note").hidden = !!names.length;
     $("workflow-source-note").textContent =
       "Save a workflow in ComfyUI’s workflows directory to select it here.";
