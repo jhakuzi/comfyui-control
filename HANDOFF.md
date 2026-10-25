@@ -25,7 +25,17 @@ recent-page backfill and independent-client revision tests. Gallery switch check
 passed in Chromium/WebKit/Firefox; preview recovery, Batch Count and collections
 regressions passed in Chromium/WebKit. Additional narrow-header/live-metrics
 checks passed in all three browsers; screenshots were visually reviewed. ZIP
-contents match the tested source, source RPM built and diff check passed. No real GPU or user output changes.
+contents match the tested source, source RPM built and diff check passed.
+
+Publication succeeded:
+- Testing head `030465de7a2dc70741c9b3c7408b12c20ca15461` pushed; clean local testing checkout updated.
+- [PR #3](https://github.com/jhakuzi/comfyui-control/pull/3) merged at `ecc1c42ec407743f7fc9ca681277a17c3bf3dedc` with expected-head guard.
+- Annotated tag `v1.2.0` points to that tested main merge.
+- [Packaging run 40240681332](https://github.com/jhakuzi/comfyui-control/actions/runs/40240681332) succeeded, including Fedora RPM build/tests and COPR publication.
+- [COPR build 11206588](https://copr.fedorainfracloud.org/coprs/jhakuzi/comfyui-control/build/11206588/) succeeded: `1.2.0-1`, `fedora-44-x86_64`.
+- `docs/releases/publish.json` requests the matching GitHub Release with verified build artifacts. The publication workflow verifies tag/COPR run and ZIP contents before attaching RPM, source RPM and ZIP.
+- Upgrade with `sudo dnf upgrade --refresh comfyui-control`, restart the app and hard-reload clients. Complete source/testing commands are in the session output `release-1.2.0.md`.
+This publication record follows the immutable release tag. No real GPU or user output changes.
 
 
 ## Returning-tab preview selection fix — 2026-10-25
