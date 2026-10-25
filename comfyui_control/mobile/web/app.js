@@ -1,5 +1,6 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
+const baseTitle = document.title;
 const activeStatuses = new Set([
   "submitting",
   "queued",
@@ -107,6 +108,7 @@ async function api(path, options = {}) {
   return body;
 }
 function showLogin() {
+  document.title = baseTitle;
   imageConfirmation.cancel();
   galleryBulk?.reset();
   galleryLibrary.close();
@@ -269,6 +271,8 @@ function updateGenerate() {
   const feedback = generateFeedback.update({ jobs: state.jobs, selectedJob: job,
     busy, submitting, pending: !!pendingSubmission, connected, online: state.online, recovering });
   ComfyGenerateFeedback.paint($("generate"), $("generate-label"), feedback);
+  document.title = feedback.kind === "determinate"
+    ? `${Math.floor(feedback.progress * 100)}% · ${baseTitle}` : baseTitle;
   clearTimeout(generateFeedbackTimer);
   if (generateFeedback.feedback) {
     // One local redraw clears terminal feedback. No requests or new listeners.
@@ -923,17 +927,31 @@ function refreshFullState() {
   if (fullStatePending) return;
   fullStateAgain = false;
   fullStatePending = true;
+  const epoch = recoveryEpoch;
   api("/api/state")
-    .then(applyState)
-    .catch(connectionFailure)
+    .then((value) => { if (epoch === recoveryEpoch) applyState(value); })
+    .catch((error) => { if (epoch === recoveryEpoch) connectionFailure(error); })
     .finally(() => {
+      if (epoch !== recoveryEpoch) return;
       fullStatePending = false;
       if (fullStateAgain) refreshFullState();
     });
 }
 function applyState(value) {
-  if (value.instance === state.instance && value.version < state.version)
-    return;
+  if (value.instance === state.instance && value.version < state.version) {
+    // Frequent progress/telemetry summaries can overtake a full response. Keep
+    // the newest live state, but accept missing details for the same job/version.
+    if (!value.partial && state.partial) {
+      const details = new Map(value.jobs.map((job) => [job.id, job]));
+      value = { ...state, partial: false, jobs: state.jobs.map((job) => {
+        const full = details.get(job.id);
+        return (!job.preset || (job.images || []).length !== job.image_count) &&
+          full && full.status === job.status && full.prompt_id === job.prompt_id &&
+          full.images?.length === job.image_count
+          ? { ...full, ...job, images: full.images } : job;
+      }) };
+    } else return;
+  }
   if (value.instance !== state.instance && value.partial) {
     refreshFullState();
     return;
@@ -1797,7 +1815,16 @@ $("logout").addEventListener(
   }),
 );
 document.addEventListener("visibilitychange", () => {
-  document.hidden ? pauseConnection() : foreground();
+  if (document.hidden) {
+    // Keep the existing event stream for tab-title progress and completion.
+    // Real page suspension/navigation still cancels through pagehide.
+    imageConfirmation.cancel();
+    galleryBulk?.reset();
+    galleryLibrary.close();
+    saveDraft();
+    saveUI();
+    stopGallerySync();
+  } else foreground();
 });
 window.addEventListener("pagehide", pauseConnection);
 window.addEventListener("pageshow", foreground);
@@ -1831,8 +1858,11 @@ $("import-name").addEventListener("input", saveUI);
 if ("serviceWorker" in navigator && window.isSecureContext)
   navigator.serviceWorker.register("/sw.js").catch(() => {});
 function connectionFailure(error) {
-  if (document.hidden || !$("login").hidden) return;
   connected = false;
+  if (document.hidden || !$("login").hidden) {
+    updateGenerate();
+    return;
+  }
   $("offline").hidden = false;
   $("connection").textContent = "Reconnecting…";
   $("connection").classList.remove("online");

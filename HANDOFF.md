@@ -1,5 +1,34 @@
 # Session handoff — 2026-10-24
 
+## Background results and browser-tab sampling progress — 2026-10-25
+
+On `testing/shared-image-delete`, the user also requested a stale Preview & results
+fix after tab switches and a percentage in the browser tab during sampling.
+Full state responses can be overtaken by frequent partial SSE updates. Previously
+all older responses were discarded, including the only completed-image details,
+so the Desktop fallback could continue showing the previous completed image.
+Now a same-instance older full response may fill missing details only for matching
+job ID, prompt ID, status and image count, retaining all newer summary fields.
+Full-state request callbacks are guarded by the recovery epoch across suspension.
+
+Ordinary visibility changes save drafts/UI and stop Gallery synchronization but
+retain the existing SSE stream, allowing background sampling progress and terminal
+results. Pagehide, offline/logout and real connection failures retain cancellation/
+resume behavior. Browser suspension is still recovered using state/resume; there
+is no new polling or prompt resubmission. The tab title uses the shared Generate
+feedback's validated sampling fraction (`65% · original title`), clearing the
+percentage for processing/loading, terminal states and connection loss. Login
+also restores the original title. Service worker cache is bumped.
+
+Verification: 496 pytest tests passed. Six browser-script runs passed in Chromium
+and WebKit: the new background/completion-race check (Desktop and Phone), Desktop
+submission/preview transitions, and shared Generate progress (Desktop and Phone).
+Draft preservation, background 25%/65% titles, completion-title reset, simulated
+BFCache resume and exactly two intended submissions are covered. No real GPU or
+physical browser suspension was used. No release/push is included in this change.
+
+
+
 ## Shared Delete permission — 2026-10-25
 
 The user requested deletion from any browser and removal of the generating-browser

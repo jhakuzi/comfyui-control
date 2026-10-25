@@ -161,6 +161,13 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   immediate-VRAM-cleanup patch. The existing idle-only `/free` request remains;
   server-side processing timing is outside this app's guarantee.
 
+- Ordinary background-tab visibility retains the existing SSE stream for sampling
+  title progress and completed results; pagehide/offline/logout still cancel and
+  resume safely. Never add a second poller or resubmit work on return. Older full
+  state responses may hydrate missing details only for matching instance/job/
+  prompt/status/image count, preserving newer summaries and recovery epochs.
+  Browser titles use validated shared sampling feedback and reset outside sampling.
+
 ## Data and safety contracts
 
 - Act on the explicitly selected image and version. Ignore stale async responses
