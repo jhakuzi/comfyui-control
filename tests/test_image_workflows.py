@@ -114,7 +114,7 @@ def test_actions_preserve_graphs_pixels_drafts_and_existing_session_recovery(tmp
             service.image_owners[service.image_ownership_key(older)] = BOB
             caps = await service.describe_image_actions(older['id'], ALICE)
             assert caps['actions']['edit']['available'] and caps['actions']['upscale']['available']
-            assert not caps['actions']['trash']['available']
+            assert caps['actions']['trash']['available']
             request = dict(action='edit', request_id=str(uuid.uuid4()), modified=older['modified'], prompt='Golden light, preserve composition')
             first, retry = await asyncio.gather(*(service.image_action(older['id'], ALICE, request) for _ in range(2)))
             assert first['job']['id'] == retry['job']['id'] == request['request_id']

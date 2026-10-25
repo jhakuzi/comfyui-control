@@ -33,7 +33,7 @@ def test_old_favourites_survive_restart_recent_scans_and_other_browser_reads(tmp
         assert favourites[0]['kept'] and favourites[0]['modified'] == item['modified']
         assert [entry['id'] for entry in await reopened.gallery(BOB, favourites=True)] == [item['id']]
         # A regular refresh must retain the older image's validated reference for
-        # the existing image/details/action APIs, without granting delete access.
+        # the existing image/details/action APIs with shared delete access.
         await reopened.gallery(BOB, force=True)
         assert reopened.image_action_capabilities(item['id'], ALICE)['kept']
         os.utime(old, ns=(1700000000001000000,) * 2)
@@ -106,10 +106,14 @@ def test_authenticated_devices_share_library_but_not_jobs_history_or_live_permis
             assert len(await (await bob.get(base + 'api/gallery?favourites=1')).json()) == 1
             assert (await (await bob.get(base + 'api/state')).json())['jobs'] == []
             assert await (await bob.get(base + 'api/prompts')).json() == []
-            assert not (await (await bob.get(base + action)).json())['actions']['trash']['available']
+            assert (await (await bob.get(base + action)).json())['actions']['trash']['available']
             assert (await bob.post(base + 'api/jobs/private-job/cancel', headers=origin,
                 json={'confirm_interrupt': True})).status == 400
-            deleted = await (await alice.post('/' + action, headers=origin,
+            assert (await anonymous.post(base + action, headers=origin,
+                json=dict(action='delete', confirm=True, modified=item['modified']))).status == 401
+            assert (await bob.post(base + action,
+                json=dict(action='delete', confirm=True, modified=item['modified']))).status == 403
+            deleted = await (await bob.post(base + action, headers=origin,
                 json=dict(action='delete', confirm=True, modified=item['modified']))).json()
             token = deleted['trash']['token']
             assert len(await (await bob.get(base + 'api/trash')).json()) == 1
@@ -132,7 +136,7 @@ def test_authenticated_devices_share_library_but_not_jobs_history_or_live_permis
     asyncio.run(scenario())
 
 
-def test_shared_bin_keeps_original_when_source_ownership_changes(tmp_path):
+def test_shared_bin_deletion_is_independent_of_source_browser_ownership(tmp_path):
     async def scenario():
         picture(tmp_path / 'out/one.png')
         service = MobileService(tmp_path / 'data', MobileSettings(), tmp_path / 'out')
@@ -144,9 +148,9 @@ def test_shared_bin_keeps_original_when_source_ownership_changes(tmp_path):
         service.jobs['original']['owner'] = BOB
         result = await service.delete_permanently(BOB,
             dict(confirm=True, tokens=[deleted['trash']['token']]))
-        assert 'ownership changed' in result['results'][0]['error']
-        assert (tmp_path / 'out/one.png').exists()
-        assert len(await service.image_trash(ALICE)) == len(await service.image_trash(BOB)) == 1
+        assert result['results'][0]['deleted']
+        assert not (tmp_path / 'out/one.png').exists()
+        assert await service.image_trash(ALICE) == await service.image_trash(BOB) == []
     asyncio.run(scenario())
 
 

@@ -1,5 +1,23 @@
 # Session handoff — 2026-10-24
 
+## Shared Delete permission — 2026-10-25
+
+The user requested deletion from any browser and removal of the generating-browser
+restriction message. `testing/shared-image-delete` changes the shared backend
+capability and mutation checks, so Desktop/Phone single and bulk Delete work for
+all clients admitted by WebUI access rules. Image-settings sharing is independent.
+Permanent deletion also no longer depends on private source-browser metadata;
+legacy bin records retain their recorded owner for worker validation. Confirmed
+virtual deletion still only marks the bin; permanent deletion retains explicit
+token confirmation, current output scope and all filesystem identity safeguards.
+Authentication, Host/Origin, job/cancellation and prompt/metadata privacy remain.
+Verification: all 496 pytest tests passed, including cross-browser HTTP deletion,
+authentication/Origin rejection, private job/metadata boundaries, local/network
+output, confirmation/stale-version checks and permanent-delete identity guards.
+`git diff --check` passed. No frontend assets changed.
+No version bump or release publication is part of this change.
+
+
 ## Authorized 1.1.0 release — 2026-10-25
 
 The user confirmed the installer works in a Fedora VM and authorized the final

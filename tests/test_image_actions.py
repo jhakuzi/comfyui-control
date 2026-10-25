@@ -115,23 +115,34 @@ def test_trashed_outputs_disappear_from_public_jobs_without_changing_journal(tmp
     asyncio.run(scenario())
 
 
-def test_workflow_actions_are_honestly_unavailable_and_sharing_does_not_grant_trash(tmp_path):
+@pytest.mark.parametrize('network', [False, True])
+@pytest.mark.parametrize('share_settings', [False, True])
+def test_delete_is_shared_independently_of_private_workflow_settings(tmp_path, network, share_settings):
     async def scenario():
         picture(tmp_path / 'one.png')
-        service = MobileService(tmp_path / 'data', MobileSettings(share_image_settings=True), tmp_path)
-        service.jobs['job'] = {'id': 'job', 'owner': ALICE}
+        service = MobileService(tmp_path / 'data', MobileSettings(share_image_settings=share_settings), tmp_path, network_output=network)
+        service.jobs['job'] = {'id': 'job', 'owner': ALICE, 'status': 'complete', 'images': [], 'created': 1}
         item = service.image_ref(dict(filename='one.png'), 'job')
         item = (await service.gallery(ALICE))[0]
         caps = service.image_action_capabilities(item['id'], BOB)
         assert caps['actions']['keep']['available']
-        assert not caps['actions']['trash']['available']
+        assert caps['actions']['trash']['available'] and not caps['actions']['trash']['reason']
         for action in ('edit', 'upscale'):
             assert not caps['actions'][action]['available']
             with pytest.raises(ValueError, match='not configured'):
                 await service.image_action(item['id'], ALICE, dict(action=action, modified=item['modified']))
-        with pytest.raises(ValueError, match='Only the browser'):
-            await service.image_action(item['id'], BOB, dict(action='trash', confirm=True, modified=item['modified']))
-        assert (tmp_path / 'one.png').exists()
+        assert not service._metadata_allowed(item, BOB, allow_shared=False)
+        with pytest.raises(ValueError, match='Confirm'):
+            await service.image_action(item['id'], BOB, dict(action='trash', modified=item['modified']))
+        with pytest.raises(ValueError, match='changed'):
+            await service.image_action(item['id'], BOB, dict(action='trash', confirm=True, modified='stale'))
+        deleted = await service.image_action(item['id'], BOB, dict(action='trash', confirm=True, modified=item['modified']))
+        assert (tmp_path / 'one.png').exists()  # Virtual delete leaves the original intact.
+        assert await service.gallery(ALICE) == []
+        # A different browser can complete permanent deletion despite private source metadata.
+        result = await service.delete_permanently(ALICE, dict(confirm=True, tokens=[deleted['trash']['token']]))
+        assert result['results'][0]['deleted']
+        assert not (tmp_path / 'one.png').exists()
     asyncio.run(scenario())
 
 

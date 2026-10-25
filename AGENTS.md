@@ -179,10 +179,11 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   identity, symlink, ownership and output-scope guards and bounded NFS workers.
   Failed deletion stays in Wastebin with its error.
 - Preserve Host/Origin checks, authentication and CSP. Library sharing includes
-  bin listing/thumbnails, restore and confirmed permanent deletion. Preserve each
-  bin record's original owner for source-ownership and legacy-worker checks.
+  initial virtual Delete, bin listing/thumbnails, restore and confirmed permanent
+  deletion for every admitted browser, independent of image-settings sharing.
+  Preserve each bin record's recorded owner for legacy-worker validation.
   Live jobs, cancellation, prompt history and optional settings reuse remain
-  browser-specific. Sharing does not change initial image Delete permissions.
+  browser-specific. Delete does not require the generating browser; keep metadata/job privacy separate.
   Never commit credentials or private prompts.
 - Keep blocking filesystem/NFS/GPU work off Qt and HTTP event loops. Preserve
   atomic metadata writes and corruption safeguards. Do not disturb user settings

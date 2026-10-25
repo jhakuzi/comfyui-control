@@ -745,15 +745,13 @@ class MobileService:
 
 
     def image_action_capabilities(self, identifier, owner):
-        """Sharing pixels/settings never grants permission to remove an image."""
+        """All admitted WebUI clients share saved-output deletion capabilities."""
         item = self.images.get(identifier)
         if not item or identifier in self.unavailable_images or self.image_library.deleted_image(self.output_scope, item):
             raise ValueError('This saved image is no longer available. Refresh the gallery.')
         saved = item.get('type') == 'output'
-        own = self._metadata_allowed(item, owner, allow_shared=False)
         local = self.local_comfy or self.network_output
-        reason = ('Delete is available only for saved images in the configured local or network output folder.' if not saved or not local
-                  else 'Only the browser that generated this image can delete it.' if not own else '')
+        reason = 'Delete is available only for saved images in the configured local or network output folder.' if not saved or not local else ''
         return {'image_id': identifier, 'modified': item.get('modified', ''),
                 'kept': self.image_library.contains_shared(item),
                 'actions': {'keep': {'available': saved, 'reason': '' if saved else 'Favourites are available for saved output images.'},
@@ -927,8 +925,6 @@ class MobileService:
                     raise ValueError(f'Could not mark this image as deleted: {exc}. The original was not modified.') from None
                 if scope != self.output_scope:
                     raise ValueError('The output folder changed. Nothing was marked as deleted.')
-                if not self._metadata_allowed(item, owner, allow_shared=False):
-                    raise ValueError('Image ownership changed. Nothing was marked as deleted.')
                 record = await asyncio.to_thread(self.image_library.delete, scope, owner, item, identity)
                 result = {'image_id': identifier, 'trash': self.public_trash(record)}
             else:
@@ -1026,8 +1022,6 @@ class MobileService:
                 try:
                     if blocked:
                         raise OSError(blocked)
-                    if not self._metadata_allowed(record['image'], record['owner'], allow_shared=False):
-                        raise ValueError('Image ownership changed. Permanent deletion is not permitted.')
                     await self.network_io('legacy-delete' if record.get('legacy') else 'delete', record)
                 except (OSError, ValueError) as exc:
                     if isinstance(exc, TimeoutError):

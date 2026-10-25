@@ -13,7 +13,10 @@ ComfyUI Control has one shared WebUI access boundary/password. Clients admitted
 by those access rules share the image library. Authentication, browser identity,
 Host/Origin checks, CSP and no-cache policies still apply. Live jobs, cancellation,
 prompt history and the optional image-settings sharing preference keep their
-existing browser boundaries. Initial image Delete permission is unchanged.
+existing browser boundaries. Every admitted browser can Delete saved images from
+the configured local/network output, regardless of which browser generated them
+or whether image-settings sharing is enabled. Delete still requires confirmation
+and the exact saved image version; moving to Wastebin leaves the original intact.
 
 ## Collection views and stable layout
 
@@ -42,8 +45,8 @@ sends no request. Confirmation calls the existing `POST /api/trash/empty` with
 `confirm: true` and that exact token snapshot. Images binned later are not added.
 
 The server authorizes every token against the current output scope before doing
-filesystem work. It retains each record’s original owner for source-ownership and
-legacy-worker validation. Existing exact-file, root/parent directory, symlink,
+filesystem work. It retains each record’s recorded owner for legacy-worker validation, while
+source browser ownership does not restrict shared deletion. Existing exact-file, root/parent directory, symlink,
 regular-file, replacement and bounded NFS-worker guards remain. Failed deletions
 stay in Wastebin with their errors, while successful records become tombstones.
 The dialog refreshes after a confirmed result and reports partial failures.
