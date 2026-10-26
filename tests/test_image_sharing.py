@@ -116,19 +116,19 @@ def test_http_sharing_allows_reuse_without_raw_workflow_download_or_private_stat
                 revision=revision(preset), values={}, controls=[], images=[], prompt_id='do-not-share')
             item = service.image_ref(dict(filename=path.name), 'owned')
             service.jobs['owned']['images'] = [item]
-            assert (await (await phone.get(item['url'] + '/details')).json())['restricted']
+            assert (await (await phone.get('/api/images/' + item['id'] + '/details')).json())['restricted']
             assert not QImage.fromData(await (await phone.get(item['download'])).read()).text('prompt')
             service.settings = replace(service.settings, share_image_settings=True)
             gallery = await (await phone.get('/api/gallery')).json()
             assert gallery[0]['reuse']['available'] and gallery[0]['job'] is None
-            reply = await phone.post(item['url'] + '/reuse', json={}, headers={'Origin': str(phone.make_url('/')).rstrip('/')})
+            reply = await phone.post('/api/images/' + item['id'] + '/reuse', json={}, headers={'Origin': str(phone.make_url('/')).rstrip('/')})
             assert reply.status == 200
             assert 'do-not-share' not in json.dumps(await reply.json())
             assert not (await (await phone.get('/api/state')).json())['jobs']
             shared_download = QImage.fromData(await (await phone.get(item['download'])).read())
             assert not shared_download.text('prompt')
             service.settings = replace(service.settings, share_image_settings=False)
-            assert (await (await phone.get(item['url'] + '/details')).json())['restricted']
+            assert (await (await phone.get('/api/images/' + item['id'] + '/details')).json())['restricted']
             assert not QImage.fromData(await (await phone.get(item['download'])).read()).text('prompt')
             assert path.read_bytes() == original
         finally:

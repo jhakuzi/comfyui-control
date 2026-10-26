@@ -304,7 +304,7 @@ class MobileHTTP:
             filename = str(Path(item['filename']).with_suffix('.png')) if private_metadata else item['filename']
             headers["Content-Disposition"] = "attachment; filename*=UTF-8''" + quote(filename, safe="")
         if self.service.network_output and item['type'] == 'output':
-            key = (item['id'], item.get('modified'), thumb_size)
+            key = (item['id'], item.get('modified') or ('job-' + str(item.get('job', ''))), thumb_size)
             if request.query.get('thumbnail') == '1' and key in self.thumbnails:
                 return web.Response(body=self.thumbnails[key], content_type='image/jpeg')
             try:
@@ -313,7 +313,7 @@ class MobileHTTP:
                 self.service.image_unavailable(item['id'])
                 raise web.HTTPNotFound(text='This image is no longer available.')
             if request.query.get('thumbnail') == '1':
-                return await self.thumbnail((item['id'], item.get('modified')), contents, thumb_size)
+                return await self.thumbnail(key[:2], contents, thumb_size)
             if private_metadata:
                 contents = await self.encode_image(contents, thumbnail=False)
             return web.Response(body=contents, content_type='image/png' if private_metadata else

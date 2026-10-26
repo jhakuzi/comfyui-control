@@ -651,6 +651,8 @@ def virtual_image(root, operation, data):
             if not stat.S_ISREG(info.st_mode):
                 raise ValueError('Image is not a regular file.')
             identity = dict(directories=directories, file=file_identity(info))
+            if operation == 'stat':
+                return {'modified': str(info.st_mtime_ns), 'created': info.st_mtime}
             if operation == 'identify':
                 if str(info.st_mtime_ns) != descriptor.get('modified'):
                     raise ValueError('This image changed. Refresh the gallery before deleting it.')
@@ -677,7 +679,7 @@ def virtual_image(root, operation, data):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('operation', choices=('setup', 'remove', 'probe', 'scan', 'read', 'trash', 'restore', 'trash-list', 'identify', 'delete', 'wastebin-read', 'legacy-delete', 'legacy-read'))
+    parser.add_argument('operation', choices=('setup', 'remove', 'probe', 'scan', 'versions', 'read', 'trash', 'restore', 'trash-list', 'identify', 'delete', 'wastebin-read', 'legacy-delete', 'legacy-read'))
     parser.add_argument('first')
     parser.add_argument('second', nargs='?', default='')
     args = parser.parse_args()
@@ -695,6 +697,16 @@ def main():
                     raise OSError('Network output is not mounted. Retry the connection from the desktop app.')
             if args.operation == 'scan':
                 result = scan(root, data)
+            elif args.operation == 'versions':
+                if not isinstance(data, list) or len(data) > 200:
+                    raise ValueError('Choose at most 200 saved image references.')
+                result = {}
+                for descriptor in data:
+                    try:
+                        result[descriptor['id']] = virtual_image(root, 'stat', {'image': descriptor})
+                    except (OSError, ValueError):
+                        # Missing/inaccessible files never clear deletion markers.
+                        continue
             elif args.operation in ('identify', 'delete', 'wastebin-read'):
                 result = virtual_image(root, args.operation, data)
                 if args.operation == 'wastebin-read':

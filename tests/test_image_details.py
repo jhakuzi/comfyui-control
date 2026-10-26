@@ -130,9 +130,9 @@ def test_foreign_downloads_do_not_bypass_metadata_privacy(tmp_path):
         service.jobs['job']=dict(owner=owner,controls=[dict(key='p',role='positive',label='Prompt')],values=dict(p='Private submitted text'))
         item=service.image_ref(dict(filename='owned.png'),'job')
         try:
-            details=await (await first.get(item['url']+'/details')).json()
+            details=await (await first.get('/api/images/'+item['id']+'/details')).json()
             assert details['positive'][0]['value']=='Private submitted text'
-            assert (await (await second.get(item['url']+'/details')).json())['restricted']
+            assert (await (await second.get('/api/images/'+item['id']+'/details')).json())['restricted']
             assert await (await first.get(item['url'])).read()==original
             clean=await (await second.get(item['download'])).read()
             decoded=QImage.fromData(clean)

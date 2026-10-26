@@ -189,3 +189,17 @@ limit; default/1 includes all folders. The bounded scan retains a separate visib
 page so newer hidden files cannot crowd out visible files within the scan window.
 Returned revisions reflect the selected view; an old response cannot repaint a
 newer switch setting. Selection is reconciled when visible images change.
+
+## Reused filenames and Preview versions
+
+ComfyUI can reuse an output filename after its previous image was deleted. A
+completed result must be matched to the current file timestamp before applying
+old deletion markers; an unversioned path alone is not proof it is the old image.
+The service checks newest completed output references in a bounded read-only
+worker before publishing job images. This lets Preview update without first
+opening Gallery and preserves the result through reload/restart.
+
+Original deleted jobs and unchanged deleted file versions remain hidden. Missing,
+symlinked or inaccessible files cannot clear a marker. Checks do not delete or
+rewrite originals. Unknown versions have a generation-specific URL/cache identity
+until their file timestamp is known, avoiding thumbnail reuse across generations.
