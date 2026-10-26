@@ -42,6 +42,15 @@ collections passed in Chromium/WebKit. One WebKit fixture race was corrected to
 wait for accepted queue data before advancing its test double, then passed.
 Release ZIP contents match tested sources, source RPM built and diff check passed.
 
+Published:
+- Testing head `f636aa3ed7557b7e6037f6b75109fb7abedd148f` pushed; clean local testing checkout fast-forwarded.
+- [PR #4](https://github.com/jhakuzi/comfyui-control/pull/4) merged with expected-head guard at `e76998cab6ba0817a8130c7e96a1f61fd2aaf9c7`; tag `v1.2.1` points there.
+- [Packaging run 40298204941](https://github.com/jhakuzi/comfyui-control/actions/runs/40298204941) succeeded including RPM tests and COPR publication.
+- [COPR build 11208564](https://copr.fedorainfracloud.org/coprs/jhakuzi/comfyui-control/build/11208564/) succeeded: `1.2.1-1`, `fedora-44-x86_64`.
+- Publication request uses that exact run/tag for GitHub release downloads.
+- Upgrade with `sudo dnf upgrade --refresh comfyui-control`, fully restart the app, then hard-reload WebUI clients. Backend code changes require the app restart.
+The documentation/publication commit follows the release tag; do not move the tag.
+
 
 ## Authorized 1.2.0 release / hidden-folder Gallery switch — 2026-10-25
 
