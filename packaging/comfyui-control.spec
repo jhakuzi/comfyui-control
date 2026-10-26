@@ -1,5 +1,5 @@
 Name:           comfyui-control
-Version:        1.2.0
+Version:        1.2.1
 Release:        1%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
@@ -62,6 +62,10 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Mon Oct 26 2026 ComfyUI Control contributors - 1.2.1-1
+- Resolve completed output versions before filtering old deletion tombstones
+- Separate reused-filename preview cache identities and preserve restart journals
+
 * Sun Oct 25 2026 ComfyUI Control contributors - 1.2.0-1
 - Add Desktop hidden-folder Gallery switch and shared image deletion
 - Queue separate Batch Count workflow runs with safe journals and cancellation

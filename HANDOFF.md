@@ -1,5 +1,48 @@
 # Session handoff — 2026-10-24
 
+## Preview versions / 1.2.1 correction — 2026-10-26
+
+User reported stale Preview even after reload, while Gallery showed the new
+image. Public app.js read confirmed the running WebUI already had the previous
+preview fixes. Read-only journal/library inspection found the concrete case:
+VeryComfy_00007_.png was reused by multiple jobs. The latest completed reference
+had no modified timestamp, while a purged older version of the same image ID had
+a tombstone. `deleted_image()` conservatively hides unversioned refs by ID, so
+public_job suppressed the new result and Desktop fell back to the previous image.
+Gallery's timestamped reference correctly showed the replacement file.
+
+The pre-fix regression failed for all four local/network × virtual/purged cases.
+A temporary identity-only copy of the actual latest record returned 0 preview
+images before version reconciliation and 1 afterward, with the current on-disk
+mtime. Original images, configuration, journal and markers were not modified.
+
+`resolve_output_versions()` resolves missing versions of newest known completed
+outputs through a bounded isolated read-only `versions` worker before public job
+filtering. Stat uses the existing directory/regular-file/no-symlink safeguards;
+no directory-wide Gallery scan is required. Tombstones tied to the original job
+(or legacy markers newer than it) keep that job hidden. Unchanged deleted files,
+missing/symlinked/inaccessible storage remain hidden; no marker is removed.
+Completion references are persisted before the storage await for safe shutdown.
+
+`image_ref` no longer inherits another generation's timestamp at a reused path;
+known journal versions are retained for their exact job. Unversioned URL/cache
+identities include the job ID, and NFS thumbnail caching follows that identity.
+API test/smoke callers build action/details paths from image IDs rather than
+appending to an image URL that can contain a version query.
+
+Release workflow: the interrupted authorized 1.2.0 publication push was completed;
+GitHub publication run 40296673958 succeeded. This correction is being prepared
+as 1.2.1 under the user's earlier test-then-push/merge/COPR instruction.
+
+Verification: all 527 pytest tests passed. The exact reused-filename browser
+check passed in Firefox/Chromium/WebKit for Desktop/NFS and Phone/local output,
+including rendered pixel equality expectations, no Gallery-first dependency and
+reload. Background/tab checks passed in all three engines; Batch Count and Gallery
+collections passed in Chromium/WebKit. One WebKit fixture race was corrected to
+wait for accepted queue data before advancing its test double, then passed.
+Release ZIP contents match tested sources, source RPM built and diff check passed.
+
+
 ## Authorized 1.2.0 release / hidden-folder Gallery switch — 2026-10-25
 
 User requested the Desktop header switch and explicitly authorized push, main

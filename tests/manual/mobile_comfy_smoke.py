@@ -64,7 +64,7 @@ async def check(comfy_url, output):
                 assert thumbnail.content_type == 'image/jpeg'
                 reduced = QImage.fromData(await thumbnail.read())
                 assert not reduced.isNull() and max(reduced.width(), reduced.height()) <= 384
-                details = await (await client.get(item['url'] + '/details')).json()
+                details = await (await client.get('/api/images/' + item['id'] + '/details')).json()
                 assert details['source'] == 'mobile'
                 assert next(field['value'] for field in details['parameters'] if field['label']=='Width') == 96
                 if output:

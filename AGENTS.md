@@ -62,7 +62,7 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   bump the shell cache when shipping changed assets. Never cache private APIs or
   images. Preserve reduced-motion support.
 
-## Current implementation contracts (1.2.0)
+## Current implementation contracts (1.2.1)
 
 - Workflow/model refresh reconciles option catalogues in place when graph/control
   structure is unchanged. Preserve select/button DOM identity, handlers, drafts,
@@ -181,6 +181,12 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   Compare. Phone/API defaults remain unfiltered; Wastebin lists all entries.
   Preserve bounded visible-page references, per-client filtering/revisions, stale
   response/selection guards and open collections on presentation changes.
+
+- Completed output refs must resolve their actual file version before old deletion
+  markers can filter a replacement at a reused filename. Use the bounded read-only
+  versions worker, keep original deleted jobs hidden, and fail closed on uncertain
+  storage. Never inherit another job's timestamp; unversioned URL/thumbnail caches
+  use job identity. Journal completion refs before awaiting version resolution.
 
 ## Data and safety contracts
 

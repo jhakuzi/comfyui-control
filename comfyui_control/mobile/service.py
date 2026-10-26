@@ -456,13 +456,20 @@ class MobileService:
         image_type = descriptor.get("type", "output")
         key = hashlib.sha256((self.output_scope + ":" + image_type + ":" + str(relative)).encode()).hexdigest()[:32]
         previous = self.images.get(key, {})
-        stamp = previous.get('modified', '')
         if job and job != previous.get('job'):
-            stamp = ''
+            # A reused filename is a different generation. Never inherit the old
+            # file's timestamp (or cache identity) from its path-only image ID.
+            previous = {k: v for k, v in previous.items() if k not in {'modified', 'created'}}
             self.unavailable_images.discard(key)
-        version = f'v={stamp}&' if stamp else ''
+        stored = next((item for item in self.jobs.get(job, {}).get('images', [])
+                       if item.get('id') == key and item.get('job') == job and item.get('modified')), None) if job else None
+        if stored:
+            previous = {**previous, 'modified': stored['modified'], 'created': stored.get('created', previous.get('created', 0))}
+        stamp = previous.get('modified', '')
+        cache_version = stamp or (f'job-{job}' if job else '')
+        version = f'v={cache_version}&' if cache_version else ''
         item = {**previous, "id": key, "filename": filename, "subfolder": subfolder, "type": image_type, "job": job or previous.get("job"),
-                "url": f"/api/images/{key}" + (f'?v={stamp}' if stamp else ''),
+                "url": f"/api/images/{key}" + (f'?v={cache_version}' if cache_version else ''),
                 "thumbnail": f"/api/images/{key}?{version}thumbnail=1", "download": f"/api/images/{key}?{version}download=1"}
         if not previous or item['job'] != previous.get('job'):
             self.gallery_time = 0
@@ -474,6 +481,58 @@ class MobileService:
                 self.image_owners[ownership_key] = owner
                 self.ownership_dirty = True
         return item
+
+    async def resolve_output_versions(self):
+        """Resolve newest job outputs before deletion filtering, without a Gallery scan."""
+        if not (self.local_comfy or self.network_output):
+            return
+        scope = self.output_scope
+        latest = {}
+        for job in self.current_jobs():
+            for item in job.get('images', []):
+                if item.get('type') == 'output':
+                    previous = latest.get(item['id'])
+                    if previous is None or job.get('created', 0) >= previous[0].get('created', 0):
+                        latest[item['id']] = (job, item)
+        deleted_jobs = set()
+        legacy_deleted = {}
+        for record in self.image_library.deleted.values():
+            if record['scope'] != scope:
+                continue
+            image = record['image']
+            if image.get('job'):
+                deleted_jobs.add((image['id'], image['job']))
+            else:
+                legacy_deleted[image['id']] = max(legacy_deleted.get(image['id'], 0), record['created'])
+        pending = [(job, item) for job, item in latest.values()
+                   if job['status'] == 'complete' and not item.get('modified')
+                   and (item['id'], job['id']) not in deleted_jobs
+                   and job.get('created', 0) > legacy_deleted.get(item['id'], -1)][:200]
+        if not pending:
+            return
+        # Completion references must survive shutdown even if storage resolution
+        # is cancelled before the regular refresh persistence step.
+        self.persist()
+        try:
+            versions = json.loads(await self.network_io('versions', [item for _, item in pending], timeout=2))
+        except (OSError, ValueError):
+            return  # Storage uncertainty must never unhide a deleted version.
+        if scope != self.output_scope:
+            return
+        for job, item in pending:
+            version = versions.get(item['id'])
+            if not version or item not in job.get('images', []):
+                continue
+            stamp = version['modified']
+            item.update(modified=stamp, created=version['created'],
+                        url=f"/api/images/{item['id']}?v={stamp}",
+                        thumbnail=f"/api/images/{item['id']}?v={stamp}&thumbnail=1",
+                        download=f"/api/images/{item['id']}?v={stamp}&download=1")
+            current = self.images.get(item['id'])
+            if current and current.get('job') == job['id']:
+                current.update(item)
+            if not self.image_library.deleted_image(scope, item):
+                self.unavailable_images.discard(item['id'])
 
     async def refresh(self):
         async with self.refresh_lock:
@@ -528,6 +587,7 @@ class MobileService:
                             messages = status.get("messages", [])
                             error = next((data.get("exception_message", "Generation failed") for kind, data in messages if kind == "execution_error"), "Generation was interrupted or failed.")
                             job["error"] = str(error)[:2500]
+                await self.resolve_output_versions()
                 running = {item[1] for item in queue.get("queue_running", [])}
                 pending = {item[1]: index + 1 for index, item in enumerate(queue.get("queue_pending", []))}
                 for job in self.current_jobs():

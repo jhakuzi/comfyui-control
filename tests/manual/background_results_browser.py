@@ -45,7 +45,7 @@ async def check(browser, engine, output, viewport):
         title = await page.title()
         async def start():
             await page.locator('#generate').click()
-            await until(lambda: len(service.jobs) > len(stub.history))
+            await until(lambda: len(service.jobs) > len(stub.history) and bool(stub.pending))
             job = list(service.jobs.values())[-1]
             stub.running, stub.pending = stub.pending, []
             await service.refresh()
