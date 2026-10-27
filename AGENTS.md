@@ -5,6 +5,12 @@ Read `HANDOFF.md`, `docs/WEBUI_PRESENTATION.md` and
 branch, recent commits and working tree. Treat the implementation as the baseline;
 do not assume earlier requests or deferred integrations are unfinished assignments.
 
+For the next session, start with the current-session snapshot at the top of
+`HANDOFF.md`. Its newest section supersedes older, chronological notes. The
+latest published baseline is 1.2.1; check the actual branch, remote and working
+tree rather than assuming a previous checkout is current. `AGENTS.md` is the only
+agent guide; do not create a second `AGENT.md` with conflicting instructions.
+
 ## Project and architecture
 
 ComfyUI Control is a Linux Python/Qt controller with one buildless responsive
@@ -21,7 +27,8 @@ Paths below are under `comfyui_control/` unless stated otherwise:
 | `mobile/server.py`, `mobile/settings.py` | HTTP/SSE, sessions, permissions and WebUI preferences. |
 | `mobile/workflows.py`, `mobile/workflow_sources.py`, `mobile/editor_subgraphs.py`, `mobile/input_metadata.py` | Graph import, explicit mappings, saved workflows and metadata validation. |
 | `mobile/image_actions.py`, `mobile/image_pixels.py`, `mobile/image_metadata.py` | Image-library sidecar, action bindings, pixel copies and image metadata. |
-| `network_output.py`, `background_process.py` | Authorized output filesystem operations and bounded workers. |
+| `network_output.py`, `background_process.py` | Authorized output filesystem operations and bounded workers, including read-only output-version resolution. |
+| `bundled_workflows.py`, `workflow_webui.py` | Optional workflow installation and asynchronous ComfyUI readiness checks. |
 | `mobile/web/app.js` | One shared application controller, selection, drafts, requests, generation and pending journal. |
 | `mobile/web/feature_*.js` | Shared Generate/image-action components and transport. |
 | `mobile/web/feature_gallery_library.js/css` | Shared Gallery toolbar, Favourites/Wastebin collection previews and heart indicators. |
@@ -252,7 +259,7 @@ For WebUI changes, install optional Playwright and its browsers:
 
 ```bash
 .venv/bin/python -m pip install playwright
-.venv/bin/python -m playwright install chromium webkit
+.venv/bin/python -m playwright install chromium webkit firefox
 .venv/bin/python tests/manual/desktop_image_actions_browser.py --browser chromium --output /tmp/control-desktop-actions-check
 .venv/bin/python tests/manual/mobile_responsive_browser.py --browser chromium --output /tmp/control-responsive-check
 .venv/bin/python tests/manual/mobile_generate_button_browser.py --browser chromium --output /tmp/control-generate-check
@@ -260,6 +267,10 @@ For WebUI changes, install optional Playwright and its browsers:
 .venv/bin/python tests/manual/gallery_collections_browser.py --browser chromium --output /tmp/control-gallery-library-check
 .venv/bin/python tests/manual/gallery_library_updates_browser.py --browser chromium --output /tmp/control-shared-library-check
 .venv/bin/python tests/manual/phone_gallery_bulk_browser.py --browser chromium --output /tmp/control-phone-gallery-check
+.venv/bin/python tests/manual/hidden_gallery_browser.py --browser chromium --output /tmp/control-hidden-gallery-check
+.venv/bin/python tests/manual/preview_reused_filename_browser.py --browser firefox --output /tmp/control-preview-version-check
+.venv/bin/python tests/manual/background_results_browser.py --browser firefox --output /tmp/control-background-check
+.venv/bin/python tests/manual/batch_count_browser.py --browser firefox --output /tmp/control-batch-check
 git diff --check
 ```
 
@@ -272,7 +283,7 @@ Also run the focused protocol/browser checks relevant to a change:
 .venv/bin/python tests/manual/generate_transition_browser.py --browser chromium --output /tmp/control-submit-transition-check
 ```
 
-Repeat relevant browser checks with WebKit and fresh output directories. See
+Repeat relevant browser checks with WebKit, Chromium or Firefox and fresh output directories. See
 `docs/WEBUI_PRESENTATION.md` for Phone pixel comparisons against an exported
 baseline. Node runs optional shared-JS tests; it is not a runtime/build dependency.
 Browser/protocol fixtures do not prove real GPU inference, NAS or physical Phone

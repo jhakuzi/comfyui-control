@@ -1,4 +1,49 @@
-# Session handoff — 2026-10-24
+# Session handoff
+
+## New Codex session snapshot — 2026-10-27
+
+Start here. Sections below are chronological records, including historical
+restrictions, branch names, test counts and proposed next steps; they do not
+represent outstanding work unless the user explicitly requests it now.
+
+- Latest published release: [1.2.1](https://github.com/jhakuzi/comfyui-control/releases/tag/v1.2.1),
+  with app ZIP, Fedora 44 binary RPM and source RPM. [COPR build 11208564](https://copr.fedorainfracloud.org/coprs/jhakuzi/comfyui-control/build/11208564/)
+  succeeded. [Release-downloads run 40298959993](https://github.com/jhakuzi/comfyui-control/actions/runs/40298959993)
+  succeeded. `v1.2.1` points to merge `e76998cab6ba0817a8130c7e96a1f61fd2aaf9c7`;
+  the documentation/publication commit on main is `214000e3444f14b4ec901b257b8c565e1efbacb9`.
+- This preparation branch is `handoff/codex-session-2026-10-27`, created from that
+  main commit. Check `git status`, current branch and remote before future work.
+  Prior testing branches are historical; do not assume they are based on the latest main.
+- The separate local testing checkout at
+  `/home/jhaku/Downloads/Testing/comfyui-control-integration-testing` was clean on
+  `testing/desktop-gallery-bulk` at `f636aa3` when checked. Its editable environment
+  reported 1.2.1; it is not the current development branch. Preserve local edits
+  and verify the branch before updating it. A running app must be restarted to load
+  backend changes; reload the WebUI afterward.
+- The 1.2.1 preview correction addresses the user-reported old result after reload:
+  a new image reused a deleted filename and its unversioned job reference matched
+  the older deletion marker. Resolve the newest completed output's actual file
+  version in the bounded read-only worker; preserve old tombstones, source identity
+  checks and fail-closed handling. Generation-specific cache keys protect pending
+  unversioned outputs. The fix was verified with fixtures and a temporary copy of
+  the affected record; **user confirmation on the real workflow has not been recorded**.
+- Current features include Desktop/Phone shared Gallery actions and bulk selection,
+  Desktop hidden-folder filtering, tab sampling percentages, separate journaled
+  Batch Count runs and the optional bundled-workflow installer. See the contracts
+  in `AGENTS.md`, `docs/WEBUI_PRESENTATION.md`, `docs/FEATURE_PORT_INTEGRATION.md`,
+  `docs/GALLERY_COLLECTIONS.md`, `docs/PHONE_UI.md` and `docs/BUNDLED_WORKFLOWS.md`.
+- Last release evidence: 527 pytest tests, plus Firefox/Chromium/WebKit browser
+  checks for reused filenames/background results and Chromium/WebKit batch and
+  Gallery checks. These used disposable fixtures; they do not prove physical-phone,
+  live NAS or real GPU inference behavior. Run checks relevant to new changes.
+- The previous release authorization covered that release. New version bumps,
+  rebuilds, merges, tags or publication require a current user request. Protect
+  private prompts, credentials, workflows and real image files; never test destructive
+  operations on the user's ComfyUI output or start a competing app against its config.
+
+## Historical notes
+
+### Preview versions / 1.2.1 correction — 2026-10-26
 
 ## Preview versions / 1.2.1 correction — 2026-10-26
 
@@ -31,8 +76,8 @@ API test/smoke callers build action/details paths from image IDs rather than
 appending to an image URL that can contain a version query.
 
 Release workflow: the interrupted authorized 1.2.0 publication push was completed;
-GitHub publication run 40296673958 succeeded. This correction is being prepared
-as 1.2.1 under the user's earlier test-then-push/merge/COPR instruction.
+GitHub publication run 40296673958 succeeded. The correction was then published
+as 1.2.1 under the user's test-then-push/merge/COPR instruction.
 
 Verification: all 527 pytest tests passed. The exact reused-filename browser
 check passed in Firefox/Chromium/WebKit for Desktop/NFS and Phone/local output,
@@ -47,7 +92,7 @@ Published:
 - [PR #4](https://github.com/jhakuzi/comfyui-control/pull/4) merged with expected-head guard at `e76998cab6ba0817a8130c7e96a1f61fd2aaf9c7`; tag `v1.2.1` points there.
 - [Packaging run 40298204941](https://github.com/jhakuzi/comfyui-control/actions/runs/40298204941) succeeded including RPM tests and COPR publication.
 - [COPR build 11208564](https://copr.fedorainfracloud.org/coprs/jhakuzi/comfyui-control/build/11208564/) succeeded: `1.2.1-1`, `fedora-44-x86_64`.
-- Publication request uses that exact run/tag for GitHub release downloads.
+- [GitHub release publication run 40298959993](https://github.com/jhakuzi/comfyui-control/actions/runs/40298959993) succeeded and published the ZIP and RPM downloads.
 - Upgrade with `sudo dnf upgrade --refresh comfyui-control`, fully restart the app, then hard-reload WebUI clients. Backend code changes require the app restart.
 The documentation/publication commit follows the release tag; do not move the tag.
 
