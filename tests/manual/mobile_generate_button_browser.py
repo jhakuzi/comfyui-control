@@ -95,6 +95,30 @@ async def check(browser, engine, url, service, stub, output, viewport):
             assert await button.evaluate('el=>Number(getComputedStyle(el,"::before").opacity)') > .2
             await geometry()
             await page.screenshot(path=str(output/f'sampling-{value}.png'))
+        if width >= 1000:
+            await page.locator('#gallery-tab').click()
+            dock = page.locator('#generation-dock')
+            await expect(dock).to_be_visible()
+            await expect(label).to_have_text('Sampling · 100%')
+            await expect(page.locator('#cancel')).to_be_visible()
+            before_scroll = await dock.bounding_box()
+            assert abs(before_scroll['x'] + before_scroll['width'] / 2 - width / 2) < 1, before_scroll
+            assert 10 <= height - before_scroll['y'] - before_scroll['height'] <= 30, before_scroll
+            assert await dock.evaluate("element => getComputedStyle(element).position") == 'fixed'
+            assert await dock.evaluate("element => getComputedStyle(element).boxShadow") != 'none'
+            cancel_box = await page.locator('#cancel').bounding_box()
+            progress_box = await button.bounding_box()
+            assert cancel_box['y'] + cancel_box['height'] <= progress_box['y'], (cancel_box, progress_box)
+            await page.evaluate("() => { const spacer = document.createElement('div'); spacer.id = 'scroll-fixture'; spacer.style.height = '2000px'; document.body.append(spacer); }")
+            await page.evaluate('window.scrollTo(0, 700)')
+            await page.wait_for_function('() => window.scrollY > 0')
+            after_scroll = await dock.bounding_box()
+            assert abs(after_scroll['x'] - before_scroll['x']) < 1 and abs(after_scroll['y'] - before_scroll['y']) < 1
+            await page.screenshot(path=str(output/'gallery-floating-dock.png'))
+            await page.evaluate("document.getElementById('scroll-fixture').remove(); window.scrollTo(0, 0)")
+            await page.locator('#create-tab').click()
+            await expect(label).to_have_text('Sampling · 100%')
+            await geometry()
         await stub.emit('progress_state',dict(prompt_id=job['prompt_id'],nodes={'sampler':dict(state='running',value=100,max=100)}))
         await expect(label).to_have_text('Sampling · 100%')
         await expect(button).to_have_attribute('data-progress','determinate')

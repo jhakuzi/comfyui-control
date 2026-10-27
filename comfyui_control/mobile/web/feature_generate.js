@@ -24,7 +24,9 @@ window.ComfyGenerateFeedback = class GenerateFeedback {
     pending = false, connected = true, online = true, recovering = false } = {}) {
     const activeStatuses = new Set(["submitting", "queued", "running", "cancelling", "unknown"]);
     const progressJob = jobs.find((item) => item.status === "running") ||
-      (selectedJob && activeStatuses.has(selectedJob.status) ? selectedJob : jobs.find((item) => activeStatuses.has(item.status)));
+      (selectedJob && activeStatuses.has(selectedJob.status) ? selectedJob : null) ||
+      jobs.find((item) => activeStatuses.has(item.status) && item.status !== "unknown") ||
+      (jobs.at(-1)?.status === "unknown" ? jobs.at(-1) : null);
     const active = !!progressJob;
     if (progressJob && progressJob.id !== this.progressId) {
       this.progressId = progressJob.id;

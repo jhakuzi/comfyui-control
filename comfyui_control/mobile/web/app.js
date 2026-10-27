@@ -562,6 +562,7 @@ function configurePromptToggle(input, wrap, toggle, editorKey, label) {
 function control(field, container, hideLabel = false) {
   if (field.role === "batch") field = { ...field, label: "Batch Count", kind: "int", options: null, min: 1, max: 20, step: 1 };
   const wrap = node("div", undefined, "control");
+  if (field.sampling_stage) wrap.dataset.samplingStage = String(field.sampling_stage);
   if ((field.kind === "text" && !field.options) || ["seed", "lora_model"].includes(field.role))
     wrap.classList.add("wide");
   const label = node("label", field.role === "batch" ? "Batch Count" : field.label);

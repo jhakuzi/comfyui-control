@@ -146,9 +146,18 @@ def suggested_mappings(graph, info=None):
             if node_id in seen or node_id not in graph:
                 continue
             seen.add(node_id)
+            # Zeroed conditioning does not use its source text as a negative
+            # prompt, even when it is wired into a negative sampler input.
+            if graph[node_id]['class_type'] == 'ConditioningZeroOut':
+                continue
             inputs = graph[node_id]["inputs"]
             if isinstance(inputs.get("text"), str):
-                found.add(node_id)
+                found.add((node_id, 'text'))
+            # ComfyUI primitive strings expose their literal as `value`, often
+            # connected to one or more text encoders. Do not infer arbitrary
+            # custom nodes' value widgets as prompts.
+            if graph[node_id]['class_type'] in {'PrimitiveString', 'PrimitiveStringMultiline'} and isinstance(inputs.get('value'), str):
+                found.add((node_id, 'value'))
             pending.extend(value[0] for value in inputs.values() if isinstance(value, list) and len(value) == 2 and isinstance(value[0], str))
         return found
     for node in graph.values():
@@ -166,16 +175,29 @@ def suggested_mappings(graph, info=None):
             found = ("diffusion_model", "Diffusion model")
         if "aspect_ratio" in inputs and "divisible_by" in inputs:
             found = resolution.get(field["input"], found)
-        if field["input"] == "text":
-            roles = [role for role in prompt_nodes if field["node"] in prompt_nodes[role]]
+        if field["input"] in {"text", "value"}:
+            roles = [role for role in prompt_nodes if (field["node"], field["input"]) in prompt_nodes[role]]
             if len(roles) == 1:
                 found = (roles[0], "Prompt" if roles[0] == "positive" else "Negative prompt")
-            elif len(text_nodes) == 1:
+            elif field['input'] == 'text' and len(text_nodes) == 1 and not roles:
                 found = ("positive", "Prompt")
+        # A numbered filename/strength pair is one LoRA slot. Require both
+        # literals so unrelated numbered widgets are not guessed as LoRAs.
+        match = re.fullmatch(r'(lora|strength)_(\d+)', field['input'])
+        group = None
+        if match:
+            suffix = match.group(2)
+            if isinstance(inputs.get('lora_' + suffix), str) and type(inputs.get('strength_' + suffix)) in (int, float):
+                found = ('lora_model', 'LoRA ' + suffix) if match.group(1) == 'lora' else ('lora_strength', 'Strength ' + suffix)
+                group = field['node'] + ':lora:' + suffix
+        if field['input'] == 'dimensions' and isinstance(field['default'], str) and re.fullmatch(r'\s*\d+\s*x\s*\d+\s*(?:\([^()]*\))?\s*', field['default'], re.I):
+            found = ('aspect_ratio', 'Dimensions')
         if not found:
             continue
         role, label = found
         item = {"node": field["node"], "input": field["input"], "role": role, "label": label, "key": f"field-{len(result)}"}
+        if group:
+            item['group'] = group
         try:
             validate_mappings(graph, [item])
         except ValueError:
@@ -211,11 +233,55 @@ def with_model_controls(preset, info):
     return item
 
 
+def sampling_stages(graph, fields):
+    """Identify separate sampler stages only from explicit sampler input links."""
+    stages = []
+    for node_id, node in graph.items():
+        inputs = node['inputs']
+        links = {name: inputs.get(name) for name in ('noise', 'guider', 'sampler', 'sigmas')}
+        if not all(isinstance(link, list) and len(link) == 2 and isinstance(link[0], str) and link[0] in graph for link in links.values()):
+            continue
+        targets = {'seed': links['noise'][0], 'cfg': links['guider'][0],
+                   'sampler': links['sampler'][0], 'scheduler': links['sigmas'][0], 'steps': links['sigmas'][0]}
+        keys = {field['key'] for field in fields if targets.get(field['role']) == field['node']}
+        if keys:
+            stages.append((node_id, keys))
+    if len(stages) < 2:
+        return {}
+    # Put upstream sampling before stages that consume its output. Shared
+    # controls remain outside the groups instead of implying a false pairing.
+    def ancestors(node_id):
+        found, pending = set(), [node_id]
+        while pending:
+            current = pending.pop()
+            if current in found or current not in graph:
+                continue
+            found.add(current)
+            pending.extend(value[0] for value in graph[current]['inputs'].values()
+                           if isinstance(value, list) and len(value) == 2 and isinstance(value[0], str))
+        return found
+    all_ancestors = {node_id: ancestors(node_id) for node_id, _ in stages}
+    stage_ids = [node_id for node_id, _ in stages]
+    stages.sort(key=lambda stage: sum(other != stage[0] and other in all_ancestors[stage[0]] for other in stage_ids))
+    counts = Counter(key for _, keys in stages for key in keys)
+    return {key: index for index, (_, keys) in enumerate(stages, 1) for key in keys if counts[key] == 1}
+
+
 def fields_for(preset, info, lora_models=None):
     available = {(c["node"], c["input"]): c for c in candidates(preset["graph"], info)}
     diffusion = diffusion_inputs(preset["graph"], info)
     fields = [{**available[(m["node"], m["input"])], **m} for m in preset["mappings"]]
+    stages = sampling_stages(preset['graph'], fields)
     for field in fields:
+        if field['key'] in stages:
+            field['sampling_stage'] = stages[field['key']]
+        if field['input'] == 'dimensions' and field['role'] == 'aspect_ratio' and isinstance(field['options'], list) and field['default'] not in field['options']:
+            # Only reconcile a unique whitespace-only difference; never pick an
+            # approximate resolution or rewrite a stored workflow.
+            normalized = ' '.join(field['default'].split())
+            matches = [option for option in field['options'] if isinstance(option, str) and ' '.join(option.split()) == normalized]
+            if len(matches) == 1:
+                field['default'] = matches[0]
         # Custom loaders may register a STRING widget populated by their own
         # frontend extension. Use ComfyUI's model catalogue for explicitly
         # mapped LoRA names; registered combo choices remain authoritative.
