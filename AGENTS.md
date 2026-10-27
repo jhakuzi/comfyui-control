@@ -7,7 +7,7 @@ do not assume earlier requests or deferred integrations are unfinished assignmen
 
 For the next session, start with the current-session snapshot at the top of
 `HANDOFF.md`. Its newest section supersedes older, chronological notes. The
-latest published baseline is 1.2.1; check the actual branch, remote and working
+latest published baseline is 1.2.2; check the actual branch, remote and working
 tree rather than assuming a previous checkout is current. `AGENTS.md` is the only
 agent guide; do not create a second `AGENT.md` with conflicting instructions.
 
@@ -69,7 +69,16 @@ Paths below are under `comfyui_control/` unless stated otherwise:
   bump the shell cache when shipping changed assets. Never cache private APIs or
   images. Preserve reduced-motion support.
 
-## Current implementation contracts (1.2.1)
+## Current implementation contracts (1.2.2)
+
+- Automatically recognize connected primitive prompts, numbered LoRA/strength pairs,
+  and combined dimensions choices. Only resolve a unique whitespace-only option
+  match; retain explicitly saved mappings and never guess ambiguous graph wiring.
+- Group unambiguously connected sampler stages on Desktop, preserving Phone control
+  order and draft values. The Desktop Gallery generation dock is centered and fixed
+  above the viewport bottom; retain Cancel, live progress and modal layering.
+- An older unknown job must not override Generate feedback for a newer completed job;
+  retain the unknown job's diagnostics and uncertain-submission safeguards.
 
 - Workflow/model refresh reconciles option catalogues in place when graph/control
   structure is unchanged. Preserve select/button DOM identity, handlers, drafts,
