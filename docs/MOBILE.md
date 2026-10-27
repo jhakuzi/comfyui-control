@@ -183,6 +183,17 @@ unchanged. Prompt mapping follows positive/negative connections where available;
 review unusual multi-encoder graphs in the mapping editor. Required inputs and missing nodes are checked before/while queueing;
 ComfyUI's validation errors are returned to the page.
 
+Automatic mapping also recognizes connected ComfyUI primitive string prompts,
+numbered `lora_01`/`strength_01` pairs, and a combined dimensions selector when
+its saved value has a recognizable width × height form. Each numbered LoRA pair
+has its own group. For a dimensions selector, a unique whitespace-only match to
+the installed node's choices is used as the displayed and submitted default;
+ambiguous or unavailable choices are not guessed. Existing presets retain their
+saved mappings, including intentionally hidden fields. Reimport an API export to
+create a new preset with the updated automatic mappings, or edit mappings on an
+existing preset. Unknown custom nodes and ambiguous prompt wiring may still need
+manual mapping.
+
 ### LoRA groups
 
 Multiple LoRA nodes and strengths are supported. Mappings from the same node

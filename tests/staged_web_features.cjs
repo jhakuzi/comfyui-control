@@ -32,6 +32,12 @@ async function main() {
   assert.equal(view('complete').kind, 'success');
   now = 1500;
   assert.equal(view('complete').kind, 'idle');
+  const unknown = {id:'unknown',status:'unknown'}, complete = {id:'new',status:'complete'};
+  const independent = new Feedback({now: () => now});
+  assert.equal(independent.update({jobs:[unknown], selectedJob:unknown}).label, 'Checking submission');
+  assert.equal(independent.update({jobs:[unknown, complete], selectedJob:complete}).label, '✦ Generate');
+  assert.equal(independent.update({jobs:[unknown, complete], selectedJob:unknown}).label, 'Checking submission');
+  assert.equal(independent.update({jobs:[unknown, {id:'queued',status:'queued'}, complete], selectedJob:complete}).label, 'Queued');
   assert.equal(view('queued').kind, 'indeterminate');
   assert.equal(view('failed').kind, 'failed');
   view('queued');

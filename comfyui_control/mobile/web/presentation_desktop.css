@@ -26,6 +26,32 @@
 }
 
 /* Desktop refinements; shared Phone layout and component skins stay authoritative. */
+:where(html[data-presentation="desktop"]) #workspace[data-page="gallery"] #generation-dock {
+  left: 50%;
+  right: auto;
+  bottom: calc(20px + var(--safe-area-bottom));
+  width: min(440px, calc(100vw - 40px));
+  margin: 0;
+  padding: 10px;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 12px 36px #000b;
+  z-index: 8;
+}
+:where(html[data-presentation="desktop"]) #workspace[data-page="gallery"] #generation-dock > .job-card {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+:where(html[data-presentation="desktop"]) #workspace[data-page="gallery"] #generation-panel:not([data-status="unknown"]) #generation-dock > .job-card .heading {
+  justify-content: flex-end;
+}
+:where(html[data-presentation="desktop"]) #workspace[data-page="gallery"] #generation-panel #generation-dock #cancel {
+  position: static;
+}
 :where(html[data-presentation="desktop"]) #workspace[data-page="create"] {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -247,6 +273,16 @@
 }
 
 /* Compact LoRA controls; keep their full labels available to assistive technology. */
+:where(html[data-presentation="desktop"]) .desktop-sampling-group {
+  grid-column: 1 / -1;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+:where(html[data-presentation="desktop"]) .desktop-sampling-group h3 {
+  margin: 0 0 14px;
+  font-size: .9rem;
+  font-weight: 600;
+}
 :where(html[data-presentation="desktop"]) #lora-controls .control:has(> [data-role="lora_model"]) > label,
 :where(html[data-presentation="desktop"]) #lora-controls .control:has(> [data-role="lora_strength"]) > label {
   position: absolute;

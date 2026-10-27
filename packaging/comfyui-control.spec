@@ -1,5 +1,5 @@
 Name:           comfyui-control
-Version:        1.2.1
+Version:        1.2.2
 Release:        1%{?dist}
 Summary:        A compact Qt controller for a local ComfyUI installation
 
@@ -62,6 +62,11 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/256x256/apps/%{name}.png
 
 %changelog
+* Tue Oct 27 2026 ComfyUI Control contributors - 1.2.2-1
+- Map connected prompts, numbered LoRA stacks and combined dimensions
+- Group sampling stages and center the Gallery progress dock
+- Ignore obsolete unknown jobs in Generate button feedback
+
 * Mon Oct 26 2026 ComfyUI Control contributors - 1.2.1-1
 - Resolve completed output versions before filtering old deletion tombstones
 - Separate reused-filename preview cache identities and preserve restart journals

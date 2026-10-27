@@ -1,8 +1,8 @@
 # Fedora RPM and COPR
 
-Version **1.2.1** fixes preview versions when a new image reuses a previously
-deleted filename. RPM `1.2.1-1` upgrades previous releases normally.
-See the [release notes](../docs/releases/1.2.1.md). Development versions remain
+Version **1.2.2** improves workflow mapping and desktop sampling controls.
+RPM `1.2.2-1` upgrades previous releases normally.
+See the [release notes](../docs/releases/1.2.2.md). Development versions remain
 blocked from COPR; stable releases and explicitly numbered RCs can be published.
 
 ## App ZIP download

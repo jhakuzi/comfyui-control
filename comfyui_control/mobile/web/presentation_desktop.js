@@ -26,6 +26,8 @@ window.ComfyDesktopImagePresentation = class DesktopImagePresentation {
     this.cleanup = cleanup;
     this.promptToggle = promptToggle;
     this.negativeEditors = new Map();
+    this.samplingControls = new Map();
+    this.samplingGroups = [];
     this.cleanupButtons = new Set();
     this.galleryRefresh = document.getElementById("refresh-gallery");
     this.refreshIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/></svg>';
@@ -257,6 +259,7 @@ window.ComfyDesktopImagePresentation = class DesktopImagePresentation {
   }
 
   layout(previewing) {
+    this.layoutSamplingControls();
     const negative = document.getElementById("negative-controls");
     if (this.negativePrompt && (!this.active || this.negativePrompt.element !== negative)) {
       this.negativePrompt.element.open = this.negativePrompt.open;
@@ -390,6 +393,54 @@ window.ComfyDesktopImagePresentation = class DesktopImagePresentation {
     }
     this.alignPreview();
     this.sizeSections();
+  }
+
+  layoutSamplingControls() {
+    const container = document.getElementById('basic-controls');
+    const stale = [...this.samplingControls.keys()].some(element => !element.isConnected);
+    if ((!this.active || stale) && this.samplingControls.size) {
+      for (const [element, saved] of this.samplingControls) {
+        if (saved.anchor.isConnected) saved.anchor.replaceWith(element);
+        if (saved.label) saved.label.textContent = saved.text;
+      }
+      for (const group of this.samplingGroups) group.remove();
+      this.samplingControls.clear();
+      this.samplingGroups = [];
+    }
+    if (!this.active || this.samplingControls.size) return;
+    const controls = [...container.querySelectorAll(':scope > .control[data-sampling-stage]')];
+    const stages = [...new Set(controls.map(element => element.dataset.samplingStage))];
+    if (stages.length < 2) return;
+    const roles = ['sampler', 'scheduler', 'steps', 'cfg', 'seed'];
+    for (const element of controls) {
+      const anchor = document.createComment('Original sampling control placement');
+      element.before(anchor);
+      const label = element.querySelector(':scope > label');
+      this.samplingControls.set(element, { anchor, label, text: label?.textContent });
+    }
+    for (const stage of stages.sort((a, b) => Number(a) - Number(b))) {
+      const group = document.createElement('section');
+      group.className = 'desktop-sampling-group';
+      group.dataset.desktopSlot = '';
+      const title = document.createElement('h3');
+      title.textContent = `Sampling stage ${stage}`;
+      const grid = document.createElement('div');
+      grid.className = 'control-grid';
+      const members = controls.filter(element => element.dataset.samplingStage === stage);
+      members.sort((a, b) => roles.indexOf(a.querySelector('[data-role]')?.dataset.role) - roles.indexOf(b.querySelector('[data-role]')?.dataset.role));
+      for (const element of members) {
+        const role = element.querySelector('[data-role]')?.dataset.role;
+        const label = this.samplingControls.get(element).label;
+        if (label && roles.includes(role) && members.filter(item => item.querySelector('[data-role]')?.dataset.role === role).length === 1)
+          label.textContent = {sampler:'Sampler', scheduler:'Scheduler', steps:'Steps', cfg:'CFG', seed:'Seed'}[role];
+        grid.append(element);
+      }
+      group.append(title, grid);
+      container.insertBefore(group, container.firstChild);
+      this.samplingGroups.push(group);
+    }
+    // Groups are inserted at the front; restore their ascending stage order.
+    for (const group of this.samplingGroups.slice().reverse()) container.prepend(group);
   }
 
   arrangeGalleryTools() {
