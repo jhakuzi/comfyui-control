@@ -1,5 +1,37 @@
 # Session handoff
 
+## Current session snapshot — 1.2.2 release, 2026-10-27
+
+This snapshot supersedes older session and release notes below. ComfyUI Control
+1.2.2 is published to COPR for Fedora 44 x86_64.
+
+- Testing branch `testing/dynamic-workflow-mapping` was pushed at
+  `f97ef0b70407c02146dae397fe1ee9227b168321`; PR #5 merged to main at
+  `6adaba1a9f8e2d639f9fe8aef064760f4c807a6e`. Annotated tag `v1.2.2`
+  points to that merge. The user requested push, merge, and COPR build.
+- GitHub Actions packaging run
+  https://github.com/jhakuzi/comfyui-control/actions/runs/40480171778
+  and COPR build
+  https://copr.fedorainfracloud.org/coprs/jhakuzi/comfyui-control/build/11213524/
+  succeeded. The stable app ZIP and source RPM in main were rebuilt for 1.2.2.
+  No new GitHub Release publication was requested or performed.
+- The release improves mapping connected primitive prompts, numbered LoRA pairs,
+  and combined dimensions; groups confidently connected sampler stages on Desktop;
+  centers the floating Gallery progress dock; and prevents an older unknown job
+  from overriding newer completed-job feedback. See `docs/releases/1.2.2.md`.
+  Existing presets preserve their mappings; import an API export again to obtain
+  new automatic mappings. The original saved editor workflow's ambiguous subgraph
+  error was not diagnosed because its editor-format JSON was not provided.
+- Verification: 530 pytest tests passed. Sampling groups, generation/Gallery dock,
+  LoRA bypass and in-place refresh checks passed in Chromium and WebKit. Browser
+  and protocol fixtures do not establish real GPU, physical Phone or live NAS
+  behavior. User confirmed the new workflow generated and the sampling layout
+  looked correct; reload the testing app/WebUI after source changes.
+- Protect private prompts, credentials, workflows and real image files. Do not
+  test destructive actions on real output or start competing app instances. New
+  releases, merges and publication need a current request. Check branch/status
+  and remote before further work.
+
 ## New Codex session snapshot — 2026-10-27
 
 Start here. Sections below are chronological records, including historical
